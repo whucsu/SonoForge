@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "updated_at": null,
+  "active_model": "echonet_seg_resnet50",
+  "models": {
+    "echonet_seg_resnet50": {
+      "id": "echonet_seg_resnet50",
+      "filename": "echonet_seg_resnet50.onnx",
+      "filename_int8": "echonet_seg_resnet50_int8.onnx",
+      "architecture": "deeplabv3_resnet50",
+      "description": "EchoNet-Dynamic LV segmentation branch (frame-wise, A4C)",
+      "source": {
+        "repository": "https://github.com/echonet/dynamic",
+        "license": "MIT",
+        "weights_url": "https://github.com/echonet/dynamic/releases/download/v1.0.0/deeplabv3_resnet50_random.pt",
+        "weights_filename": "deeplabv3_resnet50_random.pt",
+        "excluded_components": ["r2plus1d_18", "r3d_18", "mc3_18"]
+      },
+      "onnx": {
+        "opset_version": 17,
+        "input_name": "input",
+        "output_name": "logits",
+        "input_shape": [1, 3, 112, 112],
+        "output_shape": [1, 1, 112, 112],
+        "output_type": "logits",
+        "postprocess": "sigmoid_then_threshold_0.5"
+      },
+      "status": "pending_export",
+      "sha256": null,
+      "sha256_int8": null,
+      "file_size_bytes": null,
+      "file_size_int8_bytes": null,
+      "exported_at": null,
+      "export_script": "scripts/export_echonet_seg_to_onnx.py"
+    },
+    "echonet_seg_mobilenet_v3": {
+      "id": "echonet_seg_mobilenet_v3",
+      "filename": "echonet_seg_mobilenet_v3.onnx",
+      "architecture": "deeplabv3_mobilenet_v3_large",
+      "description": "Lite fallback for 8 GB RAM (Phase 2) — not exported by default",
+      "status": "not_exported",
+      "sha256": null,
+      "file_size_bytes": null
+    }
+  },
+  "preprocessing": {
+    "resize_height": 112,
+    "resize_width": 112,
+    "interpolation": "cubic",
+    "layout": "NCHW",
+    "color_order": "RGB",
+    "value_range_before_norm": "0-255",
+    "normalization_mode": "per_frame",
+    "normalization_note": "EchoNet training uses dataset mean/std from train split. For vendor DICOM exports use per_frame until fixed_mean/std are calibrated on Tier 1 data.",
+    "fixed_mean": null,
+    "fixed_std": null
+  },
+  "inference": {
+    "providers": ["CPUExecutionProvider"],
+    "max_workers": 1,
+    "timeout_sec": 2.0,
+    "trigger_frames": ["ED", "ES"]
+  }
+}
