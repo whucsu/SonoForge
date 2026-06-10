@@ -43,3 +43,9 @@ htmlcov/
 
 # mypy
 .mypy_cache/
+
+# Tooling / worktrees
+.tooling-venv/
+.worktrees/
+scan_errors.log
+uv.lock
