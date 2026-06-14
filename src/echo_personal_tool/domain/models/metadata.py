@@ -27,6 +27,8 @@ class InstanceMetadata:
     frame_time_ms: float | None
     series_description: str
     path: Path | None = None
+    media_format: str = "dicom"
+    pixel_spacing_source: str | None = None
 
 
 @dataclass(frozen=True)
