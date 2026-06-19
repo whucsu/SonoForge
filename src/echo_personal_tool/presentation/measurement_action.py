@@ -10,6 +10,7 @@ class MeasurementAction(StrEnum):
 
     CALIBRATION = "calibration"
     CALIPER = "caliper"
+    SPLINE_AREA = "spline_area"
     RESET = "reset"
     MANUAL_SIMPSON = "manual_simpson"
     MBS_SIMPSON = "mbs_simpson"
@@ -29,4 +30,5 @@ class MeasurementAction(StrEnum):
     DOPPLER_PEAK = "doppler_peak"
     DOPPLER_INTERVAL = "doppler_interval"
     DOPPLER_TRACE = "doppler_trace"
+    DOPPLER_MITRAL_INFLOW = "doppler_mitral_inflow"
     AUTO_SEGMENT = "auto_segment"
