@@ -28,6 +28,7 @@ class MeasurementAction(StrEnum):
     RV_FAC_ED = "rv_fac_ed"
     RV_FAC_ES = "rv_fac_es"
     DOPPLER_PEAK = "doppler_peak"
+    DOPPLER_E_DT_A = "doppler_e_dt_a"
     DOPPLER_INTERVAL = "doppler_interval"
     DOPPLER_TRACE = "doppler_trace"
     DOPPLER_MITRAL_INFLOW = "doppler_mitral_inflow"

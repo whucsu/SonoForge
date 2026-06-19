@@ -41,7 +41,7 @@ class MeasurementPanel(QWidget):
         self._height_spin.setRange(0.0, 250.0)
         self._height_spin.setDecimals(1)
         self._height_spin.setSuffix(" cm")
-        self._height_spin.setSpecialValueText("—")
+        self._height_spin.setSpecialValueText("")
         self._height_spin.valueChanged.connect(self._emit_patient_metrics)
         patient_row.addWidget(self._height_spin)
         patient_row.addWidget(QLabel("Вес"))
@@ -49,16 +49,14 @@ class MeasurementPanel(QWidget):
         self._weight_spin.setRange(0.0, 300.0)
         self._weight_spin.setDecimals(1)
         self._weight_spin.setSuffix(" kg")
-        self._weight_spin.setSpecialValueText("—")
+        self._weight_spin.setSpecialValueText("")
         self._weight_spin.valueChanged.connect(self._emit_patient_metrics)
         patient_row.addWidget(self._weight_spin)
         patient_row.addStretch(1)
 
         self._summary_label = QLabel()
         self._summary_label.setWordWrap(True)
-        self._summary_label.setTextInteractionFlags(
-            self._summary_label.textInteractionFlags()
-        )
+        self._summary_label.setTextInteractionFlags(self._summary_label.textInteractionFlags())
 
         summary_container = QWidget()
         summary_layout = QVBoxLayout(summary_container)
@@ -124,9 +122,7 @@ class MeasurementPanel(QWidget):
         spacing = state.effective_pixel_spacing
         if spacing is not None:
             source = state.pixel_spacing_source_label or "unknown"
-            self.setToolTip(
-                f"Pixel spacing: {spacing[0]:.3f} × {spacing[1]:.3f} mm/px ({source})"
-            )
+            self.setToolTip(f"Pixel spacing: {spacing[0]:.3f} × {spacing[1]:.3f} mm/px ({source})")
         else:
             self.setToolTip("Pixel spacing: — (K — ручная калибровка по шкале глубины)")
 
@@ -229,9 +225,7 @@ class MeasurementPanel(QWidget):
             if metrics is None:
                 return
             length = (
-                metrics.length_ed_mm
-                if metrics.length_ed_mm is not None
-                else metrics.length_es_mm
+                metrics.length_ed_mm if metrics.length_ed_mm is not None else metrics.length_es_mm
             )
             length_suffix = " mm" if snapshot is None or snapshot.spacing_calibrated else " px"
             volume_suffix = " mL" if snapshot is None or snapshot.spacing_calibrated else " px³"

@@ -49,9 +49,7 @@ class DicomSession:
         if self._frames is None:
             raise RuntimeError("Frames not decoded; call decode_all_frames() first")
         if frame_index < 0 or frame_index >= self._frames.shape[0]:
-            raise IndexError(
-                f"Frame index {frame_index} out of range [0, {self._frames.shape[0]})"
-            )
+            raise IndexError(f"Frame index {frame_index} out of range [0, {self._frames.shape[0]})")
         return np.ascontiguousarray(self._frames[frame_index]).copy()
 
     def release(self) -> None:

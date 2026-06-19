@@ -21,9 +21,9 @@ _ITEM_DATA_ROLE = 256
 _VISIBLE_WINDOW_PADDING = 6
 _SCROLL_REQUEST_DEBOUNCE_MS = 25
 
-ThumbnailLoader = Callable[[InstanceMetadata], None] | Callable[
-    [InstanceMetadata, ThumbnailPriority], None
-]
+ThumbnailLoader = (
+    Callable[[InstanceMetadata], None] | Callable[[InstanceMetadata, ThumbnailPriority], None]
+)
 
 
 def _instance_label(instance: InstanceMetadata) -> str:
@@ -101,16 +101,12 @@ class LocalBrowserWidget(QTreeWidget):
                 series_item.setExpanded(True)
         self._building_tree = False
 
-    def request_visible_previews(
-        self, selected_instance: InstanceMetadata | None = None
-    ) -> None:
+    def request_visible_previews(self, selected_instance: InstanceMetadata | None = None) -> None:
         if self._building_tree:
             return
         visible_instances = self._collect_visible_instances()
         nearby_instances = self._collect_nearby_instances(padding=_VISIBLE_WINDOW_PADDING)
-        selected_uid = (
-            selected_instance.sop_instance_uid if selected_instance is not None else None
-        )
+        selected_uid = selected_instance.sop_instance_uid if selected_instance is not None else None
 
         if selected_uid is None:
             current_item = self.currentItem()
@@ -224,9 +220,7 @@ class LocalBrowserWidget(QTreeWidget):
             return ordered_items[: padding * 2]
 
         index_by_item = {item: idx for idx, item in enumerate(ordered_items)}
-        visible_indexes = [
-            index_by_item[item] for item in visible_items if item in index_by_item
-        ]
+        visible_indexes = [index_by_item[item] for item in visible_items if item in index_by_item]
         if not visible_indexes:
             return []
 

@@ -14,7 +14,10 @@ from PySide6.QtGui import QImage
 
 from echo_personal_tool.application.frame_cache import FrameCache
 from echo_personal_tool.application.state_manager import StateManager
-from echo_personal_tool.application.study_measurement_session import StudyMeasurementSessionStore
+from echo_personal_tool.application.study_measurement_session import (
+    StudyMeasurementData,
+    StudyMeasurementSessionStore,
+)
 from echo_personal_tool.application.thumbnail_scheduler import (
     ThumbnailPriority,
     ThumbnailScheduler,
@@ -42,6 +45,7 @@ from echo_personal_tool.domain.models import (
     StudyMetadata,
 )
 from echo_personal_tool.domain.models.doppler import DopplerMeasurementDTO
+from echo_personal_tool.domain.models.doppler_roi import DopplerCalibrationState
 from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
 from echo_personal_tool.domain.models.viewer_state import ViewerState
 from echo_personal_tool.domain.ports import IOnnxSegmenter
@@ -201,6 +205,7 @@ class AppController(QObject):
             frame_time_ms=frame_time_ms,
             emit=False,
         )
+        self._state_manager.emit_state()
         if frame_index != 0:
             self._state_manager.set_frame(frame_index)
         self._current_study_uid = self._resolve_study_uid(instance)
@@ -210,9 +215,7 @@ class AppController(QObject):
             self._decode_request_id += 1
             request_id = self._decode_request_id
             self._pending_decode_id = request_id
-            self.status_message.emit(
-                f"Decoding {instance.path.name}… ({total_frames} frames)"
-            )
+            self.status_message.emit(f"Decoding {instance.path.name}… ({total_frames} frames)")
             worker = DicomDecodeWorker(instance.path, request_id, parent=self)
             worker.signals.finished.connect(self._on_dicom_decoded)
             worker.signals.failed.connect(self._on_dicom_decode_failed)
@@ -340,9 +343,7 @@ class AppController(QObject):
                 and contour.view.upper() == target_view
                 and contour.phase.upper() == target_phase
             ):
-                updated_contours.append(
-                    dataclasses.replace(contour, review_pending=False)
-                )
+                updated_contours.append(dataclasses.replace(contour, review_pending=False))
                 found = True
             else:
                 updated_contours.append(contour)
@@ -423,10 +424,173 @@ class AppController(QObject):
             raise TypeError("Expected DopplerMeasurementDTO")
 
         self._state_manager.set_doppler_measurement(dto, emit=False)
-        study_uid = self._resolve_study_uid()
-        self._measurement_session.set_doppler_measurement(study_uid, dto)
+        instance = self._current_instance or self._state_manager.snapshot.instance
+        if instance is not None:
+            study_uid = self._resolve_study_uid()
+            frame_index = self._state_manager.snapshot.current_frame_index
+            self._measurement_session.merge_doppler_for_instance_frame(
+                study_uid,
+                instance.sop_instance_uid,
+                frame_index,
+                dto,
+            )
         self._recompute_measurements()
         self.status_message.emit(self._format_doppler_summary(dto))
+
+    def save_doppler_for_frame(
+        self,
+        instance_uid: str,
+        frame_index: int,
+        dto: DopplerMeasurementDTO,
+    ) -> None:
+        if not dto.peaks and not dto.intervals and not dto.traces:
+            return
+        study_uid = self._resolve_study_uid()
+        self._measurement_session.merge_doppler_for_instance_frame(
+            study_uid,
+            instance_uid,
+            frame_index,
+            dto,
+        )
+        self._recompute_measurements()
+
+    def get_doppler_dto_for_instance_frame(
+        self,
+        instance_uid: str,
+        frame_index: int,
+    ) -> DopplerMeasurementDTO | None:
+        study_uid = self._resolve_study_uid()
+        return self._measurement_session.get_doppler_for_instance_frame(
+            study_uid,
+            instance_uid,
+            frame_index,
+        )
+
+    def save_current_instance_doppler(self, dto: DopplerMeasurementDTO) -> None:
+        """Persist Doppler markers for the active instance before switching clips."""
+        if self._current_instance is None:
+            return
+        if not dto.peaks and not dto.intervals and not dto.traces:
+            return
+        study_uid = self._resolve_study_uid()
+        self._measurement_session.merge_doppler_for_instance(
+            study_uid,
+            self._current_instance.sop_instance_uid,
+            dto,
+        )
+        self._recompute_measurements()
+
+    def save_current_doppler_calibration(
+        self,
+        calibration: DopplerCalibrationState | None,
+    ) -> None:
+        if self._current_instance is None or calibration is None:
+            return
+        study_uid = self._resolve_study_uid()
+        self._measurement_session.set_doppler_calibration(
+            study_uid,
+            self._current_instance.sop_instance_uid,
+            calibration,
+        )
+
+    def on_doppler_calibration_changed(self, calibration: object) -> None:
+        if not isinstance(calibration, DopplerCalibrationState):
+            raise TypeError("Expected DopplerCalibrationState")
+        if self._current_instance is None:
+            return
+        study_uid = self._resolve_study_uid()
+        frame_index = self._state_manager.snapshot.current_frame_index
+        self._measurement_session.set_doppler_calibration(
+            study_uid,
+            self._current_instance.sop_instance_uid,
+            calibration,
+        )
+        self._measurement_session.set_doppler_calibration_for_frame(
+            study_uid,
+            self._current_instance.sop_instance_uid,
+            frame_index,
+            calibration,
+        )
+
+    def save_doppler_calibration_for_frame(
+        self,
+        instance_uid: str,
+        frame_index: int,
+        calibration: DopplerCalibrationState | None,
+    ) -> None:
+        study_uid = self._resolve_study_uid()
+        self._measurement_session.set_doppler_calibration_for_frame(
+            study_uid,
+            instance_uid,
+            frame_index,
+            calibration,
+        )
+
+    def get_doppler_calibration_for_instance_frame(
+        self,
+        instance_uid: str,
+        frame_index: int,
+    ) -> DopplerCalibrationState | None:
+        study_uid = self._resolve_study_uid()
+        return self._measurement_session.get_doppler_calibration_for_frame(
+            study_uid,
+            instance_uid,
+            frame_index,
+        )
+
+    def on_mmode_time_calibration(self, time_per_pixel_ms: object) -> None:
+        if not isinstance(time_per_pixel_ms, (int, float)):
+            raise TypeError("Expected numeric time_per_pixel_ms")
+        study_uid = self._resolve_study_uid()
+        self._measurement_session.set_mmode_time_per_pixel_ms(study_uid, float(time_per_pixel_ms))
+        self.status_message.emit(f"M-mode: {float(time_per_pixel_ms):.3f} ms/px")
+
+    def on_mmode_calibration_changed(self, calibration: object) -> None:
+        from echo_personal_tool.domain.models.frame_panels import MmodeCalibrationState
+
+        if not isinstance(calibration, MmodeCalibrationState):
+            raise TypeError("Expected MmodeCalibrationState")
+        if self._current_instance is None:
+            return
+        study_uid = self._resolve_study_uid()
+        self._measurement_session.set_mmode_calibration(
+            study_uid,
+            self._current_instance.sop_instance_uid,
+            calibration,
+        )
+
+    def get_mmode_calibration_for_instance(
+        self,
+        instance_uid: str,
+    ):
+
+        study_uid = self._resolve_study_uid()
+        return self._measurement_session.get_mmode_calibration(study_uid, instance_uid)
+
+    def get_doppler_calibration_for_instance(
+        self,
+        instance_uid: str,
+    ) -> DopplerCalibrationState | None:
+        study_uid = self._resolve_study_uid()
+        return self._measurement_session.get_doppler_calibration(study_uid, instance_uid)
+
+    def get_doppler_dto_for_instance(self, instance_uid: str) -> DopplerMeasurementDTO | None:
+        study_uid = self._resolve_study_uid()
+        return self._measurement_session.get_doppler_for_instance(study_uid, instance_uid)
+
+    def _current_doppler_dto(
+        self,
+        session: StudyMeasurementData,
+    ) -> DopplerMeasurementDTO | None:
+        instance = self._current_instance or self._state_manager.snapshot.instance
+        if instance is None:
+            return session.doppler_measurement
+        frame_index = self._state_manager.snapshot.current_frame_index
+        return self._measurement_session.get_doppler_for_instance_frame(
+            self._resolve_study_uid(instance),
+            instance.sop_instance_uid,
+            frame_index,
+        )
 
     def on_contours_changed(self, contours: object) -> None:
         if not isinstance(contours, list) or not all(
@@ -555,8 +719,7 @@ class AppController(QObject):
                 if series.series_uid == active.series_uid:
                     return study.study_uid
                 if any(
-                    item.sop_instance_uid == active.sop_instance_uid
-                    for item in series.instances
+                    item.sop_instance_uid == active.sop_instance_uid for item in series.instances
                 ):
                     return study.study_uid
         if self._current_study_uid is not None:
@@ -567,11 +730,8 @@ class AppController(QObject):
         state = self._state_manager.snapshot
         study_uid = self._resolve_study_uid()
         session = self._measurement_session.get(study_uid)
-        doppler = (
-            compute(session.doppler_measurement)
-            if session.doppler_measurement is not None
-            else None
-        )
+        doppler_dto = self._current_doppler_dto(session)
+        doppler = compute(doppler_dto) if doppler_dto is not None else None
         pixel_spacing, spacing_calibrated = self._resolve_pixel_spacing(
             state,
             session.manual_pixel_spacing,
@@ -588,9 +748,7 @@ class AppController(QObject):
         )
         lvm_g = lvm_from_linear(session.linear_measurements)
         rv_fac_percent = (
-            from_rv_contours(session.contours, pixel_spacing)
-            if spacing_calibrated
-            else None
+            from_rv_contours(session.contours, pixel_spacing) if spacing_calibrated else None
         )
         base_snapshot = MeasurementSnapshot(
             doppler=doppler,
@@ -754,9 +912,7 @@ class AppController(QObject):
         self._frame_cache.load(path, frames)
         if self._frame_cache.memory_bytes() > _FRAME_CACHE_WARN_BYTES:
             size_mb = self._frame_cache.memory_bytes() / (1024 * 1024)
-            self.status_message.emit(
-                f"Warning: DICOM cache uses {size_mb:.1f} MB"
-            )
+            self.status_message.emit(f"Warning: DICOM cache uses {size_mb:.1f} MB")
 
         frame_count = self._frame_cache.frame_count()
         if frame_count != self._state_manager.snapshot.total_frames:
@@ -885,9 +1041,7 @@ class AppController(QObject):
             existing
             for existing in self._state_manager.snapshot.contours
             if not (
-                existing.phase == phase
-                and existing.view == view
-                and existing.chamber == chamber
+                existing.phase == phase and existing.view == view and existing.chamber == chamber
             )
         ]
         contours.append(contour)

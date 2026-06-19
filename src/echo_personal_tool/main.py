@@ -15,7 +15,6 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("ECHO Personal Tool")
     window = MainWindow()
-    window.show()
     return app.exec()
 
 

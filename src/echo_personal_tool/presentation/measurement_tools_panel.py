@@ -74,15 +74,11 @@ class MeasurementToolsPanel(QWidget):
         col = QVBoxLayout()
         col.addWidget(QLabel(view))
         btn_ed = QPushButton(ed_label)
-        btn_ed.clicked.connect(
-            lambda _checked=False, v=view: signal.emit(_VIEW_MAP[v], "ED")
-        )
+        btn_ed.clicked.connect(lambda _checked=False, v=view: signal.emit(_VIEW_MAP[v], "ED"))
         registry[(view, "ED")] = btn_ed
         col.addWidget(btn_ed)
         btn_es = QPushButton(es_label)
-        btn_es.clicked.connect(
-            lambda _checked=False, v=view: signal.emit(_VIEW_MAP[v], "ES")
-        )
+        btn_es.clicked.connect(lambda _checked=False, v=view: signal.emit(_VIEW_MAP[v], "ES"))
         registry[(view, "ES")] = btn_es
         col.addWidget(btn_es)
         return col
@@ -137,9 +133,7 @@ class MeasurementToolsPanel(QWidget):
         group = QGroupBox("Setup")
         row = QHBoxLayout(group)
         btn_cal = QPushButton("Калибровка")
-        btn_cal.setToolTip(
-            "Линия по шкале глубины → Enter для подтверждения (K — горячая клавиша)"
-        )
+        btn_cal.setToolTip("Линия по шкале глубины → Enter для подтверждения (K — горячая клавиша)")
         btn_cal.clicked.connect(self.calibration_requested.emit)
         row.addWidget(btn_cal)
         btn_caliper = QPushButton("Caliper")
@@ -149,9 +143,7 @@ class MeasurementToolsPanel(QWidget):
         btn_caliper.clicked.connect(self.caliper_requested.emit)
         row.addWidget(btn_caliper)
         btn_reset = QPushButton("Сброс")
-        btn_reset.setToolTip(
-            "Сбросить контуры, линейные измерения, Doppler и ручную калибровку"
-        )
+        btn_reset.setToolTip("Сбросить контуры, линейные измерения, Doppler и ручную калибровку")
         btn_reset.clicked.connect(self.reset_measurements_requested.emit)
         row.addWidget(btn_reset)
         row.addStretch(1)

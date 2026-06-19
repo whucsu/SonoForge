@@ -23,11 +23,27 @@ from PySide6.QtWidgets import (
 
 from echo_personal_tool.domain.calculations.lvef_simpson import format_contour_overlay
 from echo_personal_tool.domain.models import Contour
+from echo_personal_tool.domain.models.doppler_axis import DopplerAxisMapping
+from echo_personal_tool.domain.models.doppler_roi import (
+    DopplerCalibrationState,
+    DopplerKind,
+    DopplerSpectrogramRoi,
+)
+from echo_personal_tool.domain.models.frame_panels import (
+    FramePanelLayout,
+    MmodeCalibrationState,
+)
 from echo_personal_tool.domain.models.linear_measurement import (
     LinearMeasurement,
     pixel_to_mm_length,
 )
 from echo_personal_tool.domain.models.viewer_state import ViewerState
+from echo_personal_tool.domain.services.contour_edge_snap import (
+    EdgeMap,
+    apply_soft_magnetic_snap,
+    build_edge_map,
+    magnetic_edge_snap_config_for_source,
+)
 from echo_personal_tool.domain.services.contour_geometry import (
     DEFAULT_NODE_COUNT,
     MIN_DELTA_NORM,
@@ -40,20 +56,46 @@ from echo_personal_tool.domain.services.contour_geometry import (
     sample_spline,
     tiered_influence_weights,
 )
+from echo_personal_tool.domain.services.doppler_baseline import detect_baseline_y
+from echo_personal_tool.domain.services.doppler_calibration import (
+    build_axis_mapping,
+    calibration_from_roi_and_baseline,
+    roi_from_corners,
+)
+from echo_personal_tool.domain.services.frame_panel_parser import detect_panels_heuristic
 from echo_personal_tool.domain.services.mbs_lite_service import (
     fit_contour_from_landmarks,
     refine_open_arc_contour,
 )
+from echo_personal_tool.domain.services.mmode_calibration import mmode_state_from_panel
 from echo_personal_tool.domain.services.pixel_spacing_resolver import (
     spacing_from_known_distance,
+)
+from echo_personal_tool.infrastructure.dicom_doppler_calibration import try_parse_from_path
+from echo_personal_tool.infrastructure.dicom_frame_panels import (
+    try_parse_from_path as try_parse_panels_from_path,
 )
 from echo_personal_tool.infrastructure.pixel_utils import (
     bgr_to_rgb,
     compute_display_levels,
     dr_percentiles_from_slider,
 )
+from echo_personal_tool.presentation.doppler_overlay import DopplerOverlayTools
 
 CALIBRATION_PROMPT_OVERLAY = "Проведите калибровку"
+
+_DOPPLER_CAL_ROI_STEP1 = (
+    "Doppler калибровка 1/3: клик — первый угол окна спектра (не весь кадр)"
+)
+_DOPPLER_CAL_ROI_STEP2 = (
+    "Doppler калибровка 1/3: клик — противоположный угол окна спектра"
+)
+_DOPPLER_CAL_BASELINE = (
+    "Doppler калибровка 2/3: клик на линию нулевой скорости (baseline)"
+)
+_DOPPLER_CAL_VELOCITY = (
+    "Doppler калибровка 3/3: клик верх и низ шкалы скорости на краю спектра"
+)
 _CALIBRATION_OVERLAY_STYLE = (
     "background-color: rgba(0, 0, 0, 210);"
     " color: #ffffff;"
@@ -62,6 +104,15 @@ _CALIBRATION_OVERLAY_STYLE = (
     " border: 2px solid #ffb300;"
     " border-radius: 8px;"
 )
+_RESULTS_OVERLAY_STYLE = (
+    "background-color: rgba(8, 16, 28, 215);"
+    " color: #e8eef4;"
+    " padding: 11px 18px;"
+    " font-size: 20px;"
+    " font-family: 'Consolas', 'DejaVu Sans Mono', monospace;"
+    " border: 2px solid #3d7cb8;"
+    " border-radius: 5px;"
+)
 _DEFAULT_OVERLAY_STYLE = (
     "background-color: rgba(0, 0, 0, 180);"
     " color: #f5f5f5;"
@@ -69,6 +120,9 @@ _DEFAULT_OVERLAY_STYLE = (
     " font-size: 12px;"
     " border: 1px solid #4caf50;"
 )
+_MAGNETIC_SNAP_WEIGHT_THRESHOLD = 0.15
+_MAGNETIC_RELEASE_STRENGTH = 0.9
+_MAGNETIC_RELEASE_MAX_RADIAL_PX = 15.0
 
 
 class ContourViewBox(pg.ViewBox):
@@ -87,6 +141,8 @@ class ContourViewBox(pg.ViewBox):
         if ev.button() == Qt.MouseButton.RightButton:
             ev.accept()
             return
+        if self._viewer_widget is not None and self._viewer_widget._handle_doppler_mouse_click(ev):
+            return
         if self._viewer_widget is not None and self._viewer_widget._handle_contour_mouse_click(ev):
             return
         ev.accept()
@@ -95,9 +151,18 @@ class ContourViewBox(pg.ViewBox):
         if ev.button() == Qt.MouseButton.RightButton:
             ev.accept()
             return
-        if (
-            self._viewer_widget is not None
-            and self._viewer_widget._handle_calibration_mouse_press(ev)
+        if self._viewer_widget is not None and self._viewer_widget._handle_doppler_calibration_click(
+            ev
+        ):
+            ev.accept()
+            return
+        if self._viewer_widget is not None and self._viewer_widget._handle_mmode_calibration_click(
+            ev
+        ):
+            ev.accept()
+            return
+        if self._viewer_widget is not None and self._viewer_widget._handle_calibration_mouse_press(
+            ev
         ):
             ev.accept()
             return
@@ -107,10 +172,10 @@ class ContourViewBox(pg.ViewBox):
         ):
             ev.accept()
             return
-        if (
-            self._viewer_widget is not None
-            and self._viewer_widget._handle_contour_zone_press(ev)
-        ):
+        if self._viewer_widget is not None and self._viewer_widget._handle_doppler_trace_press(ev):
+            ev.accept()
+            return
+        if self._viewer_widget is not None and self._viewer_widget._handle_contour_zone_press(ev):
             ev.accept()
             return
         super().mousePressEvent(ev)
@@ -129,22 +194,22 @@ class ContourViewBox(pg.ViewBox):
         if viewer is not None and viewer._handle_contour_zone_drag(ev):
             ev.accept()
             return
+        if viewer is not None and viewer._handle_doppler_trace_drag(ev):
+            ev.accept()
+            return
         if viewer is not None and viewer._drag_session is not None:
             ev.accept()
             return
         ev.ignore()
 
     def mouseReleaseEvent(self, ev) -> None:  # type: ignore[override]
-        if (
-            self._viewer_widget is not None
-            and self._viewer_widget._handle_contour_drag_release(ev)
-        ):
+        if self._viewer_widget is not None and self._viewer_widget._handle_doppler_trace_release(ev):
             ev.accept()
             return
-        if (
-            self._viewer_widget is not None
-            and self._viewer_widget._handle_contour_zone_release(ev)
-        ):
+        if self._viewer_widget is not None and self._viewer_widget._handle_contour_drag_release(ev):
+            ev.accept()
+            return
+        if self._viewer_widget is not None and self._viewer_widget._handle_contour_zone_release(ev):
             ev.accept()
             return
         super().mouseReleaseEvent(ev)
@@ -238,6 +303,13 @@ class ViewerWidget(QWidget):
     contours_changed = Signal(object)
     linear_measurements_changed = Signal(object)
     calibration_completed = Signal(object)
+    doppler_markers_changed = Signal(object)
+    spectral_calibration_completed = Signal(object)
+    doppler_calibration_changed = Signal(object)
+    doppler_frame_changing = Signal(int, object)
+    doppler_frame_changed = Signal(int)
+    mmode_calibration_changed = Signal(object)
+    mmode_time_calibration_completed = Signal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -251,6 +323,32 @@ class ViewerWidget(QWidget):
         self._image_item = pg.ImageItem(axisOrder="row-major")
         self._image_item.setAutoDownsample(True)
         self._view.addItem(self._image_item)
+        self._doppler = DopplerOverlayTools(self._view, self)
+        self._doppler.markers_changed.connect(self.doppler_markers_changed.emit)
+        self._doppler.workflow_step_changed.connect(self._on_doppler_workflow_step_changed)
+        self._doppler.workflow_completed.connect(self._on_doppler_workflow_completed)
+        self._doppler.trace_prompt_changed.connect(self._on_doppler_trace_prompt_changed)
+        self._calibration_kind: Literal[
+            "depth", "spectral", "doppler_velocity", "mmode_time", "mmode_depth"
+        ] | None = None
+        self._doppler_axis_calibrated = False
+        self._doppler_calibration_state: DopplerCalibrationState | None = None
+        self._doppler_calibration_instance_uid: str | None = None
+        self._doppler_calibration_frame_index: int | None = None
+        self._frame_panel_layout: FramePanelLayout | None = None
+        self._mmode_calibration_state: MmodeCalibrationState | None = None
+        self._mmode_cal_step: Literal["roi"] | None = None
+        self._mmode_roi_corner1: tuple[float, float] | None = None
+        self._mmode_pending_roi: DopplerSpectrogramRoi | None = None
+        self._crosshair_h_item: pg.PlotDataItem | None = None
+        self._crosshair_v_item: pg.PlotDataItem | None = None
+        self._doppler_cal_step: Literal["roi", "baseline", "velocity"] | None = None
+        self._doppler_cal_kind = DopplerKind.SPECTRAL
+        self._doppler_roi_corner1: tuple[float, float] | None = None
+        self._doppler_pending_roi: DopplerSpectrogramRoi | None = None
+        self._doppler_pending_baseline_y: float | None = None
+        self._mmode_time_start_x: float | None = None
+        self._vertical_caliper_labels = frozenset({"TAPSE"})
         self._current_frame: np.ndarray | None = None
         self._current_state: ViewerState | None = None
         self._linear_caliper_active = False
@@ -279,16 +377,15 @@ class ViewerWidget(QWidget):
             "TAPSE",
         ]
         self._caliper_label_index = 0
+        self._dist_serial = 1
         self._contour_mode_active = False
         self._contour_mode_kind: Literal["manual", "model", "closed"] | None = None
         self._active_contour_chamber: str = "LV"
-        self._contour_stage: Literal[
-            "ma_septal", "ma_lateral", "arc", "apex", "polygon"
-        ] | None = None
-        self._active_mitral_septal: tuple[float, float] | None = None
-        self._active_mitral_annulus: tuple[tuple[float, float], tuple[float, float]] | None = (
+        self._contour_stage: Literal["ma_septal", "ma_lateral", "arc", "apex", "polygon"] | None = (
             None
         )
+        self._active_mitral_septal: tuple[float, float] | None = None
+        self._active_mitral_annulus: tuple[tuple[float, float], tuple[float, float]] | None = None
         self._active_arc_points: list[tuple[float, float]] = []
         self._active_contour_item: pg.PlotDataItem | None = None
         self._active_ma_chord_item: pg.PlotDataItem | None = None
@@ -305,9 +402,7 @@ class ViewerWidget(QWidget):
         self._frame_overlay_lines: list[str] = []
         self._pending_viewer_state: ViewerState | None = None
         self._stored_linear_measurements: dict[tuple[str, int], LinearMeasurement] = {}
-        self._persistent_linear_graphics: list[
-            tuple[pg.PlotDataItem, pg.ScatterPlotItem]
-        ] = []
+        self._persistent_linear_graphics: list[tuple[pg.PlotDataItem, pg.ScatterPlotItem]] = []
         self._caliper_sequence: list[str] = []
         self._syncing_state = False
         self._is_color_frame = False
@@ -318,11 +413,22 @@ class ViewerWidget(QWidget):
         self._zone_drag_active = False
         self._drag_overlay_contour_index: int | None = None
         self._last_drag_apply_pos: tuple[float, float] | None = None
+        self._magnetic_snap_enabled = True
+        self._edge_map_cache: EdgeMap | None = None
+        self._edge_map_cache_key: tuple[int, tuple[float, float] | None] | None = None
 
         self._overlay_label = QLabel(self)
         self._overlay_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._overlay_label.setStyleSheet(_DEFAULT_OVERLAY_STYLE)
         self._overlay_label.hide()
+
+        self._results_overlay_label = QLabel(self)
+        self._results_overlay_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._results_overlay_label.setStyleSheet(_RESULTS_OVERLAY_STYLE)
+        self._results_overlay_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop
+        )
+        self._results_overlay_label.hide()
 
         self._timeline_slider = QSlider(Qt.Orientation.Horizontal)
         self._timeline_slider.setSingleStep(1)
@@ -333,7 +439,8 @@ class ViewerWidget(QWidget):
 
         self._fps_label = QLabel("FPS: —")
         self._source_label = QLabel("Frame: —")
-        self._measurement_label = QLabel(f"{self._current_caliper_label()}: —")
+        self._measurement_label = QLabel(f"{self._current_caliper_label()}: —", self)
+        self._measurement_label.hide()
 
         self._window_slider = QSlider(Qt.Orientation.Horizontal)
         self._window_slider.setRange(1, 400)
@@ -361,16 +468,6 @@ class ViewerWidget(QWidget):
         timeline_row.addWidget(self._fps_label)
         controls.addLayout(timeline_row)
 
-        wl_row = QHBoxLayout()
-        wl_row.addWidget(QLabel("Window"))
-        wl_row.addWidget(self._window_slider, stretch=1)
-        wl_row.addWidget(QLabel("Level"))
-        wl_row.addWidget(self._level_slider, stretch=1)
-        wl_row.addWidget(QLabel("DR"))
-        wl_row.addWidget(self._dr_slider, stretch=1)
-        wl_row.addWidget(self._measurement_label)
-        controls.addLayout(wl_row)
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._graphics)
@@ -387,6 +484,15 @@ class ViewerWidget(QWidget):
         self._graphics.setFocusPolicy(Qt.FocusPolicy.WheelFocus)
 
     def _on_scene_mouse_moved(self, scene_pos) -> None:
+        mapped = self._view.mapSceneToView(scene_pos)
+        if mapped is not None:
+            self._update_measurement_crosshair(float(mapped.x()), float(mapped.y()))
+        if (
+            mapped is not None
+            and self._doppler.get_tool_mode() == "interval"
+            and self._doppler.has_pending_interval_start()
+        ):
+            self._doppler.update_interval_preview_position(float(mapped.x()))
         if self._calibration_active and self._calibration_start_y is not None:
             mapped = self._view.mapSceneToView(scene_pos)
             if mapped is not None and self._current_frame is not None:
@@ -398,6 +504,8 @@ class ViewerWidget(QWidget):
             mapped = self._view.mapSceneToView(scene_pos)
             if mapped is not None:
                 end = (float(mapped.x()), float(mapped.y()))
+                if self._linear_caliper_start is not None:
+                    end = self._constrain_linear_endpoint(self._linear_caliper_start, end)
                 self._update_linear_caliper_preview(self._linear_caliper_start, end)
                 self._update_linear_caliper_label_preview(self._linear_caliper_start, end)
             return
@@ -447,23 +555,46 @@ class ViewerWidget(QWidget):
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
-        self._position_overlay_label()
+        self._position_overlay_labels()
+
+    def _position_overlay_labels(self) -> None:
+        geo = self._graphics.geometry()
+        if self._overlay_label.isVisible():
+            self._overlay_label.adjustSize()
+            label_w = self._overlay_label.width()
+            label_h = self._overlay_label.height()
+            calibration_banner = self._frame_overlay_lines == [CALIBRATION_PROMPT_OVERLAY]
+            if calibration_banner:
+                x = geo.x() + max((geo.width() - label_w) // 2, 8)
+                y = geo.y() + max(geo.height() // 6 - label_h // 2, 8)
+            else:
+                x = geo.x() + 8
+                y = geo.y() + 8
+            self._overlay_label.move(x, y)
+
+        if self._results_overlay_label.isVisible():
+            self._results_overlay_label.adjustSize()
+            rw = self._results_overlay_label.width()
+            x = geo.x() + max(geo.width() - rw - 8, 8)
+            y = geo.y() + max(int(geo.height() * 0.20), 8)
+            self._results_overlay_label.move(x, y)
+
+    def set_results_overlay(self, text: str) -> None:
+        """Show session measurement summary (top-right, GE-style)."""
+        if text.strip():
+            self._results_overlay_label.setText(text)
+            self._results_overlay_label.adjustSize()
+            self._results_overlay_label.show()
+            self._results_overlay_label.raise_()
+        else:
+            self._results_overlay_label.hide()
+        self._position_overlay_labels()
+
+    def results_overlay_text(self) -> str:
+        return self._results_overlay_label.text()
 
     def _position_overlay_label(self) -> None:
-        if not self._overlay_label.isVisible():
-            return
-        geo = self._graphics.geometry()
-        self._overlay_label.adjustSize()
-        label_w = self._overlay_label.width()
-        label_h = self._overlay_label.height()
-        calibration_banner = self._frame_overlay_lines == [CALIBRATION_PROMPT_OVERLAY]
-        if calibration_banner:
-            x = geo.x() + max((geo.width() - label_w) // 2, 8)
-            y = geo.y() + max(geo.height() // 6 - label_h // 2, 8)
-        else:
-            x = geo.x() + 8
-            y = geo.y() + 8
-        self._overlay_label.move(x, y)
+        self._position_overlay_labels()
 
     def show_frame(self, pixels: np.ndarray) -> None:
         """Render a 2D grayscale (H, W) or color BGR (H, W, 3) array."""
@@ -484,9 +615,15 @@ class ViewerWidget(QWidget):
         self._window_slider.setEnabled(not self._is_color_frame)
         self._level_slider.setEnabled(not self._is_color_frame)
         self._dr_slider.setEnabled(not self._is_color_frame)
+        sync_enabled = getattr(self, "_sync_display_control_enabled", None)
+        if callable(sync_enabled):
+            sync_enabled()
         if self._current_frame is not None:
             height, width = self._current_frame.shape[:2]
             self._view.setRange(xRange=(0, width), yRange=(0, height), padding=0)
+            self._refresh_frame_panel_layout()
+            self._configure_doppler_axis_for_frame()
+            self._invalidate_edge_map_cache()
 
     def clear(self) -> None:
         self._image_item.clear()
@@ -500,9 +637,7 @@ class ViewerWidget(QWidget):
             return
         self._syncing_state = True
         previous_instance = self._current_state.instance if self._current_state else None
-        previous_frame = (
-            self._current_state.current_frame_index if self._current_state else None
-        )
+        previous_frame = self._current_state.current_frame_index if self._current_state else None
         frame_changed = previous_frame != viewer_state.current_frame_index
         if previous_instance != viewer_state.instance:
             self._clear_linear_caliper()
@@ -510,8 +645,25 @@ class ViewerWidget(QWidget):
             self._clear_persistent_linear_calipers()
             self._clear_contours()
             self._stored_linear_measurements = {}
+            if self._doppler_cal_step is not None:
+                self._doppler_cal_step = None
+                self._doppler_roi_corner1 = None
+                self._doppler_pending_roi = None
+                self._doppler_pending_baseline_y = None
+            self.clear_doppler_calibration_display()
         elif frame_changed:
+            if previous_frame is not None and not self._syncing_state:
+                self.doppler_frame_changing.emit(
+                    previous_frame,
+                    self.get_doppler_dto(),
+                )
             self._clear_active_contour_drawing()
+            self._doppler_calibration_state = None
+            self._doppler_calibration_instance_uid = None
+            self._doppler_calibration_frame_index = None
+            self._doppler.clear_measurements(keep_calibration_graphics=False)
+            if not self._syncing_state:
+                self.doppler_frame_changed.emit(viewer_state.current_frame_index)
         self._stored_linear_measurements = {
             self._linear_measurement_key(measurement): measurement
             for measurement in viewer_state.linear_measurements
@@ -520,22 +672,16 @@ class ViewerWidget(QWidget):
         try:
             maximum = max(0, viewer_state.total_frames - 1)
             self._timeline_slider.setRange(0, maximum)
-            controls_enabled = (
-                viewer_state.total_frames > 1 and not viewer_state.decode_in_progress
-            )
+            controls_enabled = viewer_state.total_frames > 1 and not viewer_state.decode_in_progress
             self._timeline_slider.setEnabled(controls_enabled)
             self._play_button.setEnabled(controls_enabled)
-            self._timeline_slider.setValue(
-                min(viewer_state.current_frame_index, maximum)
-            )
+            self._timeline_slider.setValue(min(viewer_state.current_frame_index, maximum))
             self._play_button.setText("Pause" if viewer_state.is_playing else "Play")
             self._fps_label.setText(
                 f"FPS: {viewer_state.fps:.1f}" if viewer_state.fps > 0 else "FPS: —"
             )
             if viewer_state.total_frames > 0:
-                current = min(
-                    viewer_state.current_frame_index + 1, viewer_state.total_frames
-                )
+                current = min(viewer_state.current_frame_index + 1, viewer_state.total_frames)
                 self._source_label.setText(f"Frame: {current}/{viewer_state.total_frames}")
             else:
                 self._source_label.setText("Frame: —")
@@ -561,7 +707,22 @@ class ViewerWidget(QWidget):
             self._clear_linear_caliper()
             return
         self._clear_calibration_caliper()
-        self.start_linear_caliper_for(self._current_caliper_label())
+        self.activate_generic_dist_caliper()
+
+    def activate_generic_dist_caliper(self) -> str | None:
+        """Start click-click caliper with the next DistN label; return label or None."""
+        label = f"Dist{self._dist_serial}"
+        if self.start_linear_caliper_for(label):
+            self._dist_serial += 1
+            return label
+        return None
+
+    def reset_dist_caliper_serial(self) -> None:
+        self._dist_serial = 1
+
+    @property
+    def dist_caliper_serial(self) -> int:
+        return self._dist_serial
 
     @property
     def is_linear_caliper_active(self) -> bool:
@@ -580,11 +741,557 @@ class ViewerWidget(QWidget):
             return False
 
         height, width = self._current_frame.shape[:2]
+        self._calibration_kind = "depth"
         self._calibration_active = True
         self._calibration_x = min(float(width) * 0.96, float(width - 5))
         self._calibration_start_y = None
         self._measurement_label.setText("Калибровка: 1-й клик — верхняя метка")
         return True
+
+    def start_spectral_calibration(self) -> bool:
+        """Start Doppler calibration wizard (ROI → baseline → velocity scale)."""
+        return self.start_doppler_calibration(DopplerKind.SPECTRAL)
+
+    def start_doppler_calibration(self, kind: DopplerKind = DopplerKind.SPECTRAL) -> bool:
+        if self._current_frame is None:
+            return False
+        self.cancel_active_tool()
+        self._clear_calibration_caliper()
+        self._doppler_cal_kind = kind
+        self._doppler_cal_step = "roi"
+        self._doppler_roi_corner1 = None
+        self._doppler_pending_roi = None
+        self._doppler_pending_baseline_y = None
+        self._measurement_label.setText(_DOPPLER_CAL_ROI_STEP1)
+        self._measurement_label.show()
+        return True
+
+    @staticmethod
+    def doppler_calibration_prompt() -> str:
+        return (
+            "Калибровка Doppler: шаг 1 — два клика по углам окна спектра; "
+            "шаг 2 — baseline (нулевая скорость); шаг 3 — верх и низ шкалы "
+            "скорости на правом крае спектра + ввод полного диапазона (см. строку под кадром)"
+        )
+
+    def _current_instance_uid(self) -> str | None:
+        if self._current_state is None or self._current_state.instance is None:
+            return None
+        return self._current_state.instance.sop_instance_uid
+
+    def _current_frame_index(self) -> int | None:
+        if self._current_state is None:
+            return None
+        return self._current_state.current_frame_index
+
+    def _doppler_calibration_matches_instance(self) -> bool:
+        current_uid = self._current_instance_uid()
+        if current_uid is None or self._doppler_calibration_instance_uid is None:
+            return False
+        if current_uid != self._doppler_calibration_instance_uid:
+            return False
+        frame_index = self._current_frame_index()
+        if frame_index is None or self._doppler_calibration_frame_index is None:
+            return False
+        return frame_index == self._doppler_calibration_frame_index
+
+    def clear_doppler_calibration_display(self) -> None:
+        self._doppler_calibration_state = None
+        self._doppler_calibration_instance_uid = None
+        self._doppler_calibration_frame_index = None
+        self._doppler_axis_calibrated = False
+        self._doppler.clear_measurements(keep_calibration_graphics=False)
+        if self._current_frame is None:
+            return
+        height, width = self._current_frame.shape[:2]
+        self._doppler.set_axis_mapping(
+            DopplerAxisMapping.from_frame_size(width, height)
+        )
+
+    def is_doppler_axis_calibrated(self) -> bool:
+        return self.is_doppler_velocity_calibrated() and self.is_doppler_time_calibrated()
+
+    def is_doppler_velocity_calibrated(self) -> bool:
+        state = self._doppler_calibration_state
+        return state is not None and state.has_velocity_scale()
+
+    def is_doppler_time_calibrated(self) -> bool:
+        state = self._doppler_calibration_state
+        return state is not None and state.has_time_scale_from_dicom()
+
+    def start_mitral_inflow_workflow(self) -> bool:
+        if self._current_frame is None:
+            return False
+        self.cancel_active_tool()
+        self._doppler.start_mitral_inflow_workflow()
+        prompt = self._doppler.workflow_prompt()
+        if prompt:
+            self._measurement_label.setText(prompt)
+        return True
+
+    def _on_doppler_workflow_step_changed(self, prompt: str) -> None:
+        self._measurement_label.setText(prompt)
+
+    def _on_doppler_workflow_completed(self) -> None:
+        self._measurement_label.setText("Mitral inflow E/DT/A: готово")
+
+    def _on_doppler_trace_prompt_changed(self, prompt: str) -> None:
+        self._measurement_label.setText(prompt)
+
+    def restore_doppler_measurements(self, dto: object) -> None:
+        from echo_personal_tool.domain.models.doppler import DopplerMeasurementDTO
+
+        if isinstance(dto, DopplerMeasurementDTO):
+            self._doppler.load_measurement_dto(dto)
+
+    def clear_doppler_measurements(self) -> None:
+        self._doppler.clear_measurements(keep_calibration_graphics=False)
+
+    def get_doppler_calibration_state(self) -> DopplerCalibrationState | None:
+        return self._doppler_calibration_state
+
+    def apply_doppler_calibration_state(
+        self,
+        state: DopplerCalibrationState,
+        *,
+        persist: bool = True,
+    ) -> None:
+        if self._current_frame is not None:
+            height, width = self._current_frame.shape[:2]
+            roi = state.roi.normalized(float(width), float(height))
+            baseline_y = max(roi.y0, min(state.baseline_y_px, roi.y1))
+            state = DopplerCalibrationState(
+                roi=roi,
+                baseline_y_px=baseline_y,
+                time_origin_ms=state.time_origin_ms,
+                time_span_ms=state.time_span_ms,
+                velocity_span_cm_s=state.velocity_span_cm_s,
+                kind=state.kind,
+                from_dicom_tags=state.from_dicom_tags,
+            )
+        self._doppler_calibration_state = state
+        self._doppler_calibration_instance_uid = self._current_instance_uid()
+        self._doppler_calibration_frame_index = self._current_frame_index()
+        self._doppler.set_axis_mapping(build_axis_mapping(state))
+        self._doppler_axis_calibrated = state.has_velocity_scale()
+        if (
+            persist
+            and not self._syncing_state
+            and self._doppler_calibration_matches_instance()
+        ):
+            self.doppler_calibration_changed.emit(state)
+
+    def restore_doppler_state(
+        self,
+        calibration: DopplerCalibrationState | None,
+        dto: object | None,
+    ) -> None:
+        if calibration is not None:
+            self.apply_doppler_calibration_state(calibration, persist=False)
+        elif not self._try_auto_detect_doppler_calibration():
+            self.clear_doppler_calibration_display()
+        if dto is not None:
+            from echo_personal_tool.domain.models.doppler import DopplerMeasurementDTO
+
+            if isinstance(dto, DopplerMeasurementDTO):
+                self._doppler.load_measurement_dto(dto)
+        else:
+            self._doppler.clear_measurements(keep_calibration_graphics=True)
+
+    def start_doppler_envelope_trace(
+        self,
+        plot_points: tuple[tuple[float, float], ...],
+        *,
+        trace_label: str = "VTI",
+    ) -> None:
+        self._doppler.set_trace_label(trace_label)
+        self._doppler.start_trace_from_plot_points(plot_points, label=trace_label)
+
+    def set_doppler_tool_mode(
+        self,
+        mode: str,
+        *,
+        peak_label: str | None = None,
+        interval_label: str | None = None,
+        trace_label: str | None = None,
+    ) -> None:
+        self.cancel_active_tool()
+        self._doppler.set_tool_mode(mode)
+        if mode == "peak":
+            self._doppler.set_peak_label(peak_label or "E", single_shot=True)
+        elif mode == "interval":
+            self._doppler.set_interval_label(interval_label or "DT", single_shot=True)
+        elif interval_label is not None:
+            self._doppler.set_interval_label(interval_label, single_shot=True)
+        elif peak_label is not None:
+            self._doppler.set_peak_label(peak_label, single_shot=True)
+        if trace_label is not None:
+            self._doppler.set_trace_label(trace_label)
+        if mode != "none":
+            prompt = self._doppler.workflow_prompt()
+            if prompt:
+                self._measurement_label.setText(prompt)
+            elif mode == "trace":
+                prompt = self._doppler.trace_prompt()
+                self._measurement_label.setText(
+                    prompt
+                    or "Doppler trace: baseline → обводка → baseline"
+                )
+            else:
+                self._measurement_label.setText(f"Doppler {mode}: клик на спектре")
+            self._ensure_crosshair_graphics()
+
+    def is_doppler_context(self) -> bool:
+        if self._doppler.get_tool_mode() != "none":
+            return True
+        if self._doppler_cal_step is not None:
+            return True
+        if self._calibration_kind in {"spectral", "doppler_velocity"}:
+            return True
+        if self._doppler_calibration_state is not None:
+            return True
+        panels = self._resolve_frame_panels()
+        return panels is not None and panels.doppler is not None
+
+    def start_doppler_scale_calibration(self) -> bool:
+        if self._current_frame is None:
+            return False
+        self.cancel_active_tool()
+        return self.start_doppler_calibration(DopplerKind.SPECTRAL)
+
+    def is_mmode_calibrated(self) -> bool:
+        return (
+            self._mmode_calibration_state is not None
+            and self._mmode_calibration_state.is_complete()
+        )
+
+    def get_mmode_calibration_state(self) -> MmodeCalibrationState | None:
+        return self._mmode_calibration_state
+
+    def apply_mmode_calibration_state(self, state: MmodeCalibrationState) -> None:
+        if self._current_frame is not None:
+            height, width = self._current_frame.shape[:2]
+            roi = state.roi.normalized(float(width), float(height))
+            state = MmodeCalibrationState(
+                roi=roi,
+                vertical_mm_per_pixel=state.vertical_mm_per_pixel,
+                horizontal_ms_per_pixel=state.horizontal_ms_per_pixel,
+            )
+        self._mmode_calibration_state = state
+        if not self._syncing_state:
+            self.mmode_calibration_changed.emit(state)
+
+    def restore_mmode_state(self, calibration: MmodeCalibrationState | None) -> None:
+        if calibration is not None:
+            self.apply_mmode_calibration_state(calibration)
+        elif self._current_frame is not None:
+            self.try_apply_mmode_from_dicom_or_heuristic()
+
+    def try_apply_mmode_from_dicom_or_heuristic(self) -> bool:
+        panels = self._resolve_frame_panels()
+        if panels is None:
+            return False
+        m_panel = panels.m_mode
+        if m_panel is None:
+            return False
+        state = mmode_state_from_panel(m_panel)
+        if state is None:
+            return False
+        self.apply_mmode_calibration_state(state)
+        return True
+
+    def start_mmode_panel_calibration(self) -> bool:
+        if self._current_frame is None:
+            return False
+        self.cancel_active_tool()
+        self._clear_calibration_caliper()
+        self._mmode_cal_step = "roi"
+        self._mmode_roi_corner1 = None
+        self._mmode_pending_roi = None
+        self._measurement_label.setText("M-mode: 1-й клик — угол полосы M-режима")
+        return True
+
+    def _handle_mmode_calibration_click(self, ev) -> bool:
+        if self._mmode_cal_step != "roi" or self._current_frame is None:
+            return False
+        if ev.button() != Qt.MouseButton.LeftButton:
+            return False
+        click = self._map_view_event(ev)
+        if click is None:
+            return False
+        x, y = click
+        if self._mmode_roi_corner1 is None:
+            self._mmode_roi_corner1 = (x, y)
+            self._measurement_label.setText("M-mode: 2-й клик — противоположный угол полосы")
+            return True
+        height, width = self._current_frame.shape[:2]
+        roi = roi_from_corners(self._mmode_roi_corner1, (x, y)).normalized(
+            float(width),
+            float(height),
+        )
+        self._mmode_cal_step = None
+        self._mmode_roi_corner1 = None
+        self._mmode_pending_roi = roi
+        self._calibration_kind = "mmode_depth"
+        self._calibration_active = True
+        self._calibration_x = roi.x0 + roi.width / 2.0
+        self._calibration_start_y = None
+        self._measurement_label.setText("M-mode: 1-й клик — верх шкалы глубины в полосе")
+        return True
+
+    def _refresh_frame_panel_layout(self) -> None:
+        self._frame_panel_layout = None
+        if self._current_frame is None:
+            return
+        instance = self._current_state.instance if self._current_state else None
+        if instance is not None and instance.media_format == "dicom" and instance.path is not None:
+            self._frame_panel_layout = try_parse_panels_from_path(instance.path)
+        if self._frame_panel_layout is None:
+            gray = self._current_frame
+            if gray.ndim == 3:
+                gray = np.mean(gray, axis=2)
+            self._frame_panel_layout = detect_panels_heuristic(gray)
+
+    def _resolve_frame_panels(self) -> FramePanelLayout | None:
+        if self._frame_panel_layout is None:
+            self._refresh_frame_panel_layout()
+        return self._frame_panel_layout
+
+    def _crosshair_panel_bounds(self) -> DopplerSpectrogramRoi | None:
+        if self.get_doppler_tool_mode() != "none" and self._doppler_calibration_state is not None:
+            return self._doppler_calibration_state.roi
+        if (
+            self._linear_caliper_active
+            and self._current_caliper_label() in self._vertical_caliper_labels
+            and self._mmode_calibration_state is not None
+        ):
+            return self._mmode_calibration_state.roi
+        if self._calibration_kind in {"mmode_time", "mmode_depth"}:
+            if self._mmode_pending_roi is not None:
+                return self._mmode_pending_roi
+            if self._mmode_calibration_state is not None:
+                return self._mmode_calibration_state.roi
+            if self._calibration_kind == "mmode_time":
+                panels = self._resolve_frame_panels()
+                if panels is not None and panels.m_mode is not None:
+                    return panels.m_mode.bounds
+        if self._doppler_cal_step is not None and self._doppler_pending_roi is not None:
+            return self._doppler_pending_roi
+        return None
+
+    def _measurement_crosshair_active(self) -> bool:
+        if self._crosshair_panel_bounds() is not None:
+            return True
+        return False
+
+    def _ensure_crosshair_graphics(self) -> None:
+        pen = pg.mkPen("#9e9e9e", width=1, style=Qt.PenStyle.DashLine)
+        if self._crosshair_h_item is None:
+            self._crosshair_h_item = pg.PlotDataItem(pen=pen)
+            self._crosshair_h_item.setZValue(30)
+            self._crosshair_h_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self._crosshair_h_item.setAcceptHoverEvents(False)
+            self._view.addItem(self._crosshair_h_item)
+        if self._crosshair_v_item is None:
+            self._crosshair_v_item = pg.PlotDataItem(pen=pen)
+            self._crosshair_v_item.setZValue(30)
+            self._crosshair_v_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self._crosshair_v_item.setAcceptHoverEvents(False)
+            self._view.addItem(self._crosshair_v_item)
+
+    def _clear_crosshair(self) -> None:
+        if self._crosshair_h_item is not None:
+            self._crosshair_h_item.setData([], [])
+        if self._crosshair_v_item is not None:
+            self._crosshair_v_item.setData([], [])
+
+    def _update_measurement_crosshair(self, x: float, y: float) -> None:
+        panel = self._crosshair_panel_bounds()
+        if panel is None or not self._measurement_crosshair_active():
+            self._clear_crosshair()
+            return
+        if not panel.contains(x, y):
+            self._clear_crosshair()
+            return
+        self._ensure_crosshair_graphics()
+        assert self._crosshair_h_item is not None
+        assert self._crosshair_v_item is not None
+        self._crosshair_h_item.setData([panel.x0, panel.x1], [y, y])
+        self._crosshair_v_item.setData([x, x], [panel.y0, panel.y1])
+
+    def get_doppler_tool_mode(self) -> str:
+        return self._doppler.get_tool_mode()
+
+    def finish_doppler_trace(self) -> bool:
+        finished = self._doppler.finish_trace()
+        if finished:
+            self._measurement_label.setText(f"{self._current_caliper_label()}: —")
+        else:
+            self._measurement_label.setText(
+                "Doppler trace: завершите на baseline (клик или V)"
+            )
+        return finished
+
+    def get_doppler_dto(self):
+        return self._doppler.get_measurement_dto()
+
+    def _try_auto_detect_doppler_calibration(self) -> bool:
+        if self._current_frame is None:
+            return False
+        instance = self._current_state.instance if self._current_state else None
+        if instance is not None and instance.media_format == "dicom" and instance.path is not None:
+            parsed = try_parse_from_path(
+                instance.path,
+                kind=DopplerKind.SPECTRAL,
+                frame=self._current_frame,
+            )
+            if parsed is not None and parsed.has_velocity_scale():
+                self.apply_doppler_calibration_state(parsed, persist=True)
+                return True
+        return False
+
+    def _configure_doppler_axis_for_frame(self) -> None:
+        if self._current_frame is None:
+            return
+        if (
+            self._doppler_calibration_state is not None
+            and self._doppler_calibration_matches_instance()
+        ):
+            self.apply_doppler_calibration_state(
+                self._doppler_calibration_state,
+                persist=False,
+            )
+            return
+        if self._doppler_calibration_state is not None:
+            self.clear_doppler_calibration_display()
+
+        if self._try_auto_detect_doppler_calibration():
+            return
+
+        height, width = self._current_frame.shape[:2]
+        mapping = DopplerAxisMapping.from_frame_size(width, height)
+        self._doppler.set_axis_mapping(mapping)
+        self._doppler_axis_calibrated = False
+
+    def _handle_doppler_calibration_click(self, ev) -> bool:
+        if self._doppler_cal_step is None or self._current_frame is None:
+            return False
+        if ev.button() != Qt.MouseButton.LeftButton:
+            return False
+        click = self._map_view_event(ev)
+        if click is None:
+            return False
+        x, y = click
+
+        if self._doppler_cal_step == "roi":
+            if self._doppler_roi_corner1 is None:
+                self._doppler_roi_corner1 = (x, y)
+                self._measurement_label.setText(_DOPPLER_CAL_ROI_STEP2)
+                return True
+            roi = roi_from_corners(self._doppler_roi_corner1, (x, y))
+            height, width = self._current_frame.shape[:2]
+            roi = roi.normalized(float(width), float(height))
+            frame = self._current_frame
+            if frame.ndim == 3:
+                gray = np.mean(frame, axis=2)
+            else:
+                gray = frame
+            baseline_y = detect_baseline_y(gray, roi)
+            self._doppler_pending_roi = roi
+            self._doppler_pending_baseline_y = baseline_y
+            self._doppler_cal_step = "baseline"
+            partial = calibration_from_roi_and_baseline(
+                roi,
+                baseline_y,
+                kind=self._doppler_cal_kind,
+            )
+            self._doppler.set_axis_mapping(build_axis_mapping(partial))
+            self._measurement_label.setText(_DOPPLER_CAL_BASELINE)
+            return True
+
+        if self._doppler_cal_step == "baseline":
+            self._doppler_pending_baseline_y = y
+            if self._doppler_pending_roi is not None:
+                partial = calibration_from_roi_and_baseline(
+                    self._doppler_pending_roi,
+                    y,
+                    kind=self._doppler_cal_kind,
+                )
+                self._doppler.set_axis_mapping(build_axis_mapping(partial))
+            self._begin_doppler_velocity_calibration()
+            return True
+
+        return False
+
+    def _begin_doppler_velocity_calibration(self) -> None:
+        if self._current_frame is None:
+            return
+        width = self._current_frame.shape[1]
+        self._doppler_cal_step = None
+        self._calibration_kind = "doppler_velocity"
+        self._calibration_active = True
+        roi = self._doppler_pending_roi
+        if roi is not None:
+            self._calibration_x = min(roi.x1 - 4.0, float(width - 5))
+        else:
+            self._calibration_x = min(float(width) * 0.96, float(width - 5))
+        self._calibration_start_y = None
+        self._measurement_label.setText(_DOPPLER_CAL_VELOCITY)
+
+    def _handle_doppler_mouse_click(self, ev) -> bool:
+        if self._doppler_cal_step is not None or self._calibration_active:
+            return False
+        if self._doppler.get_tool_mode() == "none":
+            return False
+        if self._doppler.get_tool_mode() == "trace":
+            if self._doppler.consume_trace_click_suppression():
+                return True
+            # Trace onset/close and optional click points use click, not press-drag.
+        if ev.button() != Qt.MouseButton.LeftButton:
+            return False
+        click = self._map_view_event(ev)
+        if click is None:
+            return False
+        double = hasattr(ev, "double") and ev.double()
+        return self._doppler.handle_click(click[0], click[1], double=double)
+
+    def _handle_doppler_trace_press(self, ev) -> bool:
+        if self._doppler_cal_step is not None or self._calibration_active:
+            return False
+        if self._doppler.get_tool_mode() != "trace":
+            return False
+        if ev.button() != Qt.MouseButton.LeftButton:
+            return False
+        click = self._map_view_event(ev)
+        if click is None:
+            return False
+        if not self._doppler.has_trace_onset():
+            return False
+        return self._doppler.begin_trace_stroke(click[0], click[1])
+
+    def _handle_doppler_trace_drag(self, ev) -> bool:
+        if self._doppler_cal_step is not None or self._calibration_active:
+            return False
+        if self._doppler.get_tool_mode() != "trace":
+            return False
+        if ev.button() != Qt.MouseButton.LeftButton:
+            return False
+        click = self._map_view_event(ev)
+        if click is None:
+            return False
+        return self._doppler.extend_trace_stroke(click[0], click[1])
+
+    def _handle_doppler_trace_release(self, ev) -> bool:
+        if self._doppler_cal_step is not None or self._calibration_active:
+            return False
+        if self._doppler.get_tool_mode() != "trace":
+            return False
+        if ev.button() != Qt.MouseButton.LeftButton:
+            return False
+        click = self._map_view_event(ev)
+        if click is None:
+            return False
+        return self._doppler.end_trace_stroke(click[0], click[1])
 
     def finish_calibration(self) -> bool:
         return False
@@ -598,9 +1305,9 @@ class ViewerWidget(QWidget):
         return self._begin_linear_caliper(label)
 
     def activate_linear_caliper(self) -> bool:
-        """Start (or restart) click-click caliper for the current label."""
+        """Start (or restart) click-click caliper for the next Dist label."""
         self._clear_calibration_caliper()
-        return self._begin_linear_caliper(self._current_caliper_label())
+        return self.activate_generic_dist_caliper() is not None
 
     def start_linear_caliper_sequence(self, labels: tuple[str, ...]) -> bool:
         if not labels:
@@ -620,9 +1327,7 @@ class ViewerWidget(QWidget):
         return True
 
     def cycle_caliper_label(self) -> None:
-        self._caliper_label_index = (self._caliper_label_index + 1) % len(
-            self._caliper_labels
-        )
+        self._caliper_label_index = (self._caliper_label_index + 1) % len(self._caliper_labels)
         label = self._current_caliper_label()
         if not self._linear_caliper_active:
             self._measurement_label.setText(f"{label}: —")
@@ -783,7 +1488,11 @@ class ViewerWidget(QWidget):
                 or contour.frame_index != frame_index
             ):
                 continue
-            refined, mode = refine_open_arc_contour(self._current_frame, contour)
+            refined, mode = refine_open_arc_contour(
+                self._current_frame,
+                contour,
+                display_levels=self._effective_display_levels(),
+            )
             self._contours[contour_index] = refined
             self._upsert_stored_contour(refined)
             self._render_contours_for_current_frame()
@@ -875,48 +1584,38 @@ class ViewerWidget(QWidget):
             frame_index=self._contour_frame_index(),
         )
         self._clear_active_contour_drawing()
-        self.append_frame_overlay(
-            f"{contour.view} {contour.chamber} {contour.phase} area contour"
-        )
+        self.append_frame_overlay(f"{contour.view} {contour.chamber} {contour.phase} area contour")
         self.set_contour_from_domain(contour)
         self.contour_completed.emit(contour)
         return True
 
     def cancel_active_tool(self) -> None:
+        if self._mmode_cal_step is not None:
+            self._mmode_cal_step = None
+            self._mmode_roi_corner1 = None
+            self._mmode_pending_roi = None
+            self._clear_crosshair()
+            return
+        if self._doppler_cal_step is not None:
+            self._doppler_cal_step = None
+            self._doppler_roi_corner1 = None
+            self._doppler_pending_roi = None
+            self._doppler_pending_baseline_y = None
+            return
+        if self._doppler.cancel_active_tool():
+            return
         if self._active_contour_item is not None:
             self._clear_active_contour_drawing()
             return
         if self._calibration_active:
             self._clear_calibration_caliper()
+            self._clear_crosshair()
             return
         self._clear_linear_caliper()
+        self._clear_crosshair()
 
     def contours(self) -> list[Contour]:
         return list(self._stored_contours)
-
-    def delete_contour_for_current_phase(self, view: str = "A4C") -> bool:
-        """Remove contour for the current frame, resolved phase, and view."""
-        if self._current_state is None:
-            return False
-        phase = self._resolve_contour_phase()
-        frame_index = self._current_state.current_frame_index
-        before = len(self._stored_contours)
-        self._stored_contours = [
-            contour
-            for contour in self._stored_contours
-            if not (
-                contour.phase.casefold() == phase.casefold()
-                and contour.view.casefold() == view.casefold()
-                and contour.chamber.casefold() == "LV"
-                and contour.frame_index == frame_index
-            )
-        ]
-        if len(self._stored_contours) == before:
-            return False
-        self._render_contours_for_current_frame()
-        if not self._syncing_state:
-            self.contours_changed.emit(self.contours())
-        return True
 
     def pending_ai_review_contour(self) -> Contour | None:
         frame_index = self._contour_frame_index()
@@ -947,6 +1646,30 @@ class ViewerWidget(QWidget):
             )
         ]
         self._render_contours_for_current_frame()
+        return True
+
+    def delete_contour_for_current_phase(self, view: str = "A4C") -> bool:
+        """Remove contour for the current frame, resolved phase, and view."""
+        if self._current_state is None:
+            return False
+        phase = self._resolve_contour_phase()
+        frame_index = self._current_state.current_frame_index
+        before = len(self._stored_contours)
+        self._stored_contours = [
+            contour
+            for contour in self._stored_contours
+            if not (
+                contour.phase.casefold() == phase.casefold()
+                and contour.view.casefold() == view.casefold()
+                and contour.chamber.casefold() == "LV"
+                and contour.frame_index == frame_index
+            )
+        ]
+        if len(self._stored_contours) == before:
+            return False
+        self._render_contours_for_current_frame()
+        if not self._syncing_state:
+            self.contours_changed.emit(self.contours())
         return True
 
     @property
@@ -1028,6 +1751,8 @@ class ViewerWidget(QWidget):
     def _clear_calibration_caliper(self) -> None:
         self._calibration_active = False
         self._calibration_start_y = None
+        self._mmode_time_start_x = None
+        self._calibration_kind = None
         self._clear_calibration_graphics()
         if not self._linear_caliper_active:
             self._measurement_label.setText(f"{self._current_caliper_label()}: —")
@@ -1067,9 +1792,7 @@ class ViewerWidget(QWidget):
         else:
             frame_index = self._current_state.current_frame_index
             visible = [
-                contour
-                for contour in self._stored_contours
-                if contour.frame_index == frame_index
+                contour for contour in self._stored_contours if contour.frame_index == frame_index
             ]
         self._clear_rendered_contours()
         for contour in visible:
@@ -1319,11 +2042,7 @@ class ViewerWidget(QWidget):
         self._last_drag_apply_pos = None
 
     def _contour_editing_blocked(self) -> bool:
-        return (
-            self._contour_mode_active
-            or self._linear_caliper_active
-            or self._calibration_active
-        )
+        return self._contour_mode_active or self._linear_caliper_active or self._calibration_active
 
     def _map_view_event(self, ev) -> tuple[float, float] | None:
         if hasattr(ev, "globalPosition"):
@@ -1650,13 +2369,12 @@ class ViewerWidget(QWidget):
             force=True,
         )
         contour = self._contours[contour_index]
+        locked_tier = self._drag_session[4] if self._drag_session is not None else 1
         if contour.is_open_arc:
             num_nodes = contour.num_nodes or DEFAULT_NODE_COUNT
             if contour.mitral_annulus is not None:
                 septal, lateral = contour.mitral_annulus
-                apex = contour.apex_landmark or apex_point(
-                    contour.points, contour.mitral_annulus
-                )
+                apex = contour.apex_landmark or apex_point(contour.points, contour.mitral_annulus)
                 resampled = resample_open_arc_landmarks(
                     contour.points,
                     septal=septal,
@@ -1670,6 +2388,12 @@ class ViewerWidget(QWidget):
             else:
                 resampled = resample_open_arc(contour.points, num_nodes=num_nodes)
                 contour.points[:] = resampled
+            weights = self._locked_drag_weights(contour, grab_index, locked_tier)
+            self._apply_magnetic_snap_to_contour(
+                contour_index,
+                weights,
+                grab_index=grab_index,
+            )
             for idx, point in enumerate(contour.points):
                 self._contour_nodes[contour_index][idx].setData([point[0]], [point[1]])
         self._end_drag_overlay(contour_index)
@@ -1730,10 +2454,7 @@ class ViewerWidget(QWidget):
         spacing, spacing_calibrated = self._effective_pixel_spacing()
         if frame_index is not None:
             for contour in self._stored_contours:
-                if (
-                    contour.is_open_arc
-                    and contour.frame_index == frame_index
-                ):
+                if contour.is_open_arc and contour.frame_index == frame_index:
                     self.append_frame_overlay(
                         format_contour_overlay(
                             contour,
@@ -1750,9 +2471,7 @@ class ViewerWidget(QWidget):
         self._refresh_frame_overlays(extra_lines=extra_lines)
 
     def _linear_measurement_key(self, measurement: LinearMeasurement) -> tuple[str, int]:
-        frame_key = (
-            measurement.frame_index if measurement.frame_index is not None else -1
-        )
+        frame_key = measurement.frame_index if measurement.frame_index is not None else -1
         return measurement.label, frame_key
 
     def _linear_measurements_for_frame(self, frame_index: int) -> list[LinearMeasurement]:
@@ -1885,17 +2604,85 @@ class ViewerWidget(QWidget):
             return False
 
         height = self._current_frame.shape[0]
+        width = self._current_frame.shape[1]
+        x = max(0.0, min(float(click[0]), float(width - 1)))
+        y = max(0.0, min(float(click[1]), float(height - 1)))
+
+        if self._calibration_kind == "mmode_time":
+            if self._mmode_time_start_x is None:
+                self._mmode_time_start_x = x
+                self._calibration_start_y = y
+                self._update_mmode_time_preview(x, x, y)
+                return True
+            length_px = abs(x - float(self._mmode_time_start_x))
+            if length_px >= 1.0:
+                self._prompt_mmode_time_span(length_px)
+            return True
+
         y = max(0.0, min(float(click[1]), float(height - 1)))
         if self._calibration_start_y is None:
             self._calibration_start_y = y
             self._update_calibration_preview(y, y)
-            self._measurement_label.setText("Калибровка: 2-й клик — нижняя метка")
+            if self._calibration_kind in {"spectral", "doppler_velocity"}:
+                self._measurement_label.setText("Спектр: 2-й клик — низ шкалы скорости")
+            else:
+                self._measurement_label.setText("Калибровка: 2-й клик — нижняя метка")
             return True
 
         length_px = abs(y - self._calibration_start_y)
         if length_px >= 1.0:
-            self._prompt_calibration_distance(length_px)
+            if self._calibration_kind == "mmode_depth":
+                self._prompt_mmode_depth_calibration(length_px)
+            elif self._calibration_kind in {"spectral", "doppler_velocity"}:
+                self._prompt_spectral_velocity_span(length_px)
+            else:
+                self._prompt_calibration_distance(length_px)
         return True
+
+    def _prompt_spectral_velocity_span(self, length_px: float) -> None:
+        default_span = self._doppler_cal_kind.default_velocity_span_cm_s
+        span_cm_s, accepted = QInputDialog.getDouble(
+            self,
+            "Калибровка спектрального Doppler",
+            "Полный диапазон шкалы скорости (см/с), например 200 для ±100:",
+            default_span,
+            1.0,
+            1000.0,
+            0,
+        )
+        self._clear_calibration_caliper()
+        if not accepted or self._current_frame is None:
+            return
+
+        if self._doppler_pending_roi is not None and self._doppler_pending_baseline_y is not None:
+            roi = self._doppler_pending_roi
+            if length_px > 0.0:
+                velocity_span = span_cm_s * (roi.height / length_px)
+            else:
+                velocity_span = span_cm_s
+            state = calibration_from_roi_and_baseline(
+                roi,
+                self._doppler_pending_baseline_y,
+                velocity_span_cm_s=velocity_span,
+                kind=self._doppler_cal_kind,
+            )
+            self.apply_doppler_calibration_state(state)
+            self._doppler_pending_roi = None
+            self._doppler_pending_baseline_y = None
+            self._measurement_label.setText("Doppler: калибровка завершена")
+            self.spectral_calibration_completed.emit(velocity_span)
+            return
+
+        height, width = self._current_frame.shape[:2]
+        mapping = DopplerAxisMapping.from_frame_size(
+            width,
+            height,
+            velocity_span_cm_s=span_cm_s,
+        )
+        self._doppler.set_axis_mapping(mapping)
+        self._doppler_axis_calibrated = False
+        if not self._syncing_state:
+            self.spectral_calibration_completed.emit(span_cm_s)
 
     def _ensure_calibration_graphics(self) -> None:
         if self._calibration_line_item is None:
@@ -1925,6 +2712,51 @@ class ViewerWidget(QWidget):
         x = self._calibration_x
         self._calibration_line_item.setData([x, x], [start_y, end_y])
         self._calibration_marker_item.setData([x, x], [start_y, end_y])
+
+    def _update_mmode_time_preview(self, x_start: float, x_end: float, y: float) -> None:
+        self._ensure_calibration_graphics()
+        assert self._calibration_line_item is not None
+        assert self._calibration_marker_item is not None
+        self._calibration_line_item.setData([x_start, x_end], [y, y])
+        self._calibration_marker_item.setData([x_start, x_end], [y, y])
+
+    def _prompt_mmode_time_span(self, length_px: float) -> None:
+        span_ms, accepted = QInputDialog.getDouble(
+            self,
+            "M-mode time scale",
+            "Известный интервал времени (мс) между метками:",
+            1000.0,
+            1.0,
+            10000.0,
+            0,
+        )
+        self._clear_calibration_caliper()
+        if not accepted or length_px <= 0.0:
+            return
+        time_per_pixel_ms = span_ms / length_px
+        if not self._syncing_state:
+            self.mmode_time_calibration_completed.emit(float(time_per_pixel_ms))
+
+    def _prompt_mmode_depth_calibration(self, length_px: float) -> None:
+        known_mm, accepted = QInputDialog.getDouble(
+            self,
+            "Калибровка M-режима",
+            "Известное расстояние по глубине в полосе M-режима (мм):",
+            10.0,
+            0.1,
+            1000.0,
+            1,
+        )
+        self._clear_calibration_caliper()
+        if not accepted or self._mmode_pending_roi is None or length_px <= 0.0:
+            self._mmode_pending_roi = None
+            return
+        state = MmodeCalibrationState(
+            roi=self._mmode_pending_roi,
+            vertical_mm_per_pixel=known_mm / length_px,
+        )
+        self._mmode_pending_roi = None
+        self.apply_mmode_calibration_state(state)
 
     def _prompt_calibration_distance(self, length_px: float) -> None:
         known_mm, accepted = QInputDialog.getDouble(
@@ -1964,16 +2796,92 @@ class ViewerWidget(QWidget):
         if click is None:
             return False
 
+        if (
+            self._current_caliper_label() in self._vertical_caliper_labels
+            and self._mmode_calibration_state is not None
+            and not self._mmode_calibration_state.roi.contains(click[0], click[1])
+        ):
+            self._measurement_label.setText("TAPSE: клик внутри полосы M-режима")
+            return True
+
         if self._linear_caliper_start is None:
             self._linear_caliper_start = click
             self._update_linear_caliper_preview(click, click)
-            self._measurement_label.setText(
-                f"{self._current_caliper_label()}: 2-й клик — конец"
-            )
+            self._measurement_label.setText(f"{self._current_caliper_label()}: 2-й клик — конец")
             return True
 
         start = self._linear_caliper_start
-        self._commit_linear_measurement_from_endpoints(start, click)
+        end = self._constrain_linear_endpoint(start, click)
+        self._commit_linear_measurement_from_endpoints(start, end)
+        return True
+
+    def _constrain_linear_endpoint(
+        self,
+        start: tuple[float, float],
+        end: tuple[float, float],
+    ) -> tuple[float, float]:
+        if self._current_caliper_label() in self._vertical_caliper_labels:
+            end_y = end[1]
+            if self._mmode_calibration_state is not None:
+                roi = self._mmode_calibration_state.roi
+                end_y = max(roi.y0, min(end_y, roi.y1))
+            return (start[0], end_y)
+        return end
+
+    def _pixel_spacing_for_linear_label(
+        self,
+        label: str,
+        start: tuple[float, float],
+        end: tuple[float, float],
+    ) -> tuple[float, float] | None:
+        if label in self._vertical_caliper_labels:
+            return None
+        panels = self._resolve_frame_panels()
+        if panels is not None and panels.b_mode is not None:
+            mid_x = (start[0] + end[0]) / 2.0
+            mid_y = (start[1] + end[1]) / 2.0
+            b_panel = panels.b_mode
+            if b_panel.contains(mid_x, mid_y):
+                row = b_panel.vertical_mm_per_pixel
+                col = b_panel.horizontal_mm_per_pixel
+                if row is not None and col is not None:
+                    return (row, col)
+                if row is not None:
+                    return (row, row)
+        if self._current_state is not None:
+            return self._current_state.effective_pixel_spacing
+        return None
+
+    def start_atrial_area_length_contour(
+        self,
+        *,
+        chamber: str,
+        view: str = "A4C",
+        phase: str = "ES",
+    ) -> bool:
+        if not self._start_contour_drawing(
+            mode_kind="closed",
+            pen=self._contour_pen_manual,
+            phase=phase,
+            view=view,
+            chamber=chamber,
+        ):
+            return False
+        length_label = "LAL" if chamber.upper() == "LA" else "RA"
+        self.append_frame_overlay(
+            f"{chamber} area-length {view}: closed contour, then {length_label} caliper"
+        )
+        return True
+
+    def start_mmode_time_calibration(self) -> bool:
+        if self._current_frame is None:
+            return False
+        self.cancel_active_tool()
+        self._clear_calibration_caliper()
+        self._calibration_kind = "mmode_time"
+        self._calibration_active = True
+        self._mmode_time_start_x = None
+        self._calibration_start_y = None
         return True
 
     def _ensure_linear_caliper_graphics(self) -> None:
@@ -2024,14 +2932,15 @@ class ViewerWidget(QWidget):
         dy = end[1] - start[1]
         pixel_length = math.hypot(dx, dy)
         angle_degrees = math.degrees(math.atan2(dy, dx))
-        pixel_spacing = (
-            self._current_state.effective_pixel_spacing if self._current_state else None
-        )
-        millimeter_length = (
-            pixel_to_mm_length(pixel_length, angle_degrees, pixel_spacing)
-            if pixel_spacing is not None
-            else None
-        )
+        if label in self._vertical_caliper_labels and self._mmode_calibration_state is not None:
+            millimeter_length = abs(dy) * self._mmode_calibration_state.vertical_mm_per_pixel
+        else:
+            pixel_spacing = self._pixel_spacing_for_linear_label(label, start, end)
+            millimeter_length = (
+                pixel_to_mm_length(pixel_length, angle_degrees, pixel_spacing)
+                if pixel_spacing is not None
+                else None
+            )
         return LinearMeasurement(
             label=label,
             pixel_length=pixel_length,
@@ -2075,9 +2984,7 @@ class ViewerWidget(QWidget):
             end,
             self._current_caliper_label(),
         )
-        self._stored_linear_measurements[self._linear_measurement_key(measurement)] = (
-            measurement
-        )
+        self._stored_linear_measurements[self._linear_measurement_key(measurement)] = measurement
         self._measurement_label.setText(measurement.display_text())
         self._emit_stored_linear_measurements()
         self._render_persistent_linear_calipers()
@@ -2105,6 +3012,40 @@ class ViewerWidget(QWidget):
             return
         self.frame_selected.emit(value)
 
+    def bind_display_controls(
+        self,
+        window_slider: object,
+        level_slider: object,
+        dr_slider: object,
+    ) -> None:
+        """Wire external GE-style sliders to internal window/level/DR logic."""
+        from echo_personal_tool.presentation.ge_labeled_slider import GeLabeledSlider
+
+        sliders: list[tuple[GeLabeledSlider, object]] = []
+        for external, internal in (
+            (window_slider, self._window_slider),
+            (level_slider, self._level_slider),
+            (dr_slider, self._dr_slider),
+        ):
+            if not isinstance(external, GeLabeledSlider):
+                continue
+            ext = external.slider()
+            sliders.append((external, internal))
+            ext.setRange(internal.minimum(), internal.maximum())
+            ext.setValue(internal.value())
+            ext.valueChanged.connect(internal.setValue)
+            internal.valueChanged.connect(ext.setValue)
+            ext.valueChanged.connect(self._update_levels)
+
+        def sync_enabled() -> None:
+            enabled = not self._is_color_frame
+            for external, internal in sliders:
+                external.setEnabled(enabled)
+                internal.setEnabled(enabled)
+
+        self._sync_display_control_enabled = sync_enabled  # type: ignore[attr-defined]
+        sync_enabled()
+
     def _update_levels(self) -> None:
         if self._current_frame is None or self._is_color_frame:
             return
@@ -2120,6 +3061,86 @@ class ViewerWidget(QWidget):
             level_offset=(self._level_slider.value() - 50) / 50.0,
         )
         self._image_item.setLevels((low, high))
+        self._invalidate_edge_map_cache()
+
+    def set_magnetic_snap_enabled(self, enabled: bool) -> None:
+        self._magnetic_snap_enabled = bool(enabled)
+
+    def magnetic_snap_enabled(self) -> bool:
+        return self._magnetic_snap_enabled
+
+    def _grayscale_frame_for_edges(self) -> np.ndarray | None:
+        if self._current_frame is None:
+            return None
+        frame = np.asarray(self._current_frame)
+        if frame.ndim == 3:
+            return np.mean(frame[..., :3], axis=2, dtype=np.float64)
+        return frame.astype(np.float64, copy=False)
+
+    def _effective_display_levels(self) -> tuple[float, float] | None:
+        frame = self._grayscale_frame_for_edges()
+        if frame is None or frame.size == 0:
+            return None
+        dr_low, dr_high = dr_percentiles_from_slider(self._dr_slider.value())
+        return compute_display_levels(
+            frame,
+            dr_low_pct=dr_low,
+            dr_high_pct=dr_high,
+            window_scale=self._window_slider.value() / 100.0,
+            level_offset=(self._level_slider.value() - 50) / 50.0,
+        )
+
+    def _invalidate_edge_map_cache(self) -> None:
+        self._edge_map_cache = None
+        self._edge_map_cache_key = None
+
+    def _get_edge_map(self) -> EdgeMap | None:
+        if self._current_frame is None:
+            return None
+        frame_id = id(self._current_frame)
+        levels = self._effective_display_levels()
+        cache_key = (frame_id, levels, self._is_color_frame)
+        if self._edge_map_cache is not None and self._edge_map_cache_key == cache_key:
+            return self._edge_map_cache
+        self._edge_map_cache = build_edge_map(
+            self._current_frame,
+            display_levels=levels,
+        )
+        self._edge_map_cache_key = cache_key
+        return self._edge_map_cache
+
+    def _apply_magnetic_snap_to_contour(
+        self,
+        contour_index: int,
+        weights: np.ndarray,
+        *,
+        grab_index: int | None = None,
+    ) -> None:
+        if not self._magnetic_snap_enabled:
+            return
+        edge_map = self._get_edge_map()
+        if edge_map is None:
+            return
+        if contour_index < 0 or contour_index >= len(self._contours):
+            return
+        contour = self._contours[contour_index]
+        if not contour.is_open_arc:
+            return
+        snap_cfg = magnetic_edge_snap_config_for_source(contour.source)
+        pinned = self._pinned_indices_for_contour(contour)
+        snapped = apply_soft_magnetic_snap(
+            list(contour.points),
+            weights,
+            edge_map,
+            strength=_MAGNETIC_RELEASE_STRENGTH,
+            max_radial_px=_MAGNETIC_RELEASE_MAX_RADIAL_PX,
+            weight_threshold=_MAGNETIC_SNAP_WEIGHT_THRESHOLD,
+            config=snap_cfg,
+            pinned_indices=pinned,
+            grab_index=grab_index,
+        )
+        contour.points[:] = snapped
+        self._snap_open_arc_endpoints(contour)
 
     def _current_caliper_label(self) -> str:
         return self._caliper_labels[self._caliper_label_index]

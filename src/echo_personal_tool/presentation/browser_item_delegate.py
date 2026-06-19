@@ -73,10 +73,6 @@ class InstanceThumbnailDelegate(QStyledItemDelegate):
             _TEXT_HEIGHT,
         )
         painter.setPen(option.palette.text().color())
-        align = (
-            Qt.AlignmentFlag.AlignHCenter
-            | Qt.AlignmentFlag.AlignTop
-            | Qt.TextFlag.TextWordWrap
-        )
+        align = Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap
         painter.drawText(text_rect, int(align), item.text(0))
         painter.restore()

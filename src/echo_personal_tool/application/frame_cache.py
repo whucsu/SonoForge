@@ -35,9 +35,7 @@ class FrameCache:
         if self.frames is None:
             raise RuntimeError("Frame cache is empty")
         if index < 0 or index >= self.frames.shape[0]:
-            raise IndexError(
-                f"Frame index {index} out of range [0, {self.frames.shape[0]})"
-            )
+            raise IndexError(f"Frame index {index} out of range [0, {self.frames.shape[0]})")
         return np.ascontiguousarray(self.frames[index]).copy()
 
     def clear(self) -> None:

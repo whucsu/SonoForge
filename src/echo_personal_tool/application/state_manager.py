@@ -93,9 +93,7 @@ class StateManager(QObject):
         if self._instance is None or self._total_frames < 1:
             raise RuntimeError("Cannot set frame without a loaded instance")
         if index < 0 or index >= self._total_frames:
-            raise IndexError(
-                f"Frame index {index} out of range [0, {self._total_frames})"
-            )
+            raise IndexError(f"Frame index {index} out of range [0, {self._total_frames})")
         if index == self._current_frame_index:
             return
         self._current_frame_index = index

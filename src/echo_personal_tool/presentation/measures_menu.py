@@ -74,6 +74,8 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
             _btn("ES Diameter", MeasurementAction.LV2D_ES),
             _btn("LVEF Simpson EDV", MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ED"),
             _btn("LVEF Simpson ESV", MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ES"),
+            _btn("Simpson Biplane EDV", MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ED"),
+            _btn("Simpson Biplane ESV", MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ES"),
         ),
     ),
     (
@@ -206,9 +208,9 @@ class MeasuresAccordionSection(QWidget):
         for spec in buttons:
             button = QPushButton(spec.label)
             button.setEnabled(spec.enabled)
+            style_menu_button(button)
             if not spec.enabled:
                 button.setToolTip("A2C auto — в следующей версии")
-            style_menu_button(button)
             if spec.enabled:
                 button.clicked.connect(emit_handler(spec))
             body_layout.addWidget(button)
