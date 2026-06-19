@@ -9,6 +9,7 @@ import pytest
 
 from echo_personal_tool.domain.services.segmentation_service import (
     closed_polygon_to_open_arc,
+    exclude_papillary_concavities,
     logits_to_mask,
     mask_to_contour,
     papillary_mask_cleanup,
@@ -153,4 +154,34 @@ def test_papillary_mask_cleanup_preserves_largest_component() -> None:
     mask[2:6, 2:6] = 1  # speckle
     cleaned = papillary_mask_cleanup(mask)
     assert cleaned[2:6, 2:6].sum() == 0
+
+
+def _arc_with_inward_bump() -> tuple[list[tuple[float, float]], tuple, tuple]:
+    annulus = ((0.0, 0.0), (100.0, 0.0))
+    apex = (50.0, 80.0)
+    points = [
+        annulus[0],
+        (25.0, 40.0),
+        (50.0, 55.0),  # inward bump (papillary)
+        (75.0, 40.0),
+        annulus[1],
+    ]
+    return points, annulus, apex
+
+
+def test_exclude_papillary_concavities_raises_mid_cavity_bump() -> None:
+    points, annulus, apex = _arc_with_inward_bump()
+    result = exclude_papillary_concavities(points, annulus, apex)
+    assert result[0] == annulus[0]
+    assert result[-1] == annulus[1]
+    mid_y = result[2][1]
+    assert mid_y >= 55.0 - 2.0  # bumped outward toward chord
+
+
+def test_exclude_papillary_concavities_leaves_smooth_arc_unchanged() -> None:
+    annulus = ((0.0, 0.0), (100.0, 0.0))
+    apex = (50.0, 80.0)
+    points = [annulus[0], (50.0, 70.0), annulus[1]]
+    result = exclude_papillary_concavities(points, annulus, apex)
+    assert result[1][1] == pytest.approx(70.0, abs=2.0)
 

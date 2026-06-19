@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from scipy import ndimage
+
+from echo_personal_tool.domain.services.contour_geometry import smooth_open_arc
 
 _NEIGHBOR_OFFSETS: tuple[tuple[int, int], ...] = (
     (1, 0),
@@ -85,6 +89,77 @@ def papillary_mask_cleanup(
     counts[0] = 0
     largest = int(np.argmax(counts))
     return (labeled == largest).astype(np.uint8)
+
+
+def _signed_depth_to_chord(
+    point: tuple[float, float],
+    chord_start: tuple[float, float],
+    chord_end: tuple[float, float],
+    *,
+    inward_reference: tuple[float, float],
+) -> float:
+    """Negative depth = point is on inward_reference side of chord (concavity)."""
+    x0, y0 = point
+    x1, y1 = chord_start
+    x2, y2 = chord_end
+    cross = (x2 - x1) * (y0 - y1) - (y2 - y1) * (x0 - x1)
+    ref_cross = (x2 - x1) * (inward_reference[1] - y1) - (y2 - y1) * (inward_reference[0] - x1)
+    sign = -1.0 if ref_cross >= 0.0 else 1.0
+    numer = abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1)
+    denom = math.hypot(x2 - x1, y2 - y1)
+    if denom == 0.0:
+        return 0.0
+    return sign * numer / denom
+
+
+def _project_onto_segment(
+    point: tuple[float, float],
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> tuple[float, float]:
+    sx, sy = start
+    ex, ey = end
+    px, py = point
+    dx, dy = ex - sx, ey - sy
+    denom = dx * dx + dy * dy
+    if denom == 0.0:
+        return start
+    t = max(0.0, min(1.0, ((px - sx) * dx + (py - sy) * dy) / denom))
+    return (sx + t * dx, sy + t * dy)
+
+
+def exclude_papillary_concavities(
+    open_points: list[tuple[float, float]],
+    annulus: tuple[tuple[float, float], tuple[float, float]],
+    apex: tuple[float, float],
+    *,
+    depth_threshold_ratio: float = 0.04,
+    min_depth_px: float = 2.0,
+) -> list[tuple[float, float]]:
+    """Push interior nodes outward when concave vs MA–apex chord (ASE papillary rule)."""
+    if len(open_points) < 3:
+        return list(open_points)
+
+    septal, lateral = annulus
+    ma_mid = (
+        (septal[0] + lateral[0]) / 2.0,
+        (septal[1] + lateral[1]) / 2.0,
+    )
+    ma_len = math.hypot(lateral[0] - septal[0], lateral[1] - septal[1])
+    threshold = max(min_depth_px, depth_threshold_ratio * ma_len)
+
+    adjusted = [(float(x), float(y)) for x, y in open_points]
+    for index in range(1, len(adjusted) - 1):
+        depth = _signed_depth_to_chord(
+            adjusted[index],
+            ma_mid,
+            apex,
+            inward_reference=septal,
+        )
+        if depth < -threshold:
+            adjusted[index] = _project_onto_segment(adjusted[index], ma_mid, apex)
+
+    return smooth_open_arc(adjusted, annulus, apex=apex, iterations=4, blend=0.0)
 
 
 def mask_to_contour(
