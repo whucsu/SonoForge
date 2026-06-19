@@ -11,6 +11,7 @@ from echo_personal_tool.domain.services.segmentation_service import (
     closed_polygon_to_open_arc,
     logits_to_mask,
     mask_to_contour,
+    papillary_mask_cleanup,
     prepare_tensor,
     smooth_contour,
 )
@@ -131,4 +132,25 @@ def test_closed_polygon_to_open_arc_uses_longest_chord() -> None:
     assert len(arc) >= 2
     assert arc[0] == annulus[0]
     assert arc[-1] == annulus[1]
+
+
+def _mask_with_mid_notch(height: int = 64, width: int = 48) -> np.ndarray:
+    mask = np.zeros((height, width), dtype=np.uint8)
+    mask[8:56, 12:36] = 1
+    mask[28:40, 20:28] = 0  # papillary-like notch
+    return mask
+
+
+def test_papillary_mask_cleanup_fills_mid_notch() -> None:
+    mask = _mask_with_mid_notch()
+    cleaned = papillary_mask_cleanup(mask)
+    assert cleaned[32, 24] == 1
+    assert cleaned.sum() >= mask.sum()
+
+
+def test_papillary_mask_cleanup_preserves_largest_component() -> None:
+    mask = _mask_with_mid_notch()
+    mask[2:6, 2:6] = 1  # speckle
+    cleaned = papillary_mask_cleanup(mask)
+    assert cleaned[2:6, 2:6].sum() == 0
 

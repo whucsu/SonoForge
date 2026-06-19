@@ -52,6 +52,41 @@ def logits_to_mask(logits: np.ndarray, threshold: float = 0.5) -> np.ndarray:
     return (array >= threshold).astype(np.uint8)
 
 
+def papillary_mask_cleanup(
+    mask: np.ndarray,
+    *,
+    long_axis_hint: tuple[tuple[float, float], tuple[float, float]] | None = None,
+) -> np.ndarray:
+    """Morphological closing along LV long axis to remove papillary notches."""
+    del long_axis_hint  # v1: derive from mask bbox
+    binary = np.asarray(mask) > 0
+    if not binary.any():
+        return np.zeros_like(binary, dtype=np.uint8)
+
+    ys, xs = np.where(binary)
+    top_y, bottom_y = int(ys.min()), int(ys.max())
+    axis_length = float(bottom_y - top_y + 1)
+    se_len = int(np.clip(0.04 * axis_length, 5, 15))
+
+    cy, cx = se_len // 2, se_len // 2
+    y, x = np.ogrid[:se_len, :se_len]
+    ry = max(se_len // 2, 1)
+    rx = max(se_len // 2, 1)
+    structure = (
+        ((y - cy) / ry) ** 2 + ((x - cx) / rx) ** 2 <= 1.0
+    ).astype(np.uint8)
+
+    closed = ndimage.binary_closing(binary, structure=structure)
+    filled = ndimage.binary_fill_holes(closed)
+    labeled, count = ndimage.label(filled)
+    if count == 0:
+        return filled.astype(np.uint8)
+    counts = np.bincount(labeled.ravel())
+    counts[0] = 0
+    largest = int(np.argmax(counts))
+    return (labeled == largest).astype(np.uint8)
+
+
 def mask_to_contour(
     mask: np.ndarray,
     original_shape: tuple[int, int],

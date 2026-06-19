@@ -1,6 +1,7 @@
 from echo_personal_tool.domain.services.segmentation_service import (
     logits_to_mask,
     mask_to_contour,
+    papillary_mask_cleanup,
     prepare_tensor,
     smooth_contour,
 )
@@ -8,6 +9,7 @@ from echo_personal_tool.domain.services.segmentation_service import (
 __all__ = [
     "logits_to_mask",
     "mask_to_contour",
+    "papillary_mask_cleanup",
     "prepare_tensor",
     "smooth_contour",
 ]
