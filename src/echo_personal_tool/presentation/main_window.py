@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Literal
 from time import perf_counter
 
 import numpy as np
@@ -177,13 +178,20 @@ class MainWindow(QMainWindow):
             self._show_status("Load a frame first (or finish the active contour)")
 
     def _request_auto_segment_shortcut(self) -> None:
-        if (
-            self._view_mode == "2d"
-            and not self._controller.state_manager.snapshot.is_playing
-        ):
+        if not self._controller.is_lv_auto_session_active():
+            self._show_status("Выберите LV Auto → EDV/ESV")
+            return
+        if not self._controller.state_manager.snapshot.is_playing:
             self._controller.request_auto_segment()
 
     def _finish_active_tool_shortcut(self) -> None:
+        pending = self._viewer.pending_ai_review_contour()
+        if pending is not None:
+            view, phase = pending.view, pending.phase
+            if self._controller.accept_ai_contour_review(view, phase):
+                self._viewer.clear_frame_overlay()
+                self._maybe_prompt_es_auto(view, phase, mode="mbs")
+            return
         if self._view_mode == "doppler":
             if (
                 self._doppler_widget.get_tool_mode() == "trace"
@@ -194,6 +202,10 @@ class MainWindow(QMainWindow):
             return
 
     def _cancel_active_tool(self) -> None:
+        if self._viewer.discard_pending_ai_contour():
+            self._controller.on_contours_changed(self._viewer.contours())
+            self._show_status("AI контур отменён — нажмите LV Auto EDV/ESV")
+            return
         if self._view_mode == "doppler":
             self._doppler_widget.cancel_active_tool()
             return
@@ -418,21 +430,28 @@ class MainWindow(QMainWindow):
             self._show_status("Load a frame first or cancel the active tool (Esc)")
 
     def _on_mbs_simpson_requested(self, view: str, phase: str) -> None:
-        if self._view_mode != "2d":
-            self._show_status("Switch to 2D view for MBS-lite")
+        if view.upper() != "A4C":
+            self._show_status("A2C auto — в следующей версии")
             return
-        if phase == "ED":
-            self._worksheet.stop_es_prompt()
-        if self._viewer.start_model_contour(phase=phase, view=view, chamber="LV"):
-            self._viewer.clear_frame_overlay()
-            self._viewer.append_frame_overlay(
-                f"MBS-lite LV {view} {phase}: annulus septal → lateral → apex"
-            )
-            self._show_status(
-                f"MBS-lite {view} {phase}: click annulus septal, lateral, apex"
-            )
-        else:
-            self._show_status("Load a frame first or cancel the active tool (Esc)")
+        self._controller.set_simpson_workflow_context(phase=phase, view=view, chamber="LV")
+        self._system_bar.set_auto_segment_enabled(True)
+        self._viewer.clear_frame_overlay()
+        self._viewer.append_frame_overlay(f"LV Auto {view} {phase}: сегментация…")
+        self._controller.request_auto_segment(phase=phase, view=view, chamber="LV")
+
+    def _maybe_prompt_es_auto(
+        self, view: str, phase: str, *, mode: Literal["manual", "mbs"]
+    ) -> None:
+        if phase.upper() != "ED":
+            return
+        view_label = "4C" if view.upper() == "A4C" else "2C"
+        es_name = "ESV Auto" if mode == "mbs" else "Systole"
+        self._worksheet.start_es_prompt(mode, view_label)
+        status = f"Перейдите на кадр систолы и нажмите {es_name} ({view_label})"
+        if self._controller.state_manager.snapshot.effective_pixel_spacing is None:
+            status += " · нет PixelSpacing (K — калибровка, px / px³)"
+        self._show_status(status)
+        self._viewer.append_frame_overlay(status)
 
     def _on_es_button_pressed(self, view: str, phase: str) -> None:
         if phase == "ES":
