@@ -102,7 +102,6 @@ def _signed_depth_to_chord(
     x0, y0 = point
     x1, y1 = chord_start
     x2, y2 = chord_end
-    cross = (x2 - x1) * (y0 - y1) - (y2 - y1) * (x0 - x1)
     ref_cross = (x2 - x1) * (inward_reference[1] - y1) - (y2 - y1) * (inward_reference[0] - x1)
     sign = -1.0 if ref_cross >= 0.0 else 1.0
     numer = abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1)

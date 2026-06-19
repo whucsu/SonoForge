@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -239,6 +240,11 @@ def test_on_auto_segment_finished_sets_review_pending(
     qapp: QApplication,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        AppController,
+        "_should_auto_refine_after_segment",
+        lambda self: False,
+    )
     controller, _, _, instance, _ = _prepared_controller(monkeypatch)
     controller.set_simpson_workflow_context(phase="ED", view="A4C")
     messages: list[str] = []
@@ -274,6 +280,11 @@ def test_accept_ai_contour_review_clears_pending(
     qapp: QApplication,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        AppController,
+        "_should_auto_refine_after_segment",
+        lambda self: False,
+    )
     controller, _, _, instance, _ = _prepared_controller(monkeypatch)
     controller.set_simpson_workflow_context(phase="ED", view="A4C")
     messages: list[str] = []
@@ -303,6 +314,55 @@ def test_accept_ai_contour_review_clears_pending(
     assert len(contours) == 1
     assert contours[0].review_pending is False
     assert messages[-1] == "A4C ED: контур принят"
+
+
+def test_on_auto_segment_finished_auto_refines_when_enabled(
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from echo_personal_tool.domain.models import Contour
+
+    controller, _, _, instance, pixels = _prepared_controller(monkeypatch)
+    controller.set_simpson_workflow_context(phase="ED", view="A4C")
+    refine_calls: list[tuple[np.ndarray, Contour]] = []
+
+    def _fake_refine(frame: np.ndarray, contour: Contour) -> tuple[Contour, str]:
+        refine_calls.append((frame, contour))
+        shifted = [(x + 1.0, y) for x, y in contour.points]
+        return dataclasses.replace(contour, points=shifted), "gradient"
+
+    monkeypatch.setattr(
+        "echo_personal_tool.domain.services.mbs_lite_service.refine_open_arc_contour",
+        _fake_refine,
+    )
+    monkeypatch.setattr(
+        AppController,
+        "_should_auto_refine_after_segment",
+        lambda self: True,
+    )
+
+    mask = _circle_mask(
+        height=64,
+        width=48,
+        center_y=32,
+        center_x=24,
+        radius=18,
+    )
+    controller._on_auto_segment_finished(
+        "ED",
+        "A4C",
+        "LV",
+        instance.path,
+        0,
+        (64, 48),
+        mask,
+    )
+
+    contours = controller.state_manager.snapshot.contours
+    assert len(contours) == 1
+    assert contours[0].review_pending is True
+    assert refine_calls
+    assert refine_calls[0][0] is pixels
 
 
 def test_request_auto_segment_requires_a4c_view(

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
 from time import perf_counter
+from typing import Literal
 
 import numpy as np
 from PySide6.QtCore import QEvent, Qt

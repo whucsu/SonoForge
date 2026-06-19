@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from functools import partial
 from pathlib import Path
 from time import perf_counter
 
-import dataclasses
 import numpy as np
 from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QImage
@@ -893,7 +893,8 @@ class AppController(QObject):
         contours.append(contour)
         self.on_contours_changed(contours)
         self.status_message.emit(
-            f"{view} {phase}: проверьте контур (ASE, без папиллярных мышц) · R — уточнить · Enter — принять"
+            f"{view} {phase}: проверьте контур (ASE, без папиллярных мышц) · "
+            "R — уточнить · Enter — принять"
         )
 
     def _on_auto_segment_failed(

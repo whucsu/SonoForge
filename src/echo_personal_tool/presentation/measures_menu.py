@@ -81,8 +81,20 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
         (
             _btn("LVEF Simpson EDV", MeasurementAction.MBS_SIMPSON, view="A4C", phase="ED"),
             _btn("LVEF Simpson ESV", MeasurementAction.MBS_SIMPSON, view="A4C", phase="ES"),
-            _btn("Simpson Biplane EDV", MeasurementAction.MBS_SIMPSON, view="A2C", phase="ED", enabled=False),
-            _btn("Simpson Biplane ESV", MeasurementAction.MBS_SIMPSON, view="A2C", phase="ES", enabled=False),
+            _btn(
+                "Simpson Biplane EDV",
+                MeasurementAction.MBS_SIMPSON,
+                view="A2C",
+                phase="ED",
+                enabled=False,
+            ),
+            _btn(
+                "Simpson Biplane ESV",
+                MeasurementAction.MBS_SIMPSON,
+                view="A2C",
+                phase="ES",
+                enabled=False,
+            ),
         ),
     ),
     (
