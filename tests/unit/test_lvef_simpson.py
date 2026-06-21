@@ -147,3 +147,42 @@ def test_calculate_ignores_review_pending_contours() -> None:
     assert result.a4c is not None
     assert result.a4c.edv_ml is None
     assert result.a4c.esv_ml is not None
+
+
+def test_format_contour_overlay_shows_review_prompt_when_pending() -> None:
+    from echo_personal_tool.domain.calculations.lvef_simpson import format_contour_overlay
+
+    contour = open_arc_contour(phase="ed", view="A4C", width_px=100.0, height_px=50.0)
+    contour.review_pending = True
+
+    text = format_contour_overlay(contour, (0.5, 0.5))
+
+    assert "проверьте контур" in text
+    assert "Enter" in text
+    assert "0.1" not in text
+
+
+def test_contour_meets_lv_auto_quality_rejects_tiny_contour() -> None:
+    from echo_personal_tool.domain.calculations.lvef_simpson import explain_lv_auto_reject_reason
+
+    tiny = Contour(
+        phase="ED",
+        view="A4C",
+        chamber="LV",
+        mitral_annulus=((0.0, 0.0), (5.0, 0.0)),
+        points=[(0.0, 0.0), (2.5, 2.0), (5.0, 0.0)],
+        apex_landmark=(2.5, 2.0),
+    )
+
+    assert explain_lv_auto_reject_reason(tiny, (0.5, 0.5)) is not None
+    assert explain_lv_auto_reject_reason(
+        open_arc_contour(phase="ed", view="A4C", width_px=100.0, height_px=50.0),
+        (0.5, 0.5),
+    ) is None
+
+
+def test_lv_auto_quality_ignores_bad_mm_spacing_when_pixels_ok() -> None:
+    from echo_personal_tool.domain.calculations.lvef_simpson import explain_lv_auto_reject_reason
+
+    contour = open_arc_contour(phase="ed", view="A4C", width_px=100.0, height_px=50.0)
+    assert explain_lv_auto_reject_reason(contour, (0.001, 0.001)) is None

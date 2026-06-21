@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import numpy as np
 from scipy import ndimage
 
+from echo_personal_tool.domain.services.contour_geometry import resample_open_arc
 from echo_personal_tool.domain.services.contour_geometry import smooth_open_arc
 
 _NEIGHBOR_OFFSETS: tuple[tuple[int, int], ...] = (
@@ -19,6 +21,78 @@ _NEIGHBOR_OFFSETS: tuple[tuple[int, int], ...] = (
     (0, -1),
     (1, -1),
 )
+
+
+@dataclass(frozen=True)
+class EchoNetCropTransform:
+    """Maps 112×112 ONNX mask back to full-frame pixel coordinates."""
+
+    frame_height: int
+    frame_width: int
+    crop_y0: int
+    crop_x0: int
+    crop_size: int
+
+
+def resolve_echonet_roi_bounds(
+    frame_shape: tuple[int, int],
+    *,
+    roi_xyxy: tuple[float, float, float, float] | None = None,
+) -> tuple[int, int, int, int]:
+    """B-mode ROI rectangle in pixel coords (y0, x0, y1, x1)."""
+    height, width = frame_shape
+    if roi_xyxy is None:
+        return 0, 0, height, width
+
+    x0f, y0f, x1f, y1f = roi_xyxy
+    region_x0 = int(np.clip(round(x0f), 0, max(width - 1, 0)))
+    region_y0 = int(np.clip(round(y0f), 0, max(height - 1, 0)))
+    region_x1 = int(np.clip(round(x1f), region_x0 + 1, width))
+    region_y1 = int(np.clip(round(y1f), region_y0 + 1, height))
+    return region_y0, region_x0, region_y1, region_x1
+
+
+def crop_frame_for_echonet(
+    frame: np.ndarray,
+    *,
+    roi_xyxy: tuple[float, float, float, float] | None = None,
+) -> tuple[np.ndarray, EchoNetCropTransform]:
+    """Center square within B-mode ROI for EchoNet (resize to 112×112 in prepare_tensor)."""
+    array = np.asarray(frame)
+    height, width = array.shape[:2]
+    y0, x0, y1, x1 = resolve_echonet_roi_bounds((height, width), roi_xyxy=roi_xyxy)
+    region_height = y1 - y0
+    region_width = x1 - x0
+    crop_size = min(region_height, region_width)
+    crop_y0 = y0 + (region_height - crop_size) // 2
+    crop_x0 = x0 + (region_width - crop_size) // 2
+    transform = EchoNetCropTransform(
+        frame_height=height,
+        frame_width=width,
+        crop_y0=crop_y0,
+        crop_x0=crop_x0,
+        crop_size=crop_size,
+    )
+    return array[crop_y0 : crop_y0 + crop_size, crop_x0 : crop_x0 + crop_size], transform
+
+
+def embed_echonet_mask(mask: np.ndarray, transform: EchoNetCropTransform) -> np.ndarray:
+    """Place 112×112 ONNX mask into full-frame coordinates."""
+    full = np.zeros((transform.frame_height, transform.frame_width), dtype=np.uint8)
+    if transform.crop_size <= 0:
+        return full
+
+    array = np.asarray(mask)
+    if array.ndim != 2 or array.size == 0:
+        return full
+
+    zoom = transform.crop_size / array.shape[0]
+    upscaled = ndimage.zoom(array.astype(np.float32), (zoom, zoom), order=0)
+    upscaled = (upscaled >= 0.5).astype(np.uint8)
+    paste = min(transform.crop_size, upscaled.shape[0], upscaled.shape[1])
+    y0, x0 = transform.crop_y0, transform.crop_x0
+    full[y0 : y0 + paste, x0 : x0 + paste] = upscaled[:paste, :paste]
+    return full
 
 
 def prepare_tensor(frame: np.ndarray, *, target_size: int = 112) -> np.ndarray:
@@ -51,7 +125,7 @@ def logits_to_mask(logits: np.ndarray, threshold: float = 0.5) -> np.ndarray:
         raise ValueError(msg)
 
     if array.min() < 0.0 or array.max() > 1.0:
-        array = 1.0 / (1.0 + np.exp(-array))
+        array = 1.0 / (1.0 + np.exp(-np.clip(array, -50.0, 50.0)))
 
     return (array >= threshold).astype(np.uint8)
 
@@ -262,38 +336,192 @@ def _normalize_per_frame(rgb: np.ndarray) -> np.ndarray:
 
 
 def _trace_boundary(component: np.ndarray) -> list[tuple[int, int]]:
-    mask = component.astype(bool)
-    height, width = mask.shape
-    if not mask.any():
+    """Outer boundary of the largest filled component (x, y) pixel coords."""
+    import cv2
+
+    mask_uint8 = (np.asarray(component) > 0).astype(np.uint8) * 255
+    if not mask_uint8.any():
         return []
 
-    start_y = int(np.argmax(mask.any(axis=1)))
-    start_x = int(np.argmax(mask[start_y]))
-    start = (start_x, start_y)
+    contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if not contours:
+        return []
 
-    contour: list[tuple[int, int]] = []
-    current_x, current_y = start
-    direction_index = 4
+    largest = max(contours, key=cv2.contourArea)
+    if len(largest) < 3:
+        return []
 
-    for _ in range(height * width + 1):
-        contour.append((current_x, current_y))
-        found = False
-        for offset in range(8):
-            check_index = (direction_index + offset - 2) % 8
-            dx, dy = _NEIGHBOR_OFFSETS[check_index]
-            next_x = current_x + dx
-            next_y = current_y + dy
-            if 0 <= next_x < width and 0 <= next_y < height and mask[next_y, next_x]:
-                current_x, current_y = next_x, next_y
-                direction_index = check_index
-                found = True
-                break
-        if not found:
+    return [(int(point[0][0]), int(point[0][1])) for point in largest]
+
+
+def _closest_boundary_index(
+    boundary: list[tuple[float, float]],
+    target: tuple[float, float],
+) -> int:
+    best_index = 0
+    best_distance = float("inf")
+    for index, point in enumerate(boundary):
+        distance = (point[0] - target[0]) ** 2 + (point[1] - target[1]) ** 2
+        if distance < best_distance:
+            best_distance = distance
+            best_index = index
+    return best_index
+
+
+def _walk_boundary(
+    boundary: list[tuple[float, float]],
+    start_index: int,
+    end_index: int,
+    *,
+    step: int,
+) -> list[tuple[float, float]]:
+    if not boundary:
+        return []
+    path: list[tuple[float, float]] = []
+    index = start_index
+    for _ in range(len(boundary) + 1):
+        path.append(boundary[index])
+        if index == end_index:
             break
-        if current_x == start[0] and current_y == start[1] and len(contour) > 2:
-            break
+        index = (index + step) % len(boundary)
+    return path
 
-    return _simplify_contour(contour)
+
+def _boundary_open_arc(
+    boundary: list[tuple[float, float]],
+    septal: tuple[float, float],
+    lateral: tuple[float, float],
+    apex: tuple[float, float],
+) -> list[tuple[float, float]]:
+    """Boundary segment from septal to lateral through the cavity (contains apex)."""
+    if len(boundary) < 3:
+        return [septal, lateral]
+
+    septal_index = _closest_boundary_index(boundary, septal)
+    lateral_index = _closest_boundary_index(boundary, lateral)
+    forward = _walk_boundary(boundary, septal_index, lateral_index, step=1)
+    backward = _walk_boundary(boundary, septal_index, lateral_index, step=-1)
+
+    def _min_apex_distance(path: list[tuple[float, float]]) -> float:
+        if not path:
+            return float("inf")
+        return min(math.hypot(point[0] - apex[0], point[1] - apex[1]) for point in path)
+
+    chosen = forward if _min_apex_distance(forward) <= _min_apex_distance(backward) else backward
+    if len(chosen) < 2:
+        return [septal, *chosen, lateral]
+    return chosen
+
+
+def _band_horizontal_width(
+    ys: np.ndarray,
+    xs: np.ndarray,
+    y_low: int,
+    y_high: int,
+) -> float:
+    in_band = (ys >= y_low) & (ys <= y_high)
+    if not np.any(in_band):
+        return 0.0
+    band_xs = xs[in_band]
+    return float(np.max(band_xs) - np.min(band_xs))
+
+
+def _annulus_and_apex_from_mask_pixels(
+    ys: np.ndarray,
+    xs: np.ndarray,
+    *,
+    y_min: int,
+    y_max: int,
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+    """Annulus = wider cavity opening; apex = opposite narrow end (A4C)."""
+    height = y_max - y_min + 1
+    band_depth = max(3, int(round(0.12 * height)))
+    apex_band = max(3, int(round(0.08 * height)))
+
+    top_band = (y_min, y_min + band_depth)
+    bottom_band = (y_max - band_depth, y_max)
+    top_width = _band_horizontal_width(ys, xs, *top_band)
+    bottom_width = _band_horizontal_width(ys, xs, *bottom_band)
+
+    if bottom_width > top_width:
+        annulus_mask = (ys >= bottom_band[0]) & (ys <= bottom_band[1])
+        apex_mask = (ys >= y_min) & (ys <= y_min + apex_band)
+        apex_y = float(y_min + apex_band / 2.0)
+    else:
+        annulus_mask = (ys >= top_band[0]) & (ys <= top_band[1])
+        apex_mask = (ys >= y_max - apex_band) & (ys <= y_max)
+        apex_y = float(y_max - apex_band / 2.0)
+
+    ann_xs = xs[annulus_mask]
+    ann_ys = ys[annulus_mask]
+    if ann_xs.size < 2:
+        msg = "cannot locate mitral annulus on cavity mask"
+        raise ValueError(msg)
+
+    septal = (float(np.min(ann_xs)), float(np.median(ann_ys)))
+    lateral = (float(np.max(ann_xs)), float(np.median(ann_ys)))
+    if np.any(apex_mask):
+        apex = (float(np.median(xs[apex_mask])), float(np.median(ys[apex_mask])))
+    else:
+        apex = (float(np.median(xs)), apex_y)
+    return septal, lateral, apex
+
+
+def open_arc_from_cavity_mask(
+    mask: np.ndarray,
+    *,
+    original_shape: tuple[int, int] | None = None,
+    num_nodes: int = 32,
+    view_hint: str = "A4C",
+) -> tuple[
+    list[tuple[float, float]],
+    tuple[tuple[float, float], tuple[float, float]],
+    tuple[float, float],
+]:
+    """Build A4C LV open arc: annulus = top opening of cavity mask, arc via apex side."""
+    del view_hint
+    binary = np.asarray(mask) > 0
+    if not binary.any():
+        msg = "empty cavity mask"
+        raise ValueError(msg)
+
+    labeled, component_count = ndimage.label(binary)
+    if component_count == 0:
+        msg = "empty cavity mask"
+        raise ValueError(msg)
+
+    counts = np.bincount(labeled.ravel())
+    counts[0] = 0
+    largest_label = int(np.argmax(counts))
+    component = labeled == largest_label
+
+    ys, xs = np.where(component)
+    y_min = int(ys.min())
+    y_max = int(ys.max())
+    x_min = int(xs.min())
+    x_max = int(xs.max())
+    height = y_max - y_min + 1
+    width = x_max - x_min + 1
+    if height < 10 or width < 10:
+        msg = "cavity mask bounding box too small"
+        raise ValueError(msg)
+
+    septal, lateral, apex = _annulus_and_apex_from_mask_pixels(ys, xs, y_min=y_min, y_max=y_max)
+    annulus = (septal, lateral)
+
+    frame_shape = original_shape or binary.shape[:2]
+    boundary = mask_to_contour(component.astype(np.uint8), frame_shape)
+    if len(boundary) < 4:
+        msg = "cavity boundary too short"
+        raise ValueError(msg)
+
+    open_points = _boundary_open_arc(boundary, septal, lateral, apex)
+    resampled = resample_open_arc(open_points, num_nodes=max(num_nodes, 4))
+    if len(resampled) < 3:
+        resampled = [septal, apex, lateral]
+    resampled[0] = septal
+    resampled[-1] = lateral
+    return resampled, annulus, apex
 
 
 def closed_polygon_to_open_arc(

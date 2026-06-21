@@ -79,6 +79,8 @@ from echo_personal_tool.infrastructure.pixel_utils import (
     bgr_to_rgb,
     compute_display_levels,
     dr_percentiles_from_slider,
+    is_color_frame,
+    to_grayscale_array,
 )
 from echo_personal_tool.presentation.doppler_overlay import DopplerOverlayTools
 
@@ -599,16 +601,29 @@ class ViewerWidget(QWidget):
     def show_frame(self, pixels: np.ndarray) -> None:
         """Render a 2D grayscale (H, W) or color BGR (H, W, 3) array."""
         frame = np.asarray(pixels)
-        self._is_color_frame = frame.ndim == 3 and frame.shape[2] >= 3
+        self._is_color_frame = is_color_frame(frame)
+        if self._is_color_frame and frame.ndim == 3 and frame.shape[2] >= 3:
+            from echo_personal_tool.domain.services.frame_panel_parser import (
+                detect_panels_heuristic,
+            )
+            from echo_personal_tool.infrastructure.pixel_utils import is_effective_grayscale
+
+            layout = detect_panels_heuristic(to_grayscale_array(frame).astype(np.uint8))
+            if layout is not None and layout.b_mode is not None:
+                bounds = layout.b_mode.bounds
+                y0 = max(0, int(bounds.y0))
+                y1 = min(frame.shape[0], int(bounds.y0 + bounds.height))
+                if y1 > y0 and is_effective_grayscale(frame[y0:y1, ...]):
+                    self._is_color_frame = False
+
         if self._is_color_frame:
             display = bgr_to_rgb(frame)
-            self._current_frame = frame
+            self._current_frame = to_grayscale_array(frame)
             self._image_item.setImage(display, autoLevels=True)
         else:
-            if frame.ndim == 3:
-                frame = frame[..., 0]
-            self._current_frame = frame
-            self._image_item.setImage(frame, autoLevels=False)
+            gray = to_grayscale_array(frame)
+            self._current_frame = gray
+            self._image_item.setImage(gray, autoLevels=False)
             with QSignalBlocker(self._dr_slider):
                 self._dr_slider.setValue(50)
             self._update_levels()
@@ -672,9 +687,9 @@ class ViewerWidget(QWidget):
         try:
             maximum = max(0, viewer_state.total_frames - 1)
             self._timeline_slider.setRange(0, maximum)
-            controls_enabled = viewer_state.total_frames > 1 and not viewer_state.decode_in_progress
+            controls_enabled = viewer_state.total_frames > 1
             self._timeline_slider.setEnabled(controls_enabled)
-            self._play_button.setEnabled(controls_enabled)
+            self._play_button.setEnabled(controls_enabled and not viewer_state.decode_in_progress)
             self._timeline_slider.setValue(min(viewer_state.current_frame_index, maximum))
             self._play_button.setText("Pause" if viewer_state.is_playing else "Play")
             self._fps_label.setText(
@@ -1419,7 +1434,7 @@ class ViewerWidget(QWidget):
         return True
 
     def set_contour_from_domain(self, contour: Contour) -> None:
-        self._upsert_stored_contour(contour)
+        self._upsert_stored_contour(self._tag_contour_instance(contour))
         self._render_contours_for_current_frame()
         self._refresh_frame_overlays()
         if not self._syncing_state:
@@ -1480,12 +1495,18 @@ class ViewerWidget(QWidget):
         if self._current_frame is None:
             return False, ""
         frame_index = self._contour_frame_index()
+        instance_uid = self._current_instance_uid()
         for contour_index, contour in enumerate(self._contours):
             if (
                 contour.source not in {"manual", "model", "ai"}
                 or not contour.is_open_arc
                 or contour.mitral_annulus is None
                 or contour.frame_index != frame_index
+                or (
+                    instance_uid is not None
+                    and contour.sop_instance_uid is not None
+                    and contour.sop_instance_uid != instance_uid
+                )
             ):
                 continue
             refined, mode = refine_open_arc_contour(
@@ -1619,6 +1640,7 @@ class ViewerWidget(QWidget):
 
     def pending_ai_review_contour(self) -> Contour | None:
         frame_index = self._contour_frame_index()
+        instance_uid = self._current_instance_uid()
         if frame_index is None:
             return None
         for contour in self._stored_contours:
@@ -1626,6 +1648,11 @@ class ViewerWidget(QWidget):
                 contour.source == "ai"
                 and contour.review_pending
                 and contour.frame_index == frame_index
+                and (
+                    instance_uid is None
+                    or contour.sop_instance_uid is None
+                    or contour.sop_instance_uid == instance_uid
+                )
             ):
                 return contour
         return None
@@ -1678,8 +1705,6 @@ class ViewerWidget(QWidget):
 
     def _handle_wheel(self, ev) -> bool:
         if self._current_state is None or self._current_state.total_frames <= 1:
-            return False
-        if self._current_state.decode_in_progress:
             return False
         if hasattr(ev, "angleDelta"):
             delta_y = ev.angleDelta().y()
@@ -1791,8 +1816,16 @@ class ViewerWidget(QWidget):
             visible = list(self._stored_contours)
         else:
             frame_index = self._current_state.current_frame_index
+            instance_uid = self._current_instance_uid()
             visible = [
-                contour for contour in self._stored_contours if contour.frame_index == frame_index
+                contour
+                for contour in self._stored_contours
+                if contour.frame_index == frame_index
+                and (
+                    instance_uid is None
+                    or contour.sop_instance_uid is None
+                    or contour.sop_instance_uid == instance_uid
+                )
             ]
         self._clear_rendered_contours()
         for contour in visible:
@@ -1815,15 +1848,29 @@ class ViewerWidget(QWidget):
         self._reindex_contour_nodes()
 
     def _find_stored_contour_index(self, contour: Contour) -> int | None:
+        instance_uid = contour.sop_instance_uid
         for index, existing in enumerate(self._stored_contours):
             if (
                 existing.phase.casefold() == contour.phase.casefold()
                 and existing.view.casefold() == contour.view.casefold()
                 and existing.chamber.casefold() == contour.chamber.casefold()
                 and existing.frame_index == contour.frame_index
+                and existing.sop_instance_uid == instance_uid
             ):
                 return index
         return None
+
+    def _current_instance_uid(self) -> str | None:
+        if self._current_state is None or self._current_state.instance is None:
+            return None
+        return self._current_state.instance.sop_instance_uid
+
+    def _tag_contour_instance(self, contour: Contour) -> Contour:
+        instance_uid = self._current_instance_uid()
+        if instance_uid is None or contour.sop_instance_uid == instance_uid:
+            return contour
+        contour.sop_instance_uid = instance_uid
+        return contour
 
     def _contour_frame_index(self) -> int | None:
         if self._current_state is None:
@@ -1947,9 +1994,44 @@ class ViewerWidget(QWidget):
     def _snap_open_arc_endpoints(self, contour: Contour) -> None:
         if not contour.is_open_arc or contour.mitral_annulus is None:
             return
+        if len(contour.points) < 2:
+            return
+
+        last_index = len(contour.points) - 1
+        if self._drag_session is not None:
+            contour_index, _, _, grab_index, _ = self._drag_session
+            if 0 <= contour_index < len(self._contours) and self._contours[contour_index] is contour:
+                if grab_index == 0:
+                    septal = (float(contour.points[0][0]), float(contour.points[0][1]))
+                    lateral = contour.mitral_annulus[1]
+                    contour.mitral_annulus = (septal, lateral)
+                    self._refresh_mitral_annulus_line(contour_index)
+                    return
+                if grab_index == last_index:
+                    septal = contour.mitral_annulus[0]
+                    lateral = (
+                        float(contour.points[last_index][0]),
+                        float(contour.points[last_index][1]),
+                    )
+                    contour.mitral_annulus = (septal, lateral)
+                    self._refresh_mitral_annulus_line(contour_index)
+                    return
+
         septal, lateral = contour.mitral_annulus
         contour.points[0] = septal
-        contour.points[-1] = lateral
+        contour.points[last_index] = lateral
+
+    def _refresh_mitral_annulus_line(self, contour_index: int) -> None:
+        if contour_index < 0 or contour_index >= len(self._contour_ma_items):
+            return
+        ma_item = self._contour_ma_items[contour_index]
+        if ma_item is None or contour_index >= len(self._contours):
+            return
+        contour = self._contours[contour_index]
+        if contour.mitral_annulus is None:
+            return
+        septal, lateral = contour.mitral_annulus
+        ma_item.setData([septal[0], lateral[0]], [septal[1], lateral[1]])
 
     def _update_contour_node_highlights(
         self,
@@ -2226,6 +2308,18 @@ class ViewerWidget(QWidget):
         if not force and math.hypot(delta[0], delta[1]) < MIN_DELTA_NORM:
             return False
 
+        last_index = len(contour.points) - 1
+        if contour.is_open_arc and session_grab in (0, last_index):
+            contour.points[session_grab] = (x, y)
+            self._snap_open_arc_endpoints(contour)
+            for idx, point in enumerate(contour.points):
+                self._contour_nodes[contour_index][idx].setData([point[0]], [point[1]])
+            self._refresh_rendered_contour_geometry(contour_index, during_drag=True)
+            self._last_drag_apply_pos = rounded_cursor
+            self._drag_session = (contour_index, x, y, session_grab, locked_tier)
+            self._flush_drag_paint()
+            return True
+
         weights = self._locked_drag_weights(contour, session_grab, locked_tier)
         updated = apply_gaussian_displacement(contour.points, delta, weights)
         contour.points[:] = updated
@@ -2372,8 +2466,13 @@ class ViewerWidget(QWidget):
         locked_tier = self._drag_session[4] if self._drag_session is not None else 1
         if contour.is_open_arc:
             num_nodes = contour.num_nodes or DEFAULT_NODE_COUNT
-            if contour.mitral_annulus is not None:
-                septal, lateral = contour.mitral_annulus
+            if contour.mitral_annulus is not None and len(contour.points) >= 2:
+                septal = (float(contour.points[0][0]), float(contour.points[0][1]))
+                lateral = (
+                    float(contour.points[-1][0]),
+                    float(contour.points[-1][1]),
+                )
+                contour.mitral_annulus = (septal, lateral)
                 apex = contour.apex_landmark or apex_point(contour.points, contour.mitral_annulus)
                 resampled = resample_open_arc_landmarks(
                     contour.points,
@@ -2398,6 +2497,7 @@ class ViewerWidget(QWidget):
                 self._contour_nodes[contour_index][idx].setData([point[0]], [point[1]])
         self._end_drag_overlay(contour_index)
         self._refresh_rendered_contour_geometry(contour_index)
+        self._refresh_mitral_annulus_line(contour_index)
         self._clear_contour_node_highlights(contour_index)
         self._clear_drag_session()
         self._clear_contour_hover()

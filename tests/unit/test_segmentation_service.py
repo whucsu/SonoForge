@@ -41,6 +41,44 @@ def _polygon_area(points: list[tuple[float, float]]) -> float:
     return abs(area) / 2.0
 
 
+def test_embed_echonet_mask_places_crop_in_frame() -> None:
+    from echo_personal_tool.domain.services.segmentation_service import (
+        EchoNetCropTransform,
+        embed_echonet_mask,
+    )
+
+    mask = np.zeros((112, 112), dtype=np.uint8)
+    mask[40:72, 40:72] = 1
+    transform = EchoNetCropTransform(
+        frame_height=480,
+        frame_width=640,
+        crop_y0=40,
+        crop_x0=120,
+        crop_size=224,
+    )
+
+    embedded = embed_echonet_mask(mask, transform)
+
+    assert embedded.shape == (480, 640)
+    assert embedded[40:264, 120:344].any()
+    assert not embedded[0:40, :].any()
+
+
+def test_crop_frame_for_echonet_uses_b_mode_roi() -> None:
+    from echo_personal_tool.domain.services.segmentation_service import crop_frame_for_echonet
+
+    frame = np.zeros((600, 800, 3), dtype=np.uint8)
+    frame[50:550, 100:700] = 80
+    roi = (100.0, 50.0, 700.0, 550.0)
+
+    cropped, transform = crop_frame_for_echonet(frame, roi_xyxy=roi)
+
+    assert cropped.shape[:2] == (transform.crop_size, transform.crop_size)
+    assert transform.crop_size == 500
+    assert transform.crop_y0 >= 50
+    assert transform.crop_x0 >= 100
+
+
 def test_prepare_tensor_grayscale_shape_and_dtype() -> None:
     frame = np.full((64, 48), 128, dtype=np.uint8)
 
@@ -96,6 +134,75 @@ def test_logits_to_mask_from_probabilities() -> None:
 
     assert mask.shape == (2, 2)
     assert mask.tolist() == [[0, 1], [1, 0]]
+
+
+def test_open_arc_from_cavity_mask_uses_wider_end_as_annulus() -> None:
+    from echo_personal_tool.domain.services.segmentation_service import open_arc_from_cavity_mask
+
+    height, width = 400, 400
+    mask = np.zeros((height, width), dtype=np.uint8)
+    center_y, center_x, radius_y, radius_x = 220.0, 200.0, 150.0, 90.0
+    ys, xs = np.ogrid[:height, :width]
+    mask[
+        ((ys - center_y) ** 2 / radius_y**2 + (xs - center_x) ** 2 / radius_x**2) <= 1.0
+    ] = 1
+
+    open_points, annulus, apex = open_arc_from_cavity_mask(mask, num_nodes=32)
+    septal, lateral = annulus
+
+    annulus_y = (septal[1] + lateral[1]) / 2.0
+    assert annulus_y < apex[1]
+    assert abs(lateral[0] - septal[0]) > 20.0
+    assert open_points[0] == septal
+    assert open_points[-1] == lateral
+
+
+def test_open_arc_from_cavity_mask_flips_when_base_is_at_bottom() -> None:
+    from echo_personal_tool.domain.services.segmentation_service import open_arc_from_cavity_mask
+
+    height, width = 400, 400
+    mask = np.zeros((height, width), dtype=np.uint8)
+    for y in range(height):
+        half_width = int(15 + (y / height) * 130)
+        center_x = width // 2
+        mask[y, center_x - half_width : center_x + half_width] = 1
+
+    _, annulus, apex = open_arc_from_cavity_mask(mask, num_nodes=32)
+    annulus_y = (annulus[0][1] + annulus[1][1]) / 2.0
+    assert annulus_y > apex[1]
+
+
+def test_mask_to_contour_embedded_echonet_blob_has_full_span() -> None:
+    from echo_personal_tool.domain.services.segmentation_service import (
+        crop_frame_for_echonet,
+        embed_echonet_mask,
+        papillary_mask_cleanup,
+        smooth_contour,
+        closed_polygon_to_open_arc,
+    )
+
+    height, width = 600, 800
+    _, transform = crop_frame_for_echonet(
+        np.zeros((height, width), dtype=np.uint8),
+        roi_xyxy=(100.0, 50.0, 700.0, 550.0),
+    )
+    onnx_mask = np.zeros((112, 112), dtype=np.uint8)
+    onnx_mask[30:90, 25:85] = 1
+    embedded = embed_echonet_mask(onnx_mask, transform)
+    cleaned = papillary_mask_cleanup(embedded)
+    closed = smooth_contour(mask_to_contour(cleaned, (height, width)), num_nodes=32)
+    max_span = max(
+        math.hypot(a[0] - b[0], a[1] - b[1]) for a in closed for b in closed
+    )
+
+    assert max_span > 100.0
+    arc, annulus = closed_polygon_to_open_arc(closed)
+    annulus_len = math.hypot(
+        annulus[1][0] - annulus[0][0],
+        annulus[1][1] - annulus[0][1],
+    )
+    assert annulus_len > 100.0
+    assert len(arc) >= 3
 
 
 def test_mask_to_contour_circle_area_scales_to_original_shape() -> None:

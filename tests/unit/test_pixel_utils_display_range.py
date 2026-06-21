@@ -12,6 +12,41 @@ from echo_personal_tool.infrastructure.pixel_utils import (
 )
 
 
+def test_is_effective_grayscale_detects_b_mode_rgb_packing() -> None:
+    from echo_personal_tool.infrastructure.pixel_utils import (
+        is_color_frame,
+        is_effective_grayscale,
+    )
+
+    gray = np.full((64, 48), 120, dtype=np.uint8)
+    rgb = np.stack([gray, gray, gray], axis=-1)
+
+    assert is_effective_grayscale(gray)
+    assert is_effective_grayscale(rgb)
+    assert not is_color_frame(rgb)
+
+
+def test_is_color_frame_true_for_doppler_like_channels() -> None:
+    from echo_personal_tool.infrastructure.pixel_utils import is_color_frame
+
+    frame = np.zeros((64, 48, 3), dtype=np.uint8)
+    frame[:, :, 0] = 200
+    frame[:, :, 1] = 40
+    frame[:, :, 2] = 40
+
+    assert is_color_frame(frame)
+
+
+def test_to_grayscale_array_preserves_uint16_range() -> None:
+    from echo_personal_tool.infrastructure.pixel_utils import to_grayscale_array
+
+    frame = np.array([[0, 4095]], dtype=np.uint16)
+    gray = to_grayscale_array(frame)
+
+    assert gray.dtype == np.float64
+    assert gray.max() == pytest.approx(4095.0)
+
+
 def test_percentile_range_clips_and_ignores_non_finite_values() -> None:
     frame = np.array([np.nan, -5.0, 0.0, 10.0, np.inf], dtype=float)
 

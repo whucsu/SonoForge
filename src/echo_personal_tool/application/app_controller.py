@@ -17,6 +17,7 @@ from echo_personal_tool.application.state_manager import StateManager
 from echo_personal_tool.application.study_measurement_session import (
     StudyMeasurementData,
     StudyMeasurementSessionStore,
+    contours_for_instance,
 )
 from echo_personal_tool.application.thumbnail_scheduler import (
     ThumbnailPriority,
@@ -34,7 +35,11 @@ from echo_personal_tool.domain.calculations.doppler_metrics import compute
 from echo_personal_tool.domain.calculations.la_area_length import (
     from_measurements as la_from_measurements,
 )
-from echo_personal_tool.domain.calculations.lvef_simpson import calculate
+from echo_personal_tool.domain.calculations.lvef_simpson import (
+    _contour_arc_span_px,
+    calculate,
+    explain_lv_auto_reject_reason,
+)
 from echo_personal_tool.domain.calculations.lvm import from_linear_measurements as lvm_from_linear
 from echo_personal_tool.domain.calculations.rv_fac import from_rv_contours
 from echo_personal_tool.domain.calculations.teichholz import from_linear_measurements
@@ -50,18 +55,22 @@ from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
 from echo_personal_tool.domain.models.viewer_state import ViewerState
 from echo_personal_tool.domain.ports import IOnnxSegmenter
 from echo_personal_tool.domain.services.contour_geometry import apex_point
+from echo_personal_tool.domain.services.frame_panel_parser import detect_panels_heuristic
 from echo_personal_tool.domain.services.segmentation_service import (
     closed_polygon_to_open_arc,
     exclude_papillary_concavities,
     mask_to_contour,
+    open_arc_from_cavity_mask,
     papillary_mask_cleanup,
     smooth_contour,
 )
+from echo_personal_tool.infrastructure.dicom_frame_panels import try_parse_from_path
 from echo_personal_tool.infrastructure.onnx_engine import (
     OnnxInferenceEngine,
     _default_models_dir,
     _load_manifest,
 )
+from echo_personal_tool.infrastructure.pixel_utils import to_grayscale_uint8
 from echo_personal_tool.infrastructure.video_reader import VideoReader
 
 _FRAME_CACHE_WARN_BYTES = 512 * 1024 * 1024
@@ -205,13 +214,20 @@ class AppController(QObject):
             frame_time_ms=frame_time_ms,
             emit=False,
         )
+        study_uid = self._resolve_study_uid(instance)
+        session_contours = contours_for_instance(
+            self._measurement_session.get(study_uid).contours,
+            instance.sop_instance_uid,
+        )
+        self._state_manager.set_contours(session_contours, emit=False)
+        if instance.media_format == "dicom":
+            self._state_manager.set_decode_in_progress(True, emit=False)
         self._state_manager.emit_state()
         if frame_index != 0:
             self._state_manager.set_frame(frame_index)
         self._current_study_uid = self._resolve_study_uid(instance)
         self._recompute_measurements()
         if instance.media_format == "dicom":
-            self._state_manager.set_decode_in_progress(True)
             self._decode_request_id += 1
             request_id = self._decode_request_id
             self._pending_decode_id = request_id
@@ -397,9 +413,10 @@ class AppController(QObject):
         original_shape = (int(frame.shape[0]), int(frame.shape[1]))
         instance_path = self._current_instance.path if self._current_instance is not None else None
         frame_index = state.current_frame_index
+        roi_xyxy = self._resolve_segment_roi_bounds(frame, instance_path)
 
         self._segment_in_progress = True
-        worker = OnnxWorker(frame, parent=self)
+        worker = OnnxWorker(frame, roi_xyxy=roi_xyxy, parent=self)
         worker.signals.finished.connect(
             partial(
                 self._on_auto_segment_finished,
@@ -598,7 +615,18 @@ class AppController(QObject):
         ):
             raise TypeError("Expected a list of Contour objects")
 
-        contour_tuple = tuple(contours)
+        instance = self._current_instance or self._state_manager.snapshot.instance
+        if instance is None:
+            return
+        tagged: list[Contour] = []
+        for contour in contours:
+            if contour.sop_instance_uid != instance.sop_instance_uid:
+                tagged.append(
+                    dataclasses.replace(contour, sop_instance_uid=instance.sop_instance_uid)
+                )
+            else:
+                tagged.append(contour)
+        contour_tuple = tuple(tagged)
         self._state_manager.set_contours(contour_tuple, emit=False)
         study_uid = self._resolve_study_uid()
         self._measurement_session.merge_contours(study_uid, contour_tuple)
@@ -808,7 +836,9 @@ class AppController(QObject):
                 if self._loaded_frame_index != state.current_frame_index:
                     self._emit_cached_frame(state.current_frame_index)
                 return
-            return
+            if self._pending_decode_id != 0:
+                return
+            # Fallback after decode failure: load one frame on demand.
         if (
             self._loaded_source_path == self._current_instance.path
             and self._loaded_frame_index == state.current_frame_index
@@ -949,6 +979,28 @@ class AppController(QObject):
         self._current_frame_pixels = pixels
         self.frame_loaded.emit(pixels)
 
+    def _resolve_segment_roi_bounds(
+        self,
+        frame: np.ndarray,
+        instance_path: Path | None,
+    ) -> tuple[float, float, float, float] | None:
+        """B-mode panel bounds for EchoNet crop (DICOM regions, else heuristic)."""
+        if instance_path is not None:
+            layout = try_parse_from_path(instance_path)
+            if layout is not None and layout.b_mode is not None:
+                bounds = layout.b_mode.bounds
+                return (bounds.x0, bounds.y0, bounds.x0 + bounds.width, bounds.y0 + bounds.height)
+
+        try:
+            grayscale = to_grayscale_uint8(frame)
+        except ValueError:
+            return None
+        layout = detect_panels_heuristic(grayscale)
+        if layout is None or layout.b_mode is None:
+            return None
+        bounds = layout.b_mode.bounds
+        return (bounds.x0, bounds.y0, bounds.x0 + bounds.width, bounds.y0 + bounds.height)
+
     def _auto_segment_context_matches(
         self,
         instance_path: Path | None,
@@ -987,26 +1039,42 @@ class AppController(QObject):
             return
 
         cleaned_mask = papillary_mask_cleanup(mask)
-        closed_points = smooth_contour(
-            mask_to_contour(cleaned_mask, original_shape),
-            num_nodes=32,
-        )
-        if not closed_points:
-            self.status_message.emit("сегментация не нашла контур — используйте ручной")
+        if int(np.count_nonzero(cleaned_mask)) < 80:
+            self.status_message.emit(
+                "сегментация: маска ONNX слишком мала — нужен A4C ED/ES с видимой полостью ЛЖ"
+            )
             return
 
         try:
-            open_points, annulus = closed_polygon_to_open_arc(closed_points, view_hint=view)
+            open_points, annulus, apex = open_arc_from_cavity_mask(
+                cleaned_mask,
+                original_shape=original_shape,
+                num_nodes=32,
+                view_hint=view,
+            )
         except ValueError:
-            self.status_message.emit("сегментация: не удалось построить open arc")
-            return
+            closed_points = smooth_contour(
+                mask_to_contour(cleaned_mask, original_shape),
+                num_nodes=32,
+            )
+            if not closed_points:
+                self.status_message.emit("сегментация не нашла контур — используйте ручной")
+                return
+            try:
+                open_points, annulus = closed_polygon_to_open_arc(closed_points, view_hint=view)
+            except ValueError:
+                self.status_message.emit("сегментация: не удалось построить open arc")
+                return
+            apex = apex_point(open_points, annulus)
 
-        apex = apex_point(open_points, annulus)
         refined_points = exclude_papillary_concavities(open_points, annulus, apex)
 
         if self._should_auto_refine_after_segment() and self._current_frame_pixels is not None:
             from echo_personal_tool.domain.services.mbs_lite_service import refine_open_arc_contour
 
+            instance_uid = (
+                self._current_instance.sop_instance_uid if self._current_instance is not None else None
+            )
             draft = Contour(
                 phase=phase,
                 view=view,
@@ -1017,6 +1085,7 @@ class AppController(QObject):
                 source="ai",
                 num_nodes=len(refined_points),
                 frame_index=frame_index,
+                sop_instance_uid=instance_uid,
             )
             refined, _ = refine_open_arc_contour(self._current_frame_pixels, draft)
             refined_points = list(refined.points)
@@ -1025,6 +1094,9 @@ class AppController(QObject):
             if refined.apex_landmark is not None:
                 apex = refined.apex_landmark
 
+        instance_uid = (
+            self._current_instance.sop_instance_uid if self._current_instance is not None else None
+        )
         contour = Contour(
             phase=phase,
             view=view,
@@ -1035,7 +1107,23 @@ class AppController(QObject):
             source="ai",
             num_nodes=len(refined_points),
             frame_index=frame_index,
+            sop_instance_uid=instance_uid,
             review_pending=True,
+        )
+        pixel_spacing, _ = self._resolve_pixel_spacing(self._state_manager.snapshot)
+        reject_reason = explain_lv_auto_reject_reason(contour, pixel_spacing)
+        if reject_reason is not None:
+            mask_px = int(np.count_nonzero(cleaned_mask))
+            arc_px = _contour_arc_span_px(contour)
+            self.status_message.emit(
+                f"сегментация: {reject_reason} (маска {mask_px}px, дуга {arc_px:.0f}px) "
+                "— используйте ручной контур"
+            )
+            return
+
+        review_status = (
+            f"{view} {phase}: проверьте контур (ASE, без папиллярных мышц) · "
+            "R — уточнить · Enter — принять"
         )
         contours = [
             existing
@@ -1045,11 +1133,8 @@ class AppController(QObject):
             )
         ]
         contours.append(contour)
+        self.status_message.emit(review_status)
         self.on_contours_changed(contours)
-        self.status_message.emit(
-            f"{view} {phase}: проверьте контур (ASE, без папиллярных мышц) · "
-            "R — уточнить · Enter — принять"
-        )
 
     def _on_auto_segment_failed(
         self,

@@ -10,6 +10,8 @@ import numpy as np
 from scipy import ndimage
 
 from echo_personal_tool.domain.services.segmentation_service import (
+    crop_frame_for_echonet,
+    embed_echonet_mask,
     logits_to_mask,
     prepare_tensor,
 )
@@ -134,7 +136,12 @@ class OnnxInferenceEngine:
             and self._model_path.is_file()
         )
 
-    def segment(self, frame: np.ndarray) -> np.ndarray:
+    def segment(
+        self,
+        frame: np.ndarray,
+        *,
+        roi_xyxy: tuple[float, float, float, float] | None = None,
+    ) -> np.ndarray:
         if self._session is None:
             msg = "ONNX segmentation model is not available"
             raise RuntimeError(msg)
@@ -148,10 +155,14 @@ class OnnxInferenceEngine:
             msg = "frame must be grayscale H×W or color H×W×3"
             raise ValueError(msg)
 
-        tensor = prepare_tensor(array)
+        cropped, transform = crop_frame_for_echonet(array, roi_xyxy=roi_xyxy)
+        tensor = prepare_tensor(cropped)
         outputs = self._session.run(
             [self._output_name],
             {self._input_name: tensor},
         )
         mask = logits_to_mask(outputs[0])
-        return _upscale_mask(mask, original_shape)
+        embedded = embed_echonet_mask(mask, transform)
+        if embedded.shape != original_shape:
+            return _upscale_mask(embedded, original_shape)
+        return embedded

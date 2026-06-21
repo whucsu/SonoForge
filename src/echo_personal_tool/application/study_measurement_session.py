@@ -67,16 +67,31 @@ def aggregate_doppler_by_instance(
     return aggregated
 
 
-def contour_key(contour: Contour) -> tuple[str, str, str]:
+def contour_key(contour: Contour) -> tuple[str, str, str, str]:
     """Stable identity for LV/LA contours within a study session."""
-    return (contour.chamber, contour.view, contour.phase)
+    return (
+        contour.sop_instance_uid or "",
+        contour.chamber,
+        contour.view,
+        contour.phase,
+    )
+
+
+def contours_for_instance(
+    contours: tuple[Contour, ...],
+    instance_uid: str,
+) -> tuple[Contour, ...]:
+    """Return contours scoped to a single DICOM/clip instance."""
+    return tuple(
+        contour for contour in contours if contour.sop_instance_uid == instance_uid
+    )
 
 
 def merge_contours(
     existing: tuple[Contour, ...],
     incoming: tuple[Contour, ...],
 ) -> tuple[Contour, ...]:
-    """Replace contours by chamber/view/phase; ignore empty incoming (instance switch)."""
+    """Replace contours by instance/chamber/view/phase; ignore empty incoming."""
     if not incoming:
         return existing
     by_key = {contour_key(contour): contour for contour in existing}

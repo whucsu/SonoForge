@@ -6,6 +6,46 @@
 
 ---
 
+## [2026-06-19 26:30] Откат cine ROI экспериментов (восстановлен DICOM auto)
+- **Тип:** fix
+- **Файлы:** `segmentation_service.py`, `frame_panel_parser.py`, `app_controller.py`, `lvef_simpson.py`, `mbs_lite_service.py`, `onnx_worker.py`, тесты
+- **Суть:** Откат изменений после «DICOM Фото контур не плохо»: снова DICOM-first ROI, center-square EchoNet embed, без heuristic-priority и OOB-gate; убраны 25:35 и 26:10 правки.
+
+## [2026-06-19 25:15] MV: широкий конец маски + drag концов
+- **Тип:** fix
+- **Файлы:** `segmentation_service.py`, `viewer_widget.py`, `test_segmentation_service.py`
+- **Суть:** Annulus на более широком конце полости (не y_min); прямой drag узлов 0/N (раньше pinned → не двигались).
+
+## [2026-06-19 25:00] MV annulus из верхней полосы маски + drag MV
+- **Тип:** fix
+- **Файлы:** `segmentation_service.py`, `app_controller.py`, `viewer_widget.py`, `test_segmentation_service.py`
+- **Суть:** Annulus = верхнее отверстие полости (не longest chord/ось ЛЖ); ручной drag концов open-arc обновляет mitral_annulus и линию MV.
+
+## [2026-06-19 24:40] mask_to_contour: cv2.findContours
+- **Тип:** fix
+- **Файлы:** `segmentation_service.py`, `test_segmentation_service.py`, `lvef_simpson.py`
+- **Суть:** Moore-tracer обходил только 2×2 px угол при большой маске (25862 px, дуга 1 px); граница через OpenCV findContours.
+
+## [2026-06-19 24:25] W/L/DR для B-mode DICOM RGB
+- **Тип:** fix
+- **Файлы:** `pixel_utils.py`, `viewer_widget.py`, `test_pixel_utils_display_range.py`
+- **Суть:** Слайдеры отключались на 3-канальных DICOM (псевдо-RGB); включены для effective grayscale и составных кадров (B-mode сверху).
+
+## [2026-06-19 24:10] EchoNet B-mode crop перед ONNX
+- **Тип:** fix
+- **Файлы:** `segmentation_service.py`, `onnx_engine.py`, `onnx_worker.py`, `app_controller.py`, `test_segmentation_service.py`
+- **Суть:** ONNX получает квадратный кроп B-mode сектора (DICOM regions / heuristic), а не сжатие всего кадра с UI — устраняет схлопнутую маску в центре; статус с mask_px и arc_px.
+
+## [2026-06-19 23:55] LV auto-segment quality gate по пикселям
+- **Тип:** fix
+- **Файлы:** `lvef_simpson.py`, `app_controller.py`, `model_manifest.json`, `test_lvef_simpson.py`
+- **Суть:** Отклонение ONNX-контура по геометрии в px (не по мм при плохом PixelSpacing); ранний fail при малой маске; `auto_refine_after_segment` выключен по умолчанию; статус с конкретной причиной отказа.
+
+## [2026-06-19 23:30] Cine scroll + контуры per-instance + DopplerAxisMapping
+- **Тип:** fix
+- **Файлы:** `contour.py`, `study_measurement_session.py`, `app_controller.py`, `viewer_widget.py`, `state_manager.py`, `doppler_axis.py`, `doppler_calibration.py`, `test_study_measurement_session.py`
+- **Суть:** Слайдер/колесо во время DICOM decode; контуры per-instance; восстановлен полный API `DopplerAxisMapping` (`from_frame_size`, inverse maps, ROI) — падение при `show_frame`.
+
 ## [2026-06-19 21:00] Merge ONNX LV Auto + EchoPac UI в phase2
 - **Тип:** feature
 - **Файлы:** `segmentation_service.py`, `app_controller.py`, `main_window.py`, `viewer_widget.py`, `measures_menu.py`, `tool_panel.py`, `echopac_theme.py`, `thumbnail_gallery.py`, `test_auto_segment_controller.py`

@@ -52,11 +52,12 @@ def run_segment_in_subprocess(
     shape: tuple[int, ...],
     dtype_str: str,
     models_dir_str: str,
+    roi_xyxy: tuple[float, float, float, float] | None = None,
 ) -> bytes:
     """Picklable entry point for ProcessPoolExecutor subprocess inference."""
     frame = np.frombuffer(frame_bytes, dtype=np.dtype(dtype_str)).reshape(shape)
     engine = OnnxInferenceEngine(models_dir=Path(models_dir_str))
-    mask = engine.segment(frame)
+    mask = engine.segment(frame, roi_xyxy=roi_xyxy)
     return np.ascontiguousarray(mask).tobytes()
 
 
@@ -73,12 +74,14 @@ class OnnxWorker(QRunnable):
         self,
         frame: np.ndarray,
         *,
+        roi_xyxy: tuple[float, float, float, float] | None = None,
         models_dir: Path | None = None,
         timeout_sec: float | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__()
         self._frame = np.ascontiguousarray(frame)
+        self._roi_xyxy = roi_xyxy
         self._models_dir = Path(models_dir) if models_dir is not None else _default_models_dir()
         self._timeout_sec = (
             float(timeout_sec) if timeout_sec is not None else _load_timeout_sec(self._models_dir)
@@ -97,6 +100,7 @@ class OnnxWorker(QRunnable):
                 frame.shape,
                 frame.dtype.str,
                 str(self._models_dir),
+                self._roi_xyxy,
             )
             mask_bytes = future.result(timeout=self._timeout_sec)
         except FuturesTimeoutError:

@@ -82,6 +82,11 @@ def format_contour_overlay(
     view = contour.view
     phase = contour.phase.upper()
     chamber = contour.chamber.upper()
+    if contour.review_pending:
+        return (
+            f"{chamber} {view} {phase}: проверьте контур (ASE) · "
+            "R — уточнить · Enter — принять"
+        )
     if pixel_spacing is None:
         return f"{chamber} {view} {phase} · Длина: — · Объём: —"
     length = _contour_length_mm(contour, pixel_spacing)
@@ -93,6 +98,74 @@ def format_contour_overlay(
         length_text = f"{length:.1f} px" if length is not None else "—"
         volume_text = f"{volume:.1f} px³" if volume is not None else "—"
     return f"{chamber} {view} {phase} · Длина: {length_text} · Объём: {volume_text}"
+
+
+_MIN_LV_AUTO_ANNULUS_PX = 20.0
+_MIN_LV_AUTO_LONG_AXIS_PX = 15.0
+_MIN_LV_AUTO_ARC_SPAN_PX = 8.0
+
+
+def _contour_annulus_length_px(contour: Contour) -> float:
+    if contour.mitral_annulus is None:
+        return 0.0
+    septal, lateral = contour.mitral_annulus
+    return math.hypot(lateral[0] - septal[0], lateral[1] - septal[1])
+
+
+def _contour_long_axis_px(contour: Contour) -> float:
+    if contour.mitral_annulus is None or len(contour.points) < 3:
+        return 0.0
+    septal, lateral = contour.mitral_annulus
+    apex = contour.apex_landmark
+    if apex is None:
+        base, tip = long_axis_endpoints(list(contour.points), contour.mitral_annulus)
+        return math.hypot(tip[0] - base[0], tip[1] - base[1])
+    ma_mid = ((septal[0] + lateral[0]) / 2.0, (septal[1] + lateral[1]) / 2.0)
+    return math.hypot(apex[0] - ma_mid[0], apex[1] - ma_mid[1])
+
+
+def _contour_arc_span_px(contour: Contour) -> float:
+    points = contour.points
+    if len(points) < 2:
+        return 0.0
+    max_span = 0.0
+    for index, first in enumerate(points):
+        for second in points[index + 1 :]:
+            span = math.hypot(second[0] - first[0], second[1] - first[1])
+            if span > max_span:
+                max_span = span
+    return max_span
+
+
+def explain_lv_auto_reject_reason(
+    contour: Contour,
+    pixel_spacing: tuple[float, float] | None,
+) -> str | None:
+    """Return a short Russian reason when an ONNX contour should not enter review."""
+    del pixel_spacing  # accept/reject uses pixel geometry only (spacing affects mm display)
+    if contour.mitral_annulus is None or len(contour.points) < 3:
+        return "контур не построен"
+    annulus_px = _contour_annulus_length_px(contour)
+    long_axis_px = _contour_long_axis_px(contour)
+    arc_span_px = _contour_arc_span_px(contour)
+    if arc_span_px < _MIN_LV_AUTO_ARC_SPAN_PX:
+        return (
+            "контур маски схлопнулся при построении "
+            "(маска есть, но граница не извлечена — сообщите разработчику)"
+        )
+    if annulus_px < _MIN_LV_AUTO_ANNULUS_PX:
+        return "не найдено митральное кольцо (проверьте вид A4C и кадр ED/ES)"
+    if long_axis_px < _MIN_LV_AUTO_LONG_AXIS_PX:
+        return "короткая ось ЛЖ слишком мала — выберите другой кадр"
+    return None
+
+
+def contour_meets_lv_auto_quality(
+    contour: Contour,
+    pixel_spacing: tuple[float, float] | None,
+) -> bool:
+    """Accept ONNX contour for review based on pixel geometry (spacing-independent)."""
+    return explain_lv_auto_reject_reason(contour, pixel_spacing) is None
 
 
 def _contour_length_mm(

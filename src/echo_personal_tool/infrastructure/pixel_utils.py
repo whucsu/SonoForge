@@ -37,8 +37,37 @@ def bgr_to_rgb(frame: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(frame[:, :, ::-1], dtype=np.uint8)
 
 
+def is_effective_grayscale(frame: np.ndarray, *, tolerance: int = 12) -> bool:
+    """True when RGB channels carry the same luminance (typical US B-mode DICOM packing)."""
+    if frame.ndim == 2:
+        return True
+    if frame.ndim != 3 or frame.shape[2] < 3:
+        return False
+
+    step_y = max(1, frame.shape[0] // 128)
+    step_x = max(1, frame.shape[1] // 128)
+    sample = frame[::step_y, ::step_x, :3]
+    red = sample[..., 0].astype(np.int16)
+    green = sample[..., 1].astype(np.int16)
+    blue = sample[..., 2].astype(np.int16)
+    channel_diff = np.maximum(np.abs(red - green), np.abs(green - blue))
+    return float(np.percentile(channel_diff, 99)) <= float(tolerance)
+
+
+def to_grayscale_array(frame: np.ndarray) -> np.ndarray:
+    """Luminance as float64 for window/level (preserves uint16 dynamic range)."""
+    array = np.asarray(frame, dtype=np.float64)
+    if array.ndim == 2:
+        return array
+    if array.ndim == 3 and array.shape[2] >= 3:
+        return np.mean(array[..., :3], axis=2)
+    if array.ndim == 3:
+        return array[..., 0]
+    raise ValueError(f"Unsupported frame shape: {frame.shape}")
+
+
 def is_color_frame(frame: np.ndarray) -> bool:
-    return frame.ndim == 3 and frame.shape[2] >= 3
+    return frame.ndim == 3 and frame.shape[2] >= 3 and not is_effective_grayscale(frame)
 
 
 def percentile_range(frame: np.ndarray, low_pct: float, high_pct: float) -> tuple[float, float]:

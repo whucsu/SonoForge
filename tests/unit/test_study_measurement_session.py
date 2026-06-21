@@ -11,11 +11,32 @@ from echo_personal_tool.domain.models import Contour, LinearMeasurement
 
 
 def test_merge_contours_replaces_same_chamber_view_phase() -> None:
+    uid = "1.2.3.instance.a"
     existing = (
-        Contour(phase="ED", view="A4C", chamber="LV", points=[(0.0, 0.0)]),
-        Contour(phase="ES", view="A4C", chamber="LV", points=[(1.0, 1.0)]),
+        Contour(
+            phase="ED",
+            view="A4C",
+            chamber="LV",
+            points=[(0.0, 0.0)],
+            sop_instance_uid=uid,
+        ),
+        Contour(
+            phase="ES",
+            view="A4C",
+            chamber="LV",
+            points=[(1.0, 1.0)],
+            sop_instance_uid=uid,
+        ),
     )
-    incoming = (Contour(phase="ED", view="A4C", chamber="LV", points=[(2.0, 2.0)]),)
+    incoming = (
+        Contour(
+            phase="ED",
+            view="A4C",
+            chamber="LV",
+            points=[(2.0, 2.0)],
+            sop_instance_uid=uid,
+        ),
+    )
 
     merged = merge_contours(existing, incoming)
 
@@ -26,8 +47,41 @@ def test_merge_contours_replaces_same_chamber_view_phase() -> None:
     assert es.points == [(1.0, 1.0)]
 
 
+def test_merge_contours_keeps_different_instances_separate() -> None:
+    existing = (
+        Contour(
+            phase="ED",
+            view="A4C",
+            chamber="LV",
+            points=[(0.0, 0.0)],
+            sop_instance_uid="clip-a",
+        ),
+    )
+    incoming = (
+        Contour(
+            phase="ED",
+            view="A4C",
+            chamber="LV",
+            points=[(2.0, 2.0)],
+            sop_instance_uid="clip-b",
+        ),
+    )
+
+    merged = merge_contours(existing, incoming)
+
+    assert len(merged) == 2
+
+
 def test_merge_contours_ignores_empty_incoming() -> None:
-    existing = (Contour(phase="ED", view="A4C", chamber="LV", points=[(0.0, 0.0)]),)
+    existing = (
+        Contour(
+            phase="ED",
+            view="A4C",
+            chamber="LV",
+            points=[(0.0, 0.0)],
+            sop_instance_uid="clip-a",
+        ),
+    )
 
     assert merge_contours(existing, ()) is existing
 
@@ -54,7 +108,15 @@ def test_session_store_accumulates_across_merge_calls() -> None:
 
     store.merge_contours(
         study_uid,
-        (Contour(phase="ED", view="A4C", chamber="LV", points=[(0.0, 0.0)]),),
+        (
+            Contour(
+                phase="ED",
+                view="A4C",
+                chamber="LV",
+                points=[(0.0, 0.0)],
+                sop_instance_uid="clip-a",
+            ),
+        ),
     )
     store.merge_linear_measurements(
         study_uid,
@@ -62,7 +124,15 @@ def test_session_store_accumulates_across_merge_calls() -> None:
     )
     store.merge_contours(
         study_uid,
-        (Contour(phase="ES", view="A4C", chamber="LV", points=[(1.0, 1.0)]),),
+        (
+            Contour(
+                phase="ES",
+                view="A4C",
+                chamber="LV",
+                points=[(1.0, 1.0)],
+                sop_instance_uid="clip-a",
+            ),
+        ),
     )
 
     data = store.get(study_uid)
@@ -75,7 +145,15 @@ def test_session_store_clear() -> None:
     store = StudyMeasurementSessionStore()
     store.merge_contours(
         "study",
-        (Contour(phase="ED", view="A4C", chamber="LV", points=[(0.0, 0.0)]),),
+        (
+            Contour(
+                phase="ED",
+                view="A4C",
+                chamber="LV",
+                points=[(0.0, 0.0)],
+                sop_instance_uid="clip-a",
+            ),
+        ),
     )
 
     store.clear()

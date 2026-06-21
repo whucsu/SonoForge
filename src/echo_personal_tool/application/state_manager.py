@@ -73,11 +73,12 @@ class StateManager(QObject):
         if emit:
             self._emit_state()
 
-    def set_decode_in_progress(self, in_progress: bool) -> None:
+    def set_decode_in_progress(self, in_progress: bool, *, emit: bool = True) -> None:
         if self._decode_in_progress == in_progress:
             return
         self._decode_in_progress = in_progress
-        self._emit_state()
+        if emit:
+            self._emit_state()
 
     def set_total_frames(self, total_frames: int) -> None:
         if total_frames < 1:

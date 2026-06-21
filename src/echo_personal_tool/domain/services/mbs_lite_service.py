@@ -104,7 +104,12 @@ def build_lame_template_for_contour(contour: Contour) -> list[tuple[float, float
     )
 
 
-def refine_open_arc_contour(frame: np.ndarray, contour: Contour) -> tuple[Contour, str]:
+def refine_open_arc_contour(
+    frame: np.ndarray,
+    contour: Contour,
+    *,
+    display_levels: tuple[float, float] | None = None,
+) -> tuple[Contour, str]:
     """Refine open-arc border: gradient active contour with Laplacian fallback."""
     if contour.mitral_annulus is None or len(contour.points) < 3:
         return contour, "geometry"
@@ -127,6 +132,7 @@ def refine_open_arc_contour(frame: np.ndarray, contour: Contour) -> tuple[Contou
                 contour.mitral_annulus,
                 template_points=template,
                 config=ActiveContourConfig(),
+                display_levels=display_levels,
             )
             if _refined_is_sane(contour.points, refined_points, septal, lateral):
                 contour.points = resample_open_arc_landmarks(

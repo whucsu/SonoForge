@@ -16,6 +16,7 @@ class Contour:
     apex_landmark: tuple[float, float] | None = None
     num_nodes: int = 32
     frame_index: int | None = None
+    sop_instance_uid: str | None = None
     review_pending: bool = False
 
     @property

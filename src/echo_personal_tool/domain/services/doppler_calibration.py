@@ -28,6 +28,8 @@ def build_axis_mapping(state: DopplerCalibrationState) -> DopplerAxisMapping:
         velocity_max_cm_s=half,
         plot_width=roi.width,
         plot_height=roi.height,
+        plot_origin_x=roi.x0,
+        plot_origin_y=roi.y0,
     )
 
 

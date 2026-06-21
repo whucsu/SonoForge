@@ -27,6 +27,7 @@ def refine_open_arc(
     *,
     template_points: Sequence[tuple[float, float]] | None = None,
     config: ActiveContourConfig | None = None,
+    display_levels: tuple[float, float] | None = None,
 ) -> list[tuple[float, float]]:
     """Refine an open arc toward image edges using a discrete active contour."""
     if len(initial_points) < 3:
@@ -34,7 +35,7 @@ def refine_open_arc(
         raise ValueError(msg)
 
     cfg = config or ActiveContourConfig()
-    gray = _to_grayscale(frame)
+    gray = _to_grayscale(frame, display_levels=display_levels)
     gradient = _gradient_magnitude(gray)
     height, width = gray.shape
 
@@ -99,11 +100,22 @@ def refine_open_arc(
     return [(point[0], point[1]) for point in points]
 
 
-def _to_grayscale(frame: np.ndarray) -> np.ndarray:
+def _to_grayscale(
+    frame: np.ndarray,
+    *,
+    display_levels: tuple[float, float] | None = None,
+) -> np.ndarray:
     array = np.asarray(frame)
     if array.ndim == 3:
-        return np.mean(array[..., :3], axis=2, dtype=np.float64)
-    return array.astype(np.float64, copy=False)
+        gray = np.mean(array[..., :3], axis=2, dtype=np.float64)
+    else:
+        gray = array.astype(np.float64, copy=False)
+    if display_levels is not None:
+        low, high = display_levels
+        if high > low:
+            gray = np.clip(gray, low, high)
+            gray = (gray - low) / (high - low) * 255.0
+    return gray
 
 
 def _gradient_magnitude(image: np.ndarray) -> np.ndarray:

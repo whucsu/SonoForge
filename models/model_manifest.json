@@ -79,6 +79,6 @@
       "ED",
       "ES"
     ],
-    "auto_refine_after_segment": true
+    "auto_refine_after_segment": false
   }
 }
