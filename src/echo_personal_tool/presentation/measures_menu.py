@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QPushButton,
@@ -64,7 +64,7 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
         (
             _btn("Калипер", MeasurementAction.CALIPER),
             _btn("Площадь", MeasurementAction.SPLINE_AREA),
-            _btn("Объём", enabled=False),
+            _btn("Объём", MeasurementAction.SPLINE_VOLUME),
         ),
     ),
     (
@@ -83,20 +83,6 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
         (
             _btn("LVEF Simpson EDV", MeasurementAction.MBS_SIMPSON, view="A4C", phase="ED"),
             _btn("LVEF Simpson ESV", MeasurementAction.MBS_SIMPSON, view="A4C", phase="ES"),
-            _btn(
-                "Simpson Biplane EDV",
-                MeasurementAction.MBS_SIMPSON,
-                view="A2C",
-                phase="ED",
-                enabled=False,
-            ),
-            _btn(
-                "Simpson Biplane ESV",
-                MeasurementAction.MBS_SIMPSON,
-                view="A2C",
-                phase="ES",
-                enabled=False,
-            ),
         ),
     ),
     (
@@ -258,6 +244,9 @@ class MeasuresAccordionSection(QWidget):
         else:
             self._body.setMaximumHeight(0)
 
+    def contains_button(self, button: QPushButton) -> bool:
+        return button in self._body.findChildren(QPushButton)
+
     def _on_header_clicked(self) -> None:
         self.clicked.emit(self)
 
@@ -266,6 +255,9 @@ class MeasuresMenuWidget(QWidget):
     """Grouped measurement actions for the Measures tab."""
 
     action_requested = Signal(object, str, str, str)
+
+    _BLINK_STYLE = "background-color: #fff59d; color: #1a2430; font-weight: bold;"
+    _NORMAL_STYLE = ""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -279,13 +271,19 @@ class MeasuresMenuWidget(QWidget):
         layout.setSpacing(2)
 
         self._sections: list[MeasuresAccordionSection] = []
-        self._doppler_tool_buttons: list[tuple[QPushButton, _MenuButton]] = []
+        self._tool_buttons: list[tuple[QPushButton, _MenuButton]] = []
+        self._blink_target: QPushButton | None = None
+        self._blink_on = False
+        self._blink_timer = QTimer(self)
+        self._blink_timer.setInterval(500)
+        self._blink_timer.timeout.connect(self._toggle_blink)
+
         for group_title, buttons in _MENU:
             section = MeasuresAccordionSection(
                 group_title,
                 buttons,
                 self._make_handler,
-                button_registry=self._doppler_tool_buttons,
+                button_registry=self._tool_buttons,
                 parent=inner,
             )
             section.clicked.connect(self._on_section_clicked)
@@ -303,14 +301,60 @@ class MeasuresMenuWidget(QWidget):
         *,
         time_ok: bool,
     ) -> None:
-        for button, spec in self._doppler_tool_buttons:
+        for button, spec in self._tool_buttons:
             needs_time = bool(
                 spec.doppler_interval
                 or spec.doppler_trace
                 or spec.action == MeasurementAction.DOPPLER_MITRAL_INFLOW
                 or spec.action == MeasurementAction.DOPPLER_TRACE
             )
-            button.setEnabled(not needs_time or time_ok)
+            if not needs_time:
+                continue
+            button.setEnabled(time_ok)
+
+    def highlight_action(
+        self,
+        action: MeasurementAction,
+        *,
+        view: str = "A4C",
+        phase: str = "ED",
+    ) -> None:
+        self.clear_highlight()
+        for button, spec in self._tool_buttons:
+            if (
+                spec.enabled
+                and spec.action == action
+                and spec.view == view
+                and spec.phase == phase
+            ):
+                self._blink_target = button
+                self._blink_timer.start()
+                self._ensure_section_visible(button)
+                return
+
+    def clear_highlight(self) -> None:
+        self._blink_timer.stop()
+        if self._blink_target is not None:
+            self._blink_target.setStyleSheet(self._NORMAL_STYLE)
+        self._blink_target = None
+        self._blink_on = False
+
+    def _toggle_blink(self) -> None:
+        if self._blink_target is None:
+            return
+        self._blink_on = not self._blink_on
+        self._blink_target.setStyleSheet(
+            self._BLINK_STYLE if self._blink_on else self._NORMAL_STYLE
+        )
+
+    def _ensure_section_visible(self, button: QPushButton) -> None:
+        for section in self._sections:
+            if section.contains_button(button) and not section.is_expanded():
+                for other in self._sections:
+                    if other is not section and other.is_expanded():
+                        other.collapse()
+                section.expand()
+                break
 
     def _on_section_clicked(self, section: MeasuresAccordionSection) -> None:
         if section.is_expanded():
@@ -323,6 +367,7 @@ class MeasuresMenuWidget(QWidget):
 
     def _make_handler(self, spec: _MenuButton) -> Callable[[], None]:
         def emit() -> None:
+            self.clear_highlight()
             action = spec.action
             extra = ""
             if spec.doppler_peak:

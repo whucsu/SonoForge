@@ -54,16 +54,16 @@ def test_main_window_l_and_escape_toggle_linear_caliper(qtbot) -> None:
 
     qtbot.keyClick(window, Qt.Key.Key_L)
     assert window._viewer.is_linear_caliper_active
-    assert window._viewer._measurement_label.text().startswith("LVEDD:")
+    assert window._viewer._measurement_label.text().startswith("Dist1:")
     assert "1-й клик" in window._viewer._measurement_label.text()
 
     qtbot.keyClick(window, Qt.Key.Key_Tab)
-    assert window._viewer._measurement_label.text().startswith("LVESD:")
+    assert window._viewer._measurement_label.text().startswith("LVEDD:")
     assert "1-й клик" in window._viewer._measurement_label.text()
 
     qtbot.keyClick(window, Qt.Key.Key_Escape)
     assert not window._viewer.is_linear_caliper_active
-    assert window._viewer._measurement_label.text() == "LVESD: —"
+    assert window._viewer._measurement_label.text() == "LVEDD: —"
 
 
 def test_main_window_c_enter_and_escape_control_contours(qtbot) -> None:
@@ -191,7 +191,7 @@ def test_main_window_i_hotkey_ignored_in_doppler_mode(qtbot) -> None:
     qtbot.addWidget(window)
     window.show()
     qtbot.waitExposed(window)
-    window.set_view_mode("doppler")
+    window._viewer.set_doppler_tool_mode("peak")
 
     qtbot.keyClick(window, Qt.Key.Key_I)
     controller.request_auto_segment.assert_not_called()

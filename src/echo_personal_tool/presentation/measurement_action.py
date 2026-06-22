@@ -11,6 +11,7 @@ class MeasurementAction(StrEnum):
     CALIBRATION = "calibration"
     CALIPER = "caliper"
     SPLINE_AREA = "spline_area"
+    SPLINE_VOLUME = "spline_volume"
     RESET = "reset"
     MANUAL_SIMPSON = "manual_simpson"
     MBS_SIMPSON = "mbs_simpson"

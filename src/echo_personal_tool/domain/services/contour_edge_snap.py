@@ -111,6 +111,37 @@ def outward_normal_at_index(
     return (normal_x, normal_y)
 
 
+def directed_edge_score(
+    edge_map: EdgeMap,
+    x: float,
+    y: float,
+    normal: tuple[float, float],
+    *,
+    inward_only: bool = True,
+) -> float:
+    """Directed endocardial edge strength at a sample point (0 = no edge)."""
+    normal_x, normal_y = normal
+    norm_len = float(np.hypot(normal_x, normal_y))
+    if norm_len <= 1e-6:
+        return 0.0
+    normal_x /= norm_len
+    normal_y /= norm_len
+    magnitude = _sample_bilinear(edge_map.magnitude, x, y, edge_map)
+    if magnitude <= 0.0:
+        return 0.0
+    gx = _sample_bilinear(edge_map.grad_x, x, y, edge_map)
+    gy = _sample_bilinear(edge_map.grad_y, x, y, edge_map)
+    grad_len = float(np.hypot(gx, gy))
+    if grad_len <= 1e-6:
+        return 0.0
+    grad_dir_x = gx / grad_len
+    grad_dir_y = gy / grad_len
+    directional = grad_dir_x * normal_x + grad_dir_y * normal_y
+    if inward_only and directional <= 0.0:
+        return 0.0
+    return float(magnitude * (directional if inward_only else abs(directional)))
+
+
 def snap_point(
     edge_map: EdgeMap,
     x: float,

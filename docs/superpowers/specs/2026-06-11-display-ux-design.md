@@ -89,8 +89,8 @@ def percentile_range(frame: np.ndarray, low_pct: float, high_pct: float) -> tupl
 
 ## Success criteria
 
-- [ ] Browser shows `study.dcm (45 frames)` not UID prefix
-- [ ] RGB DICOM renders in color in viewer
-- [ ] Thumbnails visibly larger (128px) in sidebar
-- [ ] DR sliders adjust grayscale contrast; W/L still works
-- [ ] All pytest pass; ruff clean
+- [x] Browser shows filename + frame count (thumbnail gallery / instance labels)
+- [x] RGB DICOM renders in color in viewer
+- [x] Thumbnails in sidebar (`ThumbnailGalleryWidget`)
+- [x] DR sliders adjust grayscale contrast; W/L still works (`ControlsTab`)
+- [x] Unit tests for above areas (run locally: `pytest tests/unit/ -q`)

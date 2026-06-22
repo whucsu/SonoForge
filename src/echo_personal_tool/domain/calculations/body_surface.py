@@ -22,6 +22,12 @@ _INDEXED_LINEAR_LABELS = frozenset(
         "rv basal",
         "tapse",
         "lvot",
+        "lvotd",
+        "av",
+        "annulus",
+        "ao sinus",
+        "ao junction",
+        "prox ao",
     }
 )
 
@@ -53,11 +59,26 @@ def compute_indexed_measurements(
 
     lav_4c = _chamber_es_volume(la.a4c) if la is not None else None
     lav_bi = _biplane_es_volume(la.a4c, la.a2c) if la is not None else None
+    lav_area_length = (
+        snapshot.la_volume.volume_ml
+        if snapshot.la_volume and snapshot.la_volume.volume_ml is not None
+        else None
+    )
     rav = None
     if ra is not None:
         rav = _chamber_es_volume(ra.a4c) or ra.max_volume_ml
 
     linear_indexed = _indexed_linear_measurements(snapshot.linear_measurements, bsa)
+    lvmi = _index_volume(snapshot.lvm_g, bsa) if snapshot.lvm_g is not None else None
+
+    a4c_edvi = a4c_esvi = a2c_edvi = a2c_esvi = None
+    if snapshot.lvef is not None:
+        if snapshot.lvef.a4c is not None:
+            a4c_edvi = _index_volume(snapshot.lvef.a4c.edv_ml, bsa)
+            a4c_esvi = _index_volume(snapshot.lvef.a4c.esv_ml, bsa)
+        if snapshot.lvef.a2c is not None:
+            a2c_edvi = _index_volume(snapshot.lvef.a2c.edv_ml, bsa)
+            a2c_esvi = _index_volume(snapshot.lvef.a2c.esv_ml, bsa)
 
     return IndexedMeasurements(
         bsa_m2=bsa,
@@ -67,7 +88,13 @@ def compute_indexed_measurements(
         teichholz_esvi_ml_m2=_index_volume(teich.esv_ml, bsa) if teich else None,
         lav_4c_index_ml_m2=_index_volume(lav_4c, bsa),
         lav_bi_index_ml_m2=_index_volume(lav_bi, bsa),
+        lav_area_length_index_ml_m2=_index_volume(lav_area_length, bsa),
         rav_index_ml_m2=_index_volume(rav, bsa),
+        lvmi_g_m2=lvmi,
+        simpson_a4c_edvi_ml_m2=a4c_edvi,
+        simpson_a4c_esvi_ml_m2=a4c_esvi,
+        simpson_a2c_edvi_ml_m2=a2c_edvi,
+        simpson_a2c_esvi_ml_m2=a2c_esvi,
         linear_index_mm_m2=linear_indexed,
     )
 

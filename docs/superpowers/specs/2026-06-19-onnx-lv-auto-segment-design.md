@@ -248,11 +248,11 @@ uv run ruff check src tests
 
 ## Phased delivery
 
-| Phase | Content |
-|-------|---------|
-| **v1** | LV Auto A4C ONNX + papillary post-process + review UX; disable A2C auto |
-| **v1.1** | Fixed train mean/std; improved annulus from mask geometry |
-| **v2** | A2C auto (separate model or validated EchoNet transfer) |
+| Phase | Content | Status |
+|-------|---------|--------|
+| **v1** | LV Auto A4C ONNX + papillary post-process + review UX; disable A2C auto | ✅ Done (see `ROADMAP.md`) |
+| **v1.1** | Fixed train mean/std; improved annulus from mask geometry | [ ] Planned |
+| **v2** | A2C auto (separate model or validated EchoNet transfer) | [ ] Planned |
 
 ## Verification note
 

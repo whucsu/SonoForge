@@ -48,10 +48,9 @@ def test_manual_ed_shows_panel_and_overlay_without_pixel_spacing(qtbot) -> None:
 
     _complete_manual_ed(window)
 
-    panel_text = window._measurement_panel._summary_label.text()
+    panel_text = window._viewer.results_overlay_text()
     overlay = "\n".join(window._viewer._frame_overlay_lines)
-    assert "Объёмы ЛЖ (Симпсон)" in panel_text
-    assert "КДО ЛЖ 4C" in panel_text
+    assert "EDV 4C" in panel_text
     assert "px³" in panel_text
     assert "Длина:" in overlay
     assert "px" in overlay
@@ -70,21 +69,21 @@ def test_mbs_ed_updates_after_node_drag(qtbot) -> None:
     qtbot.waitExposed(window)
     window._viewer.show_frame(np.zeros((64, 64), dtype=np.uint8))
 
-    window._on_mbs_simpson_requested("A4C", "ED")
+    window._viewer.start_model_contour(phase="ED", view="A4C")
     window._viewer.handle_contour_click((10.0, 40.0))
     window._viewer.handle_contour_click((50.0, 40.0))
     window._viewer.handle_contour_click((30.0, 10.0))
 
-    before = window._measurement_panel._summary_label.text()
+    before = window._viewer.results_overlay_text()
     mid = 16
     mx, my = window._viewer.contours()[0].points[mid]
     window._viewer._drag_contour_point(0, mid, mx, my)
     window._viewer._drag_contour_point(0, mid, 32.0, 8.0)
     window._viewer._finalize_contour_point_drag(0, mid, 32.0, 8.0)
-    after = window._measurement_panel._summary_label.text()
+    after = window._viewer.results_overlay_text()
     overlay = "\n".join(window._viewer._frame_overlay_lines)
 
-    assert "КДО ЛЖ 4C" in before
+    assert "EDV 4C" in before
     assert after != before
     assert "mm" in overlay
     assert "mL" in overlay

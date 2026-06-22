@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 _MIN_SEMI_AXIS_PX = 1e-6
 
+# LA / RA open-arc template: short diameter = long diameter × ratio (default 85%).
+# Long diameter = MA midpoint → apex; short axis is perpendicular to that line.
+ATRIAL_ELLIPSE_SHORT_AXIS_RATIO = 0.88
+
 
 @dataclass(frozen=True)
 class LameWarpProfile:
@@ -125,6 +129,66 @@ def warp_lame_open_arc(
         base_y = (1.0 - u) * septal[1] + u * lateral[1]
         lift = lame_lift_height(u, u_apex, ma_length, warp_profile) * apex_height
         warped.append((base_x + lift * dir_x, base_y + lift * dir_y))
+    warped[0] = septal
+    warped[-1] = lateral
+    return warped
+
+
+def warp_elliptical_open_arc(
+    septal: tuple[float, float],
+    lateral: tuple[float, float],
+    apex: tuple[float, float],
+    *,
+    num_points: int = 81,
+    short_axis_ratio: float = ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+) -> list[tuple[float, float]]:
+    """Sample open arc as a half-ellipse for LA/RA Simpson (atrial length axis).
+
+    Long diameter = distance from the MA midpoint to the apex (third landmark).
+    Short diameter = long × ``short_axis_ratio``, axis perpendicular to the long one.
+    Septal/lateral clicks set MA orientation; arc endpoints are pinned to them.
+    """
+    if num_points < 3:
+        msg = "num_points must be at least 3"
+        raise ValueError(msg)
+    if not 0.0 < short_axis_ratio <= 1.0:
+        msg = "short_axis_ratio must be in (0, 1]"
+        raise ValueError(msg)
+
+    ma_dx = lateral[0] - septal[0]
+    ma_dy = lateral[1] - septal[1]
+    ma_length = math.hypot(ma_dx, ma_dy)
+    if ma_length <= 0.0:
+        msg = "mitral annulus length must be positive"
+        raise ValueError(msg)
+
+    mid_x = (septal[0] + lateral[0]) / 2.0
+    mid_y = (septal[1] + lateral[1]) / 2.0
+    long_dx = apex[0] - mid_x
+    long_dy = apex[1] - mid_y
+    long_length = math.hypot(long_dx, long_dy)
+    if long_length <= 0.0:
+        msg = "apex must be off the mitral annulus line"
+        raise ValueError(msg)
+
+    long_x = long_dx / long_length
+    long_y = long_dy / long_length
+    short_u_x = ma_dx / ma_length
+    short_u_y = ma_dy / ma_length
+    short_half = (long_length * short_axis_ratio) / 2.0
+
+    warped: list[tuple[float, float]] = []
+    for index in range(num_points):
+        t = index / (num_points - 1)
+        theta = math.pi * (1.0 - t)
+        offset_short = short_half * math.cos(theta)
+        offset_long = long_length * math.sin(theta)
+        warped.append(
+            (
+                mid_x + offset_short * short_u_x + offset_long * long_x,
+                mid_y + offset_short * short_u_y + offset_long * long_y,
+            )
+        )
     warped[0] = septal
     warped[-1] = lateral
     return warped

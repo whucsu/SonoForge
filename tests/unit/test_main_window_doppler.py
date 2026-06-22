@@ -1,4 +1,4 @@
-"""MainWindow Doppler view integration tests."""
+"""MainWindow Doppler integration tests (single ViewerWidget)."""
 
 from __future__ import annotations
 
@@ -50,29 +50,14 @@ def _build_study(total_instances: int = 8) -> StudyMetadata:
     )
 
 
-def test_main_window_has_system_bar_mode_toggle(qtbot) -> None:
+def test_main_window_has_integrated_viewer_and_tool_panel(qtbot) -> None:
     window = _make_window(qtbot)
     assert window._system_bar is not None
-    assert window._worksheet is not None
-    window._system_bar.view_mode_changed.emit("doppler")
-    assert window._view_mode == "doppler"
+    assert window._viewer is not None
+    assert window._tool_panel is not None
 
 
-def test_set_view_mode_switches_to_doppler_and_shows_current_frame(qtbot) -> None:
-    window = _make_window(qtbot)
-    frame = np.full((8, 6), 17, dtype=np.uint8)
-    window._viewer.show_frame(frame)
-
-    window.set_view_mode("doppler")
-
-    assert window._view_mode == "doppler"
-    assert window._view_stack.currentWidget() is window._doppler_widget
-    assert window._doppler_widget._image_item.image is not None
-    assert window._doppler_widget._image_item.image.shape == (8, 6)
-    assert window.statusBar().currentMessage() == "Doppler view active"
-
-
-def test_frame_loaded_routes_to_active_view(qtbot) -> None:
+def test_frame_loaded_updates_viewer(qtbot) -> None:
     window = _make_window(qtbot)
 
     frame_2d = np.full((4, 5), 3, dtype=np.uint8)
@@ -81,44 +66,49 @@ def test_frame_loaded_routes_to_active_view(qtbot) -> None:
     assert window._viewer._current_frame.shape == (4, 5)
 
     doppler_frame = np.full((3, 7), 9, dtype=np.uint8)
-    window.set_view_mode("doppler")
     window._on_frame_loaded(doppler_frame)
-    assert window._doppler_widget._image_item.image is not None
-    assert window._doppler_widget._image_item.image.shape == (3, 7)
+    assert window._viewer._current_frame is not None
+    assert window._viewer._current_frame.shape == (3, 7)
 
 
-def test_m_hotkey_only_changes_doppler_tool_mode_in_doppler_view(qtbot) -> None:
+def test_m_hotkey_starts_model_contour_in_bmode(qtbot) -> None:
     window = _make_window(qtbot)
+    window._viewer.show_frame(np.zeros((64, 64), dtype=np.uint8))
 
     qtbot.keyClick(window, Qt.Key.Key_M)
-    assert window._doppler_widget.get_tool_mode() == "none"
 
-    window.set_view_mode("doppler")
-    qtbot.keyClick(window, Qt.Key.Key_M)
-    assert window._doppler_widget.get_tool_mode() == "peak"
+    assert window._viewer.is_contour_mode_active
+    assert window._viewer._contour_mode_kind == "model"
+
+
+def test_doppler_hotkeys_require_time_calibration(qtbot, monkeypatch) -> None:
+    window = _make_window(qtbot)
+    window._viewer.show_frame(np.zeros((64, 64), dtype=np.uint8))
+    monkeypatch.setattr(window._viewer, "is_doppler_time_calibrated", lambda: True)
+
     qtbot.keyClick(window, Qt.Key.Key_T)
-    assert window._doppler_widget.get_tool_mode() == "interval"
+    assert window._viewer.get_doppler_tool_mode() == "interval"
     qtbot.keyClick(window, Qt.Key.Key_V)
-    assert window._doppler_widget.get_tool_mode() == "trace"
+    assert window._viewer.get_doppler_tool_mode() == "trace"
 
 
 def test_escape_and_enter_delegate_to_active_doppler_tool(qtbot, monkeypatch) -> None:
     window = _make_window(qtbot)
-    window.set_view_mode("doppler")
-    window._doppler_widget.set_tool_mode("trace")
+    window._viewer.show_frame(np.zeros((64, 64), dtype=np.uint8))
+    window._viewer.set_doppler_tool_mode("trace")
 
-    cancel_calls: list[bool] = []
     finish_calls: list[bool] = []
+    cancel_calls: list[bool] = []
 
     monkeypatch.setattr(
-        window._doppler_widget,
-        "cancel_active_tool",
-        lambda: cancel_calls.append(True) or True,
+        window._viewer,
+        "finish_doppler_trace",
+        lambda: finish_calls.append(True) or True,
     )
     monkeypatch.setattr(
-        window._doppler_widget,
-        "finish_trace",
-        lambda: finish_calls.append(True) or True,
+        window._viewer._doppler,
+        "cancel_active_tool",
+        lambda: cancel_calls.append(True) or True,
     )
 
     qtbot.keyClick(window, Qt.Key.Key_Return)

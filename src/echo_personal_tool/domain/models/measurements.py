@@ -91,8 +91,22 @@ class IndexedMeasurements:
     teichholz_esvi_ml_m2: float | None = None
     lav_4c_index_ml_m2: float | None = None
     lav_bi_index_ml_m2: float | None = None
+    lav_area_length_index_ml_m2: float | None = None
     rav_index_ml_m2: float | None = None
+    lvmi_g_m2: float | None = None
+    simpson_a4c_edvi_ml_m2: float | None = None
+    simpson_a4c_esvi_ml_m2: float | None = None
+    simpson_a2c_edvi_ml_m2: float | None = None
+    simpson_a2c_esvi_ml_m2: float | None = None
     linear_index_mm_m2: tuple[tuple[str, float], ...] = ()
+
+
+@dataclass(frozen=True)
+class PlanimeterResult:
+    label: str
+    kind: str  # area | volume
+    value: float
+    unit: str
 
 
 @dataclass(frozen=True)
@@ -105,6 +119,7 @@ class MeasurementSnapshot:
     ra_simpson: ChamberSimpsonResult | None = None
     rv_simpson: ChamberSimpsonResult | None = None
     lvm_g: float | None = None
+    rwt: float | None = None
     rv_fac_percent: float | None = None
     diastology_grade: str | None = None
     linear_measurements: tuple[LinearMeasurement, ...] = ()
@@ -112,3 +127,4 @@ class MeasurementSnapshot:
     height_cm: float | None = None
     weight_kg: float | None = None
     indexed: IndexedMeasurements | None = None
+    planimeter: tuple[PlanimeterResult, ...] = ()

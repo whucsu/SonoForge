@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from unittest.mock import MagicMock
+
 import numpy as np
 from PySide6.QtWidgets import QPushButton
 
 from echo_personal_tool.application.app_controller import AppController
 from echo_personal_tool.domain.models import InstanceMetadata, ViewerState
 from echo_personal_tool.presentation.main_window import MainWindow
-from echo_personal_tool.presentation.measurement_panel import MeasurementPanel
 from echo_personal_tool.presentation.measurement_tools_panel import MeasurementToolsPanel
-from echo_personal_tool.presentation.viewer_widget import ViewerWidget
+from echo_personal_tool.presentation.tool_panel import ToolPanel
 
 
 def test_measurement_tools_panel_has_manual_and_mbs_buttons(qtbot) -> None:
@@ -72,6 +73,28 @@ def test_lav_4c_starts_manual_contour(qtbot) -> None:
     assert window._viewer.is_contour_mode_active
     assert window._viewer._contour_mode_kind == "manual"
     assert window._viewer._active_contour_chamber == "LA"
+    assert window._viewer._active_contour_view == "A4C"
+    assert window._viewer._active_contour_phase == "ES"
+
+
+def test_rav_4c_starts_manual_contour(qtbot) -> None:
+    controller = AppController()
+    controller.state_manager.set_instance(
+        _sample_instance(),
+        total_frames=10,
+        frame_time_ms=33.3,
+    )
+    window = MainWindow(controller=controller)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    window._viewer.show_frame(np.zeros((64, 64), dtype=np.uint8))
+
+    window._on_rav_volume()
+
+    assert window._viewer.is_contour_mode_active
+    assert window._viewer._contour_mode_kind == "manual"
+    assert window._viewer._active_contour_chamber == "RA"
     assert window._viewer._active_contour_view == "A4C"
     assert window._viewer._active_contour_phase == "ES"
 
@@ -188,6 +211,7 @@ def test_mbs_edv_auto_starts_model_contour(qtbot) -> None:
         total_frames=10,
         frame_time_ms=33.3,
     )
+    controller.request_auto_segment = MagicMock()
     window = MainWindow(controller=controller)
     qtbot.addWidget(window)
     window.show()
@@ -196,19 +220,14 @@ def test_mbs_edv_auto_starts_model_contour(qtbot) -> None:
 
     window._on_mbs_simpson_requested("A4C", "ED")
 
-    assert window._viewer.is_contour_mode_active
-    assert window._viewer._contour_mode_kind == "model"
-    assert window._viewer._active_contour_view == "A4C"
-    assert window._viewer._active_contour_phase == "ED"
-    assert window._viewer._active_contour_chamber == "LV"
+    controller.request_auto_segment.assert_called_once()
+    assert controller._auto_segment_phase == "ED"
+    assert controller._auto_segment_view == "A4C"
+    assert "LV Auto" in window._viewer._frame_overlay_lines[0]
+    assert not window._viewer.is_contour_mode_active
 
 
 def test_ed_contour_completion_starts_es_prompt(qtbot, monkeypatch) -> None:
-    monkeypatch.setattr(
-        MeasurementPanel,
-        "_format_lvef_section",
-        lambda self, snapshot: [],
-    )
     controller = AppController()
     controller.state_manager.set_instance(
         _sample_instance(),
@@ -226,7 +245,7 @@ def test_ed_contour_completion_starts_es_prompt(qtbot, monkeypatch) -> None:
     window._viewer.handle_contour_click((50.0, 40.0))
     window._viewer.handle_contour_click((30.0, 10.0))
 
-    assert window._worksheet._blink_timer.isActive()
+    assert window._tool_panel.measure._menu._blink_timer.isActive()
 
 
 def test_frame_overlay_clears_on_frame_change(qtbot) -> None:
@@ -249,3 +268,11 @@ def test_frame_overlay_clears_on_frame_change(qtbot) -> None:
         )
     )
     assert not viewer._overlay_label.isVisible()
+
+
+def test_tool_panel_has_results_button_under_patient_metrics(qtbot) -> None:
+    panel = ToolPanel()
+    qtbot.addWidget(panel)
+    labels = {button.text() for button in panel.findChildren(QPushButton)}
+    assert "Результаты" in labels
+    assert panel.measure._patient_metrics._results_button.isVisibleTo(panel)

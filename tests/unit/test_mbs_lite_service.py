@@ -8,12 +8,16 @@ import numpy as np
 import pytest
 
 from echo_personal_tool.domain.calculations.lvef_simpson import calculate
+from echo_personal_tool.domain.models import Contour
 from echo_personal_tool.domain.services.contour_geometry import DEFAULT_NODE_COUNT
 from echo_personal_tool.domain.services.lv_shape_template import (
+    ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
     lame_profile_for_view_phase,
+    warp_elliptical_open_arc,
     warp_lame_open_arc,
 )
 from echo_personal_tool.domain.services.mbs_lite_service import (
+    build_lame_template_for_contour,
     fit_contour_from_landmarks,
     infer_apex_from_open_arc,
     refine_model_contour,
@@ -116,6 +120,38 @@ def test_fit_contour_rejects_apex_on_annulus() -> None:
             apex=(25.0, 0.0),
             phase="ED",
         )
+
+
+def test_fit_contour_la_matches_elliptical_template() -> None:
+    from echo_personal_tool.domain.services.contour_geometry import resample_open_arc_landmarks
+
+    septal = (10.0, 40.0)
+    lateral = (50.0, 40.0)
+    apex = (30.0, 10.0)
+    contour = fit_contour_from_landmarks(
+        septal=septal,
+        lateral=lateral,
+        apex=apex,
+        phase="ES",
+        view="A4C",
+        chamber="LA",
+    )
+    elliptical = warp_elliptical_open_arc(
+        septal,
+        lateral,
+        apex,
+        num_points=81,
+        short_axis_ratio=ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+    )
+    expected = resample_open_arc_landmarks(
+        elliptical,
+        septal=septal,
+        lateral=lateral,
+        apex=apex,
+        num_nodes=DEFAULT_NODE_COUNT,
+    )
+    mid_index = len(contour.points) // 2
+    assert contour.points[mid_index] == pytest.approx(expected[mid_index], abs=0.5)
 
 
 def test_a2c_lame_profile_differs_from_a4c() -> None:
@@ -222,6 +258,110 @@ def test_refine_open_arc_contour_preserves_manual_source() -> None:
     refined, _mode = refine_open_arc_contour(frame, contour)
     assert refined.source == "manual"
     assert len(refined.points) == DEFAULT_NODE_COUNT
+
+
+def test_refine_ai_stepped_refine_locks_on_ring() -> None:
+    frame = np.zeros((128, 128), dtype=np.float64)
+    center = 63.5
+    y_values, x_values = np.mgrid[0:128, 0:128]
+    distance = np.hypot(x_values - center, y_values - center)
+    frame[(distance > 28.0) & (distance <= 42.0)] = 220.0
+
+    septal = (center - 20.0, center)
+    lateral = (center + 20.0, center)
+    ai_points = [
+        (center + 22.0 * math.cos(angle), center - 22.0 * math.sin(angle))
+        for angle in np.linspace(math.pi, 0.0, 32)
+    ]
+    ai_points[0] = septal
+    ai_points[-1] = lateral
+    ai_contour = Contour(
+        phase="ED",
+        view="A4C",
+        chamber="LV",
+        mitral_annulus=(septal, lateral),
+        apex_landmark=(center, 20.0),
+        points=ai_points,
+        source="ai",
+        num_nodes=len(ai_points),
+    )
+
+    current = ai_contour
+    for _ in range(8):
+        current, mode = refine_open_arc_contour(frame, current)
+        assert mode.startswith("step:") or mode.startswith("complete")
+        if current.refine_locked_indices:
+            break
+    assert len(current.refine_locked_indices) > 0
+
+    locked_positions = {
+        index: current.points[index]
+        for index in current.refine_locked_indices
+    }
+    next_pass, _mode2 = refine_open_arc_contour(frame, current)
+    for index, position in locked_positions.items():
+        assert next_pass.points[index] == position
+
+
+def test_refine_ai_contour_does_not_collapse_to_lame_template() -> None:
+    from echo_personal_tool.domain.services.active_contour_refine import ActiveContourConfig, refine_open_arc
+    from echo_personal_tool.domain.services.mbs_lite_service import _refine_internal_template
+
+    frame = np.zeros((128, 128), dtype=np.float64)
+    center = 63.5
+    y_values, x_values = np.mgrid[0:128, 0:128]
+    distance = np.hypot(x_values - center, y_values - center)
+    frame[(distance > 28.0) & (distance <= 42.0)] = 220.0
+
+    septal = (center - 20.0, center)
+    lateral = (center + 20.0, center)
+    apex = (center, 20.0)
+    model = fit_contour_from_landmarks(
+        septal=septal,
+        lateral=lateral,
+        apex=apex,
+        phase="ED",
+    )
+    lame_template = build_lame_template_for_contour(model)
+    ai_points = list(model.points)
+    for index in range(4, len(ai_points) - 4, 3):
+        x, y = ai_points[index]
+        ai_points[index] = (x + 8.0, y + 5.0)
+
+    ai_contour = Contour(
+        phase="ED",
+        view="A4C",
+        chamber="LV",
+        mitral_annulus=(septal, lateral),
+        apex_landmark=apex,
+        points=ai_points,
+        source="ai",
+        num_nodes=len(ai_points),
+    )
+    assert _refine_internal_template(ai_contour) == ai_points
+
+    legacy = refine_open_arc(
+        frame,
+        ai_points,
+        (septal, lateral),
+        template_points=lame_template,
+        config=ActiveContourConfig(),
+    )
+    refined, mode = refine_open_arc_contour(frame, ai_contour)
+    assert mode.startswith("step:")
+
+    def mean_distance(
+        target: list[tuple[float, float]],
+        reference: list[tuple[float, float]],
+    ) -> float:
+        total = 0.0
+        for left, right in zip(target, reference, strict=True):
+            total += math.hypot(left[0] - right[0], left[1] - right[1])
+        return total / len(target)
+
+    legacy_lame_dist = mean_distance(legacy, lame_template)
+    refined_lame_dist = mean_distance(refined.points, lame_template)
+    assert refined_lame_dist > legacy_lame_dist * 1.5
 
 
 def test_fit_contour_balances_nodes_for_off_center_apex() -> None:

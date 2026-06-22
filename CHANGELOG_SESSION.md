@@ -6,6 +6,106 @@
 
 ---
 
+## [2026-06-19 45:00] ROADMAP, чеклисты, LAV/RAV овал, LV Auto
+- **Тип:** feature
+- **Файлы:** `ROADMAP.md`, `lv_shape_template.py`, `mbs_lite_service.py`, `measures_menu.py`, `main.py`, `docs/superpowers/specs/2026-06-19-measurement-workflow-design.md`, `docs/superpowers/specs/2026-06-11-display-ux-design.md`, `docs/superpowers/specs/2026-06-19-onnx-lv-auto-segment-design.md`, `docs/superpowers/plans/2026-06-19-onnx-lv-auto-segment.md`
+- **Суть:** Единый `ROADMAP.md` с галочками по коду; обновлены чеклисты superpowers (workflow ✅, display UX, ONNX v1); п. 7 measurement-workflow снят как ошибочный; LAV/RAV — овальный шаблон (85% короткая ось); убраны кнопки Simpson Biplane из LV Auto; подавлено KDE-предупреждение в `main.py`.
+
+## [2026-06-19 44:00] Результаты, PDF, overlay по ролику
+- **Тип:** feature
+- **Файлы:** `tool_panel.py`, `measurement_results_dialog.py`, `measurement_report_formatter.py`, `measurement_report_pdf.py`, `indexed_results_formatter.py`, `main_window.py`, `app_controller.py`, тесты
+- **Суть:** Кнопка «Результаты» под рост/вес — окно отчёта по исследованию (последнее значение при дублях) и экспорт PDF с автооткрытием; LAVi/RAVi в overlay всегда при BSA, остальные индексы — при отклонении; overlay привязан к текущему instance, отчёт — study-wide.
+
+## [2026-06-19 43:00] UI: настройки, overlay справа, рост/вес без суффиксов
+- **Тип:** fix
+- **Файлы:** `system_bar.py`, `main_window.py`, `viewer_widget.py`, `tool_panel.py`
+- **Суть:** Убраны «cm»/«kg» у полей рост/вес; study overlay справа с выравниванием текста слева; Auto Segment убран, добавлена кнопка «Настройки».
+
+## [2026-06-19 42:00] UI: system bar, overlay, рост/вес
+- **Тип:** fix
+- **Файлы:** `system_bar.py`, `viewer_widget.py`, `tool_panel.py`
+- **Суть:** Кнопки Caliper/Calibration/Reset закреплены справа; статус слева после имени файла; study overlay слева; рост/вес — крупнее, целые см/кг, на 10% выше на панели.
+
+## [2026-06-19 41:00] RAV 4C — Simpson как LAV 4C
+- **Тип:** fix
+- **Файлы:** `main_window.py`, `measurement_results_formatter.py`, тесты
+- **Суть:** RAV 4C: open-arc Simpson (TV septal → lateral → apex → точки → Enter); результат RAV 4C в frame и study overlay.
+
+## [2026-06-19 40:00] LAV: результат в оверлее после контура
+- **Тип:** fix
+- **Файлы:** `measurement_results_formatter.py`, `chamber_simpson.py`, `main_window.py`, `viewer_widget.py`, тесты
+- **Суть:** LAV из Simpson (la_simpson) выводится в study/frame overlay после Enter; исправлен spacing для MP4 без DICOM; apex_landmark при завершении LA-дуги.
+
+## [2026-06-19 39:00] Площадь/Объём и LAV: упрощённый контур
+- **Тип:** fix
+- **Файлы:** `planimeter.py`, `viewer_widget.py`, `main_window.py`, `lvef_simpson.py`, `planimeter_formatter.py`, `test_planimeter.py`
+- **Суть:** Площадь и Объём — замкнутый полигон (двойной щелчок), точки двигаются по одной; LAV 4C/2C — Simpson как LV (МК → apex → дуга → Enter), без LAL-калипера.
+
+## [2026-06-19 38:00] Общие: Площадь и Объём (сплайн)
+- **Тип:** feature
+- **Файлы:** `planimeter.py`, `planimeter_formatter.py`, `viewer_widget.py`, `main_window.py`, `measures_menu.py`, `contour.py`, `measurements.py`, тесты
+- **Суть:** Площадь — замкнутый сплайн-контур (Площадь1, 2…); Объём — open-arc Simpson (Объем1, 2…); результаты в overlay и study summary.
+
+## [2026-06-19 37:00] Индексы при отклонении от ASE-норм
+- **Тип:** feature
+- **Файлы:** `ase_reference_norms.py`, `indexed_results_formatter.py`, `body_surface.py`, `measurements.py`, `measurement_results_formatter.py`, тесты
+- **Суть:** При введённых росте/весе и выходе за ASE-нормы в overlay добавляются индексированные значения: LVMI, EDVi/ESVi, LAVi, RAVi, mm/m² для аорты и крупных линейных размеров.
+
+## [2026-06-19 36:00] Калибровка см, blink, ОТС
+- **Тип:** feature
+- **Файлы:** `viewer_widget.py`, `measures_menu.py`, `main_window.py`, `tool_panel.py`, `rwt.py`, `measurements.py`, `app_controller.py`, `measurement_results_formatter.py`, тесты
+- **Суть:** Калибровка B-mode/M-mode вводит см; после All Diastole мигает ES Diameter, после ED Simpson — ESV; в overlay добавлен ОТС = (2×LVPWd)/LVEDD.
+
+## [2026-06-19 35:00] Нормативы: один документ + шрифт
+- **Тип:** feature
+- **Файлы:** `ase_reference_parser.py`, `ase_reference_dialog.py`, тесты
+- **Суть:** Вместо вкладок — один прокручиваемый документ из `References ASE+.md`; меню «Настройки → Шрифт»; кнопки «Обновить» и «Открыть файл»; цветовые градации убраны.
+
+## [2026-06-19 34:00] Кнопка «Нормативы» — таблицы ASE
+- **Тип:** feature
+- **Файлы:** `ase_reference_parser.py`, `ase_reference_dialog.py`, `system_bar.py`, `main_window.py`, `test_ase_reference_parser.py`, `test_system_bar.py`
+- **Суть:** Кнопка «Нормативы» в system bar открывает диалог с вкладками по разделам `References ASE+.md`; колонки «Норма» — зелёные; степени патологии и строки клапанных таблиц — градация зелёный→красный.
+
+## [2026-06-19 33:00] Stepped R refine: ±N px + lock узлов
+- **Тип:** feature
+- **Файлы:** `contour.py`, `stepped_border_refine.py`, `contour_edge_snap.py`, `mbs_lite_service.py`, `viewer_widget.py`, `main_window.py`, `app_controller.py`, тесты
+- **Суть:** R для ai/manual: шаг 1..12, на каждом R поиск -N/+N px вдоль нормали; узлы с сильным градиентом фиксируются; locked не двигаются; drag/auto-segment сбрасывают состояние.
+
+## [2026-06-19 32:00] AI refine: directed edge snap вместо Laplacian
+- **Тип:** fix
+- **Файлы:** `mbs_lite_service.py`, `test_mbs_lite_service.py`
+- **Суть:** ai/manual: R/auto_refine через outward edge snap (направленный градиент + intensity ridge), без итеративного k_smooth active contour; sanity по глубине дуги; model — active contour + Lamé.
+
+## [2026-06-19 31:00] Refine: ONNX shape вместо Lamé для ai/manual
+- **Тип:** fix
+- **Файлы:** `mbs_lite_service.py`, `test_mbs_lite_service.py`
+- **Суть:** R/auto_refine больше не тянет ai/manual к Lamé-шаблону: internal template = исходные точки; Lamé только для source=model; отдельный ActiveContourConfig для ai.
+
+## [2026-06-19 30:00] A4C annulus guard + cine ROI basal pad
+- **Тип:** fix
+- **Файлы:** `segment_roi.py`, `segmentation_service.py`, `cine_segment_diagnostics.py`, `app_controller.py`, тесты
+- **Суть:** A4C: flip когда annulus выше apex (annulus_end=bottom). Cine ROI: +5% panel снизу, без sector bottom trim. При загрузке MP4 — сброс frozen ROI и pending AI контуров. DICOM без изменений.
+
+## [2026-06-19 29:00] Frozen cine ROI + sloped MV annulus
+- **Тип:** fix
+- **Файлы:** `study_measurement_session.py`, `segment_roi.py`, `segmentation_service.py`, `app_controller.py`, `cine_segment_diagnostics.py`, `scripts/diagnose_cine_segment.py`, тесты
+- **Суть:** MP4: ROI фиксируется на frame 0 и перезаписывается при ED auto-segment; ES использует frozen ROI. MV-линия: отдельный Y для septal/lateral (percentile trim), A4C-guard annulus выше apex. CLI: `--freeze-roi-from-frame`.
+
+## [2026-06-19 28:00] Cine sector trim + center_square embed
+- **Тип:** fix
+- **Файлы:** `segment_roi.py`, `cine_segment_diagnostics.py`, `test_segment_roi.py`
+- **Суть:** MP4 ROI обрезается по ткани сектора (без чёрных полей); EchoNet снова center_square внутри ROI — маска шире и ближе к полости (DICOM_0027 f59: ~17k px vs ~8k).
+
+## [2026-06-19 27:30] Cine lateral trim ROI + annulus flip
+- **Тип:** fix
+- **Файлы:** `segment_roi.py`, `segmentation_service.py`, `app_controller.py`, `cine_segment_diagnostics.py`, `test_segment_roi.py`
+- **Суть:** MP4: обрезка боковых UI-полос (маска больше не на x≈1200); при annulus_y>apex_y — annulus_end=top. DICOM без изменений.
+
+## [2026-06-19 27:00] Cine auto-contour: full ROI + диагностика
+- **Тип:** feature
+- **Файлы:** `segment_roi.py`, `segmentation_service.py`, `cine_segment_diagnostics.py`, `app_controller.py`, `onnx_engine.py`, `onnx_worker.py`, `scripts/diagnose_cine_segment.py`, `tests/interactive/`, `tests/unit/test_segment_roi.py`
+- **Суть:** Для non-DICOM cine (MP4) — эвристика B-mode + full_roi embed; DICOM без изменений (center_square). Интерактивные тесты и CLI для диагностики ROI/маски/контура.
+
 ## [2026-06-19 26:30] Откат cine ROI экспериментов (восстановлен DICOM auto)
 - **Тип:** fix
 - **Файлы:** `segmentation_service.py`, `frame_panel_parser.py`, `app_controller.py`, `lvef_simpson.py`, `mbs_lite_service.py`, `onnx_worker.py`, тесты
@@ -55,138 +155,3 @@
 - **Тип:** feature
 - **Файлы:** `system_bar.py`, `measurement_worksheet.py`, `measurement_action.py`, `main_window.py`, `measurement_panel.py`, `doppler_widget.py`, `app_controller.py`, `lvm.py`, `rv_fac.py`, `diastology_grade.py`, `mbs_lite_service.py`, `segmentation_service.py`, `doppler_metrics.py`, `README.md`
 - **Суть:** EchoPac SystemBar + worksheet вместо кнопок; Doppler toolbar; ASE LVM/FAC/LA volume/diastology grades; gradient refine на R; ONNX auto-segment по worksheet ED/ES с closed→open arc.
-
-## [2026-06-13 21:02] Preview-only thumbnail worker по умолчанию 96
-- **Тип:** feature
-- **Файлы:** `thumbnail_loader_worker.py`, `test_thumbnail_qimage.py`
-- **Суть:** Worker рендерит preview по запрошенному размеру (default 96) без второй full-size фазы.
-
-## [2026-06-13 21:04] Уточнена preview_only логика и error-path тест
-- **Тип:** fix
-- **Файлы:** `thumbnail_loader_worker.py`, `test_thumbnail_qimage.py`
-- **Суть:** Явная ветка preview_only в `run()`; тест эмиссии `failed` при исключении reader.
-
-## [2026-06-13 21:06] Strict preview-only MVP режим
-- **Тип:** fix
-- **Файлы:** `thumbnail_loader_worker.py`, `test_thumbnail_qimage.py`
-- **Суть:** Убран full-size рендер из worker; параметр `preview_only` задокументирован как игнорируемый в MVP.
-
-## [2026-06-13 21:07] Scheduler thumbnail в AppController
-- **Тип:** feature
-- **Файлы:** `app_controller.py`, `test_app_controller_thumbnail_priority.py`
-- **Суть:** ThumbnailScheduler с приоритетами P0/P1/P2; main frame не блокируется thumbnail backlog.
-
-## [2026-06-13 21:12] QA thumbnail scheduler
-- **Тип:** fix
-- **Файлы:** `app_controller.py`, `test_app_controller_thumbnail_priority.py`
-- **Суть:** Очистка `_thumbnail_instances` при success/fail; release-slot после failed.
-
-## [2026-06-13 21:13] In-flight state thumbnail
-- **Тип:** fix
-- **Файлы:** `app_controller.py`, `test_app_controller_thumbnail_priority.py`
-- **Суть:** Явный учёт `_thumbnail_in_flight` в dispatch/finish/fail.
-
-## [2026-06-13 21:18] LocalBrowser lazy preview
-- **Тип:** feature
-- **Файлы:** `local_browser.py`, `test_local_browser_thumbnail_requesting.py`
-- **Суть:** Visibility-driven preview вместо eager-запросов всех series при populate.
-
-## [2026-06-13 21:21] Fallback и scroll-jank fix
-- **Тип:** fix
-- **Файлы:** `local_browser.py`, `test_local_browser_thumbnail_requesting.py`
-- **Суть:** Сигнатура loader на set_loader; debounce scroll-trigger; non-blocking update.
-
-## [2026-06-13 21:24] LocalBrowser helper-сигнатуры
-- **Тип:** fix
-- **Файлы:** `local_browser.py`
-- **Суть:** `_collect_visible_instances` / `_collect_nearby_instances` для plan-совместимости.
-
-## [2026-06-13 21:25] Initial preview и readiness метрики
-- **Тип:** feature
-- **Файлы:** `main_window.py`, `app_controller.py`, `test_main_window_doppler.py`
-- **Суть:** `request_visible_previews()` после populate; лог-точки scan/preview/frame timing.
-
-## [2026-06-13 21:30] Дубликат preview и таймер
-- **Тип:** fix
-- **Файлы:** `main_window.py`, `test_main_window_doppler.py`
-- **Суть:** Убран лишний preview trigger; сброс click-to-frame таймера на load failure.
-
-## [2026-06-13 21:32] Единая точка initial preview
-- **Тип:** fix
-- **Файлы:** `main_window.py`, `local_browser.py`, `test_local_browser_thumbnail_requesting.py`
-- **Суть:** Initial preview только из `_on_studies_loaded`; убран автозапрос из `populate()`.
-
-## [2026-06-13 21:40] Preview-thumbnail тесты
-- **Тип:** fix
-- **Файлы:** `local_browser.py`, `test_thumbnail_qimage.py`
-- **Суть:** Флаг `_building_tree` подавляет лишние запросы при populate.
-
-## [2026-06-13 21:45] Preview без искажения пропорций
-- **Тип:** fix
-- **Файлы:** `browser_item_delegate.py`, `thumbnail_loader_worker.py`, `test_thumbnail_qimage.py`
-- **Суть:** KeepAspectRatio в delegate и preview scaling.
-
-## [2026-06-13 22:00] MVP шаг A: Калибровка в Setup
-- **Тип:** feature
-- **Файлы:** `main_window.py`, `measurement_tools_panel.py`, `test_measurement_tools_panel.py`
-- **Суть:** Убран Doppler toggle из UI; кнопка «Калибровка» в Setup.
-
-## [2026-06-13 23:30] MVP шаг B: session persistence
-- **Тип:** feature
-- **Файлы:** `study_measurement_session.py`, `app_controller.py`, `state_manager.py`
-- **Суть:** Измерения накапливаются по study_uid; не сбрасываются при смене instance.
-
-## [2026-06-14 00:15] MVP шаг C: click-click калипер
-- **Тип:** feature
-- **Файлы:** `viewer_widget.py`, `test_linear_caliper_click_click.py`
-- **Суть:** Линейный калипер click→click с live preview и session store.
-
-## [2026-06-14 01:00] Caliper button и All Diastole chain
-- **Тип:** fix
-- **Файлы:** `viewer_widget.py`, `measurement_tools_panel.py`, `main_window.py`
-- **Суть:** 2-й клик через mousePressEvent; Caliper в Setup; IVSd→LVEDD→LVPWd автоматически.
-
-## [2026-06-14 02:00] MVP шаг D2: LAV/RAV/RV Simpson
-- **Тип:** feature
-- **Файлы:** `chamber_simpson.py`, `measurement_panel.py`, `main_window.py`, `mbs_lite_service.py`
-- **Суть:** LA/RA/RV объёмы через Simpson; панели ЛП/ПП/ПЖ; LAV Bi 4C→2C ES.
-
-## [2026-06-14 04:00] Overlay и калиперы по кадрам
-- **Тип:** fix
-- **Файлы:** `viewer_widget.py`, `main_window.py`, `study_measurement_session.py`
-- **Суть:** Overlay/caliper per-frame для cine; LAV Bi шаг 2 только по кнопке на 2C.
-
-## [2026-06-14 05:00] MVP E1+E2: рост/вес и indexed
-- **Тип:** feature
-- **Файлы:** `body_surface.py`, `measurement_panel.py`, `study_measurement_session.py`
-- **Суть:** BSA (Du Bois), индексированные объёмы и диаметры (mL/m², mm/m²).
-
-## [2026-06-14 06:00] LV Lamé open-arc template
-- **Тип:** feature
-- **Файлы:** `lv_shape_template.py`, `mbs_lite_service.py`, `viewer_widget.py`
-- **Суть:** Piecewise Lamé по хорде МК с пресетами A4C/A2C ED/ES; manual и model LV.
-
-## [2026-06-14 07:00] Lamé apex + R smoothing
-- **Тип:** fix
-- **Файлы:** `lv_shape_template.py`, `contour_geometry.py`, `mbs_lite_service.py`
-- **Суть:** Foot-point→apex; R — Laplacian smooth с фиксацией MA.
-
-## [2026-06-13 14:00] Lamé spec warp + равномерный resample
-- **Тип:** fix
-- **Файлы:** `lv_shape_template.py`, `contour_geometry.py`, `mbs_lite_service.py`
-- **Суть:** Warp P(u)=B(u)+h(u)·d̂; `resample_open_arc_landmarks` septal→apex→lateral.
-
-## [2026-06-13 16:00] Arc-length split узлов
-- **Тип:** fix
-- **Файлы:** `contour_geometry.py`, `mbs_lite_service.py`
-- **Суть:** Число узлов по доле длины дуги Lamé; устранены вылеты septal.
-
-## [2026-06-13 18:00] Без pin apex на узле
-- **Тип:** fix
-- **Файлы:** `lv_shape_template.py`, `contour_geometry.py`, `mbs_lite_service.py`
-- **Суть:** Lamé через foot-point; фиксируются только концы МК; apex — метаданные клика.
-
-## [2026-06-14 18:00] Завершение блока MVP измерений и калибровки
-- **Тип:** feature + fix
-- **Файлы:** `viewer_widget.py`, `main_window.py`, `app_controller.py`, `measurement_panel.py`, `measurement_tools_panel.py`, `linear_measurement.py`, `state_manager.py`, `study_measurement_session.py`, `AGENTS.md`, `.cursor/rules/changelog.mdc`
-- **Суть:** Калибровка non-DICOM: вертикальный отрезок справа (96% ширины), 2 клика → диалог мм, крупный центральный оверлей. LAV 4C/Bi, S ПП, RAV — ручной Simpson 3 клика (MBS-lite только LV). Linear geometry без px. S ЛП в панели после LAV. Кнопка «Сброс» — контуры, caliper, Doppler, калибровка. Правило: changelog только в конце сессии, лимит 30 записей.

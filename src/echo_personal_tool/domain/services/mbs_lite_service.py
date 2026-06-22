@@ -12,6 +12,11 @@ from echo_personal_tool.domain.services.active_contour_refine import (
     ActiveContourConfig,
     refine_open_arc,
 )
+from echo_personal_tool.domain.services.stepped_border_refine import (
+    format_stepped_refine_status,
+    next_refine_step,
+    run_stepped_refine_pass,
+)
 from echo_personal_tool.domain.services.contour_geometry import (
     DEFAULT_NODE_COUNT,
     apex_point,
@@ -19,7 +24,11 @@ from echo_personal_tool.domain.services.contour_geometry import (
     resample_open_arc_landmarks,
     smooth_open_arc,
 )
-from echo_personal_tool.domain.services.lv_shape_template import warp_lame_open_arc
+from echo_personal_tool.domain.services.lv_shape_template import (
+    ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+    warp_elliptical_open_arc,
+    warp_lame_open_arc,
+)
 
 _MIN_ANNULUS_LENGTH_PX = 10.0
 _MIN_APEX_DISTANCE_PX = 3.0
@@ -37,20 +46,30 @@ def fit_contour_from_landmarks(
     num_nodes: int = DEFAULT_NODE_COUNT,
 ) -> Contour:
     """Fit an open-arc contour from annulus and apex landmarks."""
-    if chamber.upper() != "LV":
-        msg = "fit_contour_from_landmarks supports LV only"
+    chamber_key = chamber.upper()
+    if chamber_key not in {"LV", "LA", "RA"}:
+        msg = "fit_contour_from_landmarks supports LV, LA, and RA only"
         raise ValueError(msg)
 
     _validate_landmarks(septal, lateral, apex)
 
-    warped = warp_lame_open_arc(
-        septal,
-        lateral,
-        apex,
-        view=view,
-        phase=phase,
-        num_points=_TEMPLATE_POINT_COUNT,
-    )
+    if chamber_key == "LV":
+        warped = warp_lame_open_arc(
+            septal,
+            lateral,
+            apex,
+            view=view,
+            phase=phase,
+            num_points=_TEMPLATE_POINT_COUNT,
+        )
+    else:
+        warped = warp_elliptical_open_arc(
+            septal,
+            lateral,
+            apex,
+            num_points=_TEMPLATE_POINT_COUNT,
+            short_axis_ratio=ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+        )
     resampled = resample_open_arc_landmarks(
         warped,
         septal=septal,
@@ -77,6 +96,30 @@ def infer_apex_from_open_arc(
 ) -> tuple[float, float]:
     """Infer apex landmark as interior point farthest from MA chord."""
     return apex_point(points, (septal, lateral))
+
+
+def build_atrial_ellipse_template_for_contour(contour: Contour) -> list[tuple[float, float]]:
+    """Regenerate atrial ellipse template resampled to contour node count."""
+    if contour.mitral_annulus is None:
+        return list(contour.points)
+    septal, lateral = contour.mitral_annulus
+    apex = contour.apex_landmark or infer_apex_from_open_arc(
+        contour.points, septal, lateral
+    )
+    warped = warp_elliptical_open_arc(
+        septal,
+        lateral,
+        apex,
+        num_points=_TEMPLATE_POINT_COUNT,
+        short_axis_ratio=ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+    )
+    return resample_open_arc_landmarks(
+        warped,
+        septal=septal,
+        lateral=lateral,
+        apex=apex,
+        num_nodes=len(contour.points),
+    )
 
 
 def build_lame_template_for_contour(contour: Contour) -> list[tuple[float, float]]:
@@ -110,7 +153,7 @@ def refine_open_arc_contour(
     *,
     display_levels: tuple[float, float] | None = None,
 ) -> tuple[Contour, str]:
-    """Refine open-arc border: gradient active contour with Laplacian fallback."""
+    """Refine open-arc: directed edge snap for ai/manual; active contour for model."""
     if contour.mitral_annulus is None or len(contour.points) < 3:
         return contour, "geometry"
 
@@ -118,23 +161,60 @@ def refine_open_arc_contour(
     apex = contour.apex_landmark or infer_apex_from_open_arc(
         contour.points, septal, lateral
     )
-    template = (
-        build_lame_template_for_contour(contour)
-        if contour.chamber.upper() == "LV"
-        else list(contour.points)
-    )
+    original_points = list(contour.points)
 
+    if frame is not None and frame.size > 0 and contour.source in {"ai", "manual"}:
+        next_step = next_refine_step(contour.refine_step)
+        locked = frozenset(contour.refine_locked_indices)
+        result = run_stepped_refine_pass(
+            frame,
+            original_points,
+            annulus=(septal, lateral),
+            locked_indices=locked,
+            step=next_step,
+            display_levels=display_levels,
+        )
+        interior_count = max(0, len(original_points) - 2)
+        status = format_stepped_refine_status(
+            step=result.step,
+            locked_count=len(result.locked_indices),
+            interior_count=interior_count,
+            newly_locked=result.newly_locked,
+        )
+        if _refined_is_sane(
+            original_points,
+            result.points,
+            septal,
+            lateral,
+            source=contour.source,
+        ):
+            contour.points = result.points
+            contour.refine_step = result.step
+            contour.refine_locked_indices = tuple(sorted(result.locked_indices))
+            contour.mitral_annulus = (septal, lateral)
+            if contour.apex_landmark is None:
+                contour.apex_landmark = apex
+            return contour, status
+        return contour, f"{status} (rejected)"
+
+    template = _refine_internal_template(contour)
     try:
         if frame is not None and frame.size > 0:
             refined_points = refine_open_arc(
                 frame,
-                contour.points,
+                original_points,
                 contour.mitral_annulus,
                 template_points=template,
-                config=ActiveContourConfig(),
+                config=_active_contour_config_for_contour(contour),
                 display_levels=display_levels,
             )
-            if _refined_is_sane(contour.points, refined_points, septal, lateral):
+            if _refined_is_sane(
+                original_points,
+                refined_points,
+                septal,
+                lateral,
+                source=contour.source,
+            ):
                 contour.points = resample_open_arc_landmarks(
                     refined_points,
                     septal=septal,
@@ -152,9 +232,29 @@ def refine_open_arc_contour(
     return _smooth_contour_points(contour), "geometry"
 
 
-def refine_model_contour(frame: np.ndarray, contour: Contour) -> tuple[Contour, str]:
-    """Alias for refine_open_arc_contour."""
-    return refine_open_arc_contour(frame, contour)
+def _refine_internal_template(contour: Contour) -> list[tuple[float, float]]:
+    """Active-contour prior: ONNX/manual shape; template warp for model-fit contours."""
+    if contour.source != "model":
+        return list(contour.points)
+    chamber = contour.chamber.upper()
+    if chamber == "LV":
+        return build_lame_template_for_contour(contour)
+    if chamber in {"LA", "RA"}:
+        return build_atrial_ellipse_template_for_contour(contour)
+    return list(contour.points)
+
+
+def _active_contour_config_for_contour(contour: Contour) -> ActiveContourConfig:
+    if contour.source == "manual":
+        return ActiveContourConfig(
+            search_radius_px=12.0,
+            k_int=0.2,
+            k_ext=1.0,
+            k_smooth=0.15,
+            step_size=0.3,
+            max_iterations=40,
+        )
+    return ActiveContourConfig(k_smooth=0.2, max_iterations=50)
 
 
 def _refined_is_sane(
@@ -162,6 +262,8 @@ def _refined_is_sane(
     refined: Sequence[tuple[float, float]],
     septal: tuple[float, float],
     lateral: tuple[float, float],
+    *,
+    source: str = "",
 ) -> bool:
     if len(refined) != len(original):
         return False
@@ -178,7 +280,20 @@ def _refined_is_sane(
     if orig_area <= 0.0:
         return True
     ratio = new_area / orig_area
-    return 0.5 <= ratio <= 2.0
+    min_ratio = 0.45 if source in {"ai", "manual"} else 0.5
+    max_ratio = 2.5 if source in {"ai", "manual"} else 2.0
+    if not (min_ratio <= ratio <= max_ratio):
+        return False
+    orig_depth = _open_arc_depth(original, septal, lateral)
+    new_depth = _open_arc_depth(refined, septal, lateral)
+    if orig_depth > 5.0 and new_depth < 0.82 * orig_depth:
+        return False
+    return True
+
+
+def refine_model_contour(frame: np.ndarray, contour: Contour) -> tuple[Contour, str]:
+    """Alias for refine_open_arc_contour."""
+    return refine_open_arc_contour(frame, contour)
 
 
 def _polyline_length(points: Sequence[tuple[float, float]]) -> float:
@@ -188,6 +303,19 @@ def _polyline_length(points: Sequence[tuple[float, float]]) -> float:
         dy = points[index][1] - points[index - 1][1]
         total += math.hypot(dx, dy)
     return total
+
+
+def _open_arc_depth(
+    points: Sequence[tuple[float, float]],
+    septal: tuple[float, float],
+    lateral: tuple[float, float],
+) -> float:
+    if len(points) < 3:
+        return 0.0
+    return max(
+        point_line_distance(point, septal, lateral)
+        for point in points[1:-1]
+    )
 
 
 def _smooth_contour_points(contour: Contour) -> Contour:

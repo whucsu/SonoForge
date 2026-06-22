@@ -117,3 +117,29 @@ def _max_volume_ml(
     if not candidates:
         return None
     return max(candidates)
+
+
+def es_volume_from_view(metrics: LvViewMetrics | None) -> float | None:
+    """Prefer ES volume; fall back to ED for single-phase chamber contours."""
+    if metrics is None:
+        return None
+    if metrics.esv_ml is not None and metrics.esv_ml > 0.0:
+        return metrics.esv_ml
+    if metrics.edv_ml is not None and metrics.edv_ml > 0.0:
+        return metrics.edv_ml
+    return None
+
+
+def biplane_es_volume_ml(
+    a4c: LvViewMetrics | None,
+    a2c: LvViewMetrics | None,
+) -> float | None:
+    """Average ES (or ED) volumes when both views are available."""
+    values: list[float] = []
+    for metrics in (a4c, a2c):
+        volume = es_volume_from_view(metrics)
+        if volume is not None:
+            values.append(volume)
+    if len(values) == 2:
+        return sum(values) / 2.0
+    return None

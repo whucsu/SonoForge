@@ -41,6 +41,8 @@ from echo_personal_tool.domain.calculations.lvef_simpson import (
     explain_lv_auto_reject_reason,
 )
 from echo_personal_tool.domain.calculations.lvm import from_linear_measurements as lvm_from_linear
+from echo_personal_tool.domain.calculations.rwt import from_linear_measurements as rwt_from_linear
+from echo_personal_tool.domain.services.planimeter_formatter import planimeter_results_from_contours
 from echo_personal_tool.domain.calculations.rv_fac import from_rv_contours
 from echo_personal_tool.domain.calculations.teichholz import from_linear_measurements
 from echo_personal_tool.domain.models import (
@@ -55,7 +57,11 @@ from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
 from echo_personal_tool.domain.models.viewer_state import ViewerState
 from echo_personal_tool.domain.ports import IOnnxSegmenter
 from echo_personal_tool.domain.services.contour_geometry import apex_point
-from echo_personal_tool.domain.services.frame_panel_parser import detect_panels_heuristic
+from echo_personal_tool.domain.services.segment_roi import (
+    echonet_crop_mode_for_media,
+    resolve_cine_segment_roi_xyxy,
+    resolve_segment_roi_xyxy,
+)
 from echo_personal_tool.domain.services.segmentation_service import (
     closed_polygon_to_open_arc,
     exclude_papillary_concavities,
@@ -64,13 +70,11 @@ from echo_personal_tool.domain.services.segmentation_service import (
     papillary_mask_cleanup,
     smooth_contour,
 )
-from echo_personal_tool.infrastructure.dicom_frame_panels import try_parse_from_path
 from echo_personal_tool.infrastructure.onnx_engine import (
     OnnxInferenceEngine,
     _default_models_dir,
     _load_manifest,
 )
-from echo_personal_tool.infrastructure.pixel_utils import to_grayscale_uint8
 from echo_personal_tool.infrastructure.video_reader import VideoReader
 
 _FRAME_CACHE_WARN_BYTES = 512 * 1024 * 1024
@@ -219,6 +223,13 @@ class AppController(QObject):
             self._measurement_session.get(study_uid).contours,
             instance.sop_instance_uid,
         )
+        if instance.media_format != "dicom":
+            session_contours = tuple(
+                contour
+                for contour in session_contours
+                if not (contour.source == "ai" and contour.review_pending)
+            )
+            self._measurement_session.set_cine_segment_roi(study_uid, instance.sop_instance_uid, None)
         self._state_manager.set_contours(session_contours, emit=False)
         if instance.media_format == "dicom":
             self._state_manager.set_decode_in_progress(True, emit=False)
@@ -412,11 +423,20 @@ class AppController(QObject):
         frame = np.ascontiguousarray(self._current_frame_pixels)
         original_shape = (int(frame.shape[0]), int(frame.shape[1]))
         instance_path = self._current_instance.path if self._current_instance is not None else None
+        media_format = (
+            self._current_instance.media_format if self._current_instance is not None else "dicom"
+        )
         frame_index = state.current_frame_index
-        roi_xyxy = self._resolve_segment_roi_bounds(frame, instance_path)
+        roi_xyxy = self._resolve_segment_roi_bounds(
+            frame,
+            instance_path,
+            media_format=media_format,
+            phase=phase,
+        )
+        crop_mode = echonet_crop_mode_for_media(media_format)
 
         self._segment_in_progress = True
-        worker = OnnxWorker(frame, roi_xyxy=roi_xyxy, parent=self)
+        worker = OnnxWorker(frame, roi_xyxy=roi_xyxy, crop_mode=crop_mode, parent=self)
         worker.signals.finished.connect(
             partial(
                 self._on_auto_segment_finished,
@@ -754,29 +774,80 @@ class AppController(QObject):
             return self._current_study_uid
         return active.series_uid
 
+    def compute_overlay_snapshot(self, state: ViewerState) -> MeasurementSnapshot | None:
+        """Recompute metrics from the current instance contours/linear only (for on-image overlay)."""
+        instance = state.instance
+        if instance is None:
+            return None
+        study_uid = self._resolve_study_uid(instance)
+        session = self._measurement_session.get(study_uid)
+        frame_index = state.current_frame_index
+        doppler_dto = self._measurement_session.get_doppler_for_instance_frame(
+            study_uid,
+            instance.sop_instance_uid,
+            frame_index,
+        )
+        if doppler_dto is None and instance.number_of_frames <= 1:
+            doppler_dto = self._measurement_session.get_doppler_for_instance(
+                study_uid,
+                instance.sop_instance_uid,
+            )
+        return self._build_measurement_snapshot(
+            contours=state.contours,
+            linear_measurements=state.linear_measurements,
+            doppler_dto=doppler_dto,
+            state=state,
+            session=session,
+        )
+
     def _recompute_measurements(self) -> None:
         state = self._state_manager.snapshot
         study_uid = self._resolve_study_uid()
         session = self._measurement_session.get(study_uid)
         doppler_dto = self._current_doppler_dto(session)
+        snapshot = self._build_measurement_snapshot(
+            contours=session.contours,
+            linear_measurements=session.linear_measurements,
+            doppler_dto=doppler_dto,
+            state=state,
+            session=session,
+        )
+        self._state_manager.set_measurement_snapshot(snapshot, emit=False)
+        self._state_manager.emit_state()
+
+    def _build_measurement_snapshot(
+        self,
+        *,
+        contours: tuple[Contour, ...],
+        linear_measurements: tuple[LinearMeasurement, ...],
+        doppler_dto: DopplerMeasurementDTO | None,
+        state: ViewerState,
+        session: StudyMeasurementData,
+    ) -> MeasurementSnapshot:
         doppler = compute(doppler_dto) if doppler_dto is not None else None
         pixel_spacing, spacing_calibrated = self._resolve_pixel_spacing(
             state,
             session.manual_pixel_spacing,
         )
-        lvef = calculate(session.contours, pixel_spacing)
-        teichholz = from_linear_measurements(session.linear_measurements)
-        la_simpson = calculate_chamber(session.contours, "LA", pixel_spacing)
-        ra_simpson = calculate_chamber(session.contours, "RA", pixel_spacing)
-        rv_simpson = calculate_chamber(session.contours, "RV", pixel_spacing)
+        lvef = calculate(contours, pixel_spacing)
+        teichholz = from_linear_measurements(linear_measurements)
+        la_simpson = calculate_chamber(contours, "LA", pixel_spacing)
+        ra_simpson = calculate_chamber(contours, "RA", pixel_spacing)
+        rv_simpson = calculate_chamber(contours, "RV", pixel_spacing)
         la_volume = la_from_measurements(
-            session.contours,
-            session.linear_measurements,
+            contours,
+            linear_measurements,
             pixel_spacing if spacing_calibrated else None,
         )
-        lvm_g = lvm_from_linear(session.linear_measurements)
+        lvm_g = lvm_from_linear(linear_measurements)
+        rwt = rwt_from_linear(linear_measurements)
         rv_fac_percent = (
-            from_rv_contours(session.contours, pixel_spacing) if spacing_calibrated else None
+            from_rv_contours(contours, pixel_spacing) if spacing_calibrated else None
+        )
+        planimeter = planimeter_results_from_contours(
+            contours,
+            pixel_spacing if spacing_calibrated else pixel_spacing,
+            spacing_calibrated=spacing_calibrated,
         )
         base_snapshot = MeasurementSnapshot(
             doppler=doppler,
@@ -787,11 +858,13 @@ class AppController(QObject):
             ra_simpson=ra_simpson,
             rv_simpson=rv_simpson,
             lvm_g=lvm_g,
+            rwt=rwt,
             rv_fac_percent=rv_fac_percent,
-            linear_measurements=session.linear_measurements,
+            linear_measurements=linear_measurements,
             spacing_calibrated=spacing_calibrated,
             height_cm=session.height_cm,
             weight_kg=session.weight_kg,
+            planimeter=planimeter,
         )
         indexed = compute_indexed_measurements(
             base_snapshot,
@@ -806,7 +879,7 @@ class AppController(QObject):
                 lav_index_ml_m2=lav_i,
                 tr_vmax_cm_s=doppler.tr_vmax_cm_s,
             )
-        snapshot = MeasurementSnapshot(
+        return MeasurementSnapshot(
             doppler=doppler,
             lvef=lvef,
             teichholz=teichholz,
@@ -815,16 +888,16 @@ class AppController(QObject):
             ra_simpson=ra_simpson,
             rv_simpson=rv_simpson,
             lvm_g=lvm_g,
+            rwt=rwt,
             rv_fac_percent=rv_fac_percent,
             diastology_grade=diastology_grade,
-            linear_measurements=session.linear_measurements,
+            linear_measurements=linear_measurements,
             spacing_calibrated=spacing_calibrated,
             height_cm=session.height_cm,
             weight_kg=session.weight_kg,
             indexed=indexed,
+            planimeter=planimeter,
         )
-        self._state_manager.set_measurement_snapshot(snapshot, emit=False)
-        self._state_manager.emit_state()
 
     def _request_frame_if_needed(self, state: ViewerState) -> None:
         if self._current_instance is None or self._current_instance.path is None:
@@ -977,29 +1050,87 @@ class AppController(QObject):
         self._loaded_source_path = self._current_instance.path
         self._loaded_frame_index = frame_index
         self._current_frame_pixels = pixels
+        if pixels is not None:
+            self._maybe_cache_cine_roi_from_frame(pixels, frame_index)
         self.frame_loaded.emit(pixels)
+
+    def _frozen_cine_segment_roi(self) -> tuple[float, float, float, float] | None:
+        instance = self._current_instance
+        if instance is None or instance.media_format == "dicom":
+            return None
+        return self._measurement_session.get_cine_segment_roi(
+            self._resolve_study_uid(),
+            instance.sop_instance_uid,
+        )
+
+    def _cache_cine_segment_roi(
+        self,
+        roi_xyxy: tuple[float, float, float, float] | None,
+    ) -> None:
+        instance = self._current_instance
+        if instance is None or instance.media_format == "dicom" or roi_xyxy is None:
+            return
+        self._measurement_session.set_cine_segment_roi(
+            self._resolve_study_uid(),
+            instance.sop_instance_uid,
+            roi_xyxy,
+        )
+
+    def _maybe_cache_cine_roi_from_frame(
+        self,
+        frame: np.ndarray,
+        frame_index: int,
+    ) -> None:
+        if frame_index != 0 or self._frozen_cine_segment_roi() is not None:
+            return
+        roi = resolve_cine_segment_roi_xyxy(frame)
+        self._cache_cine_segment_roi(roi)
 
     def _resolve_segment_roi_bounds(
         self,
         frame: np.ndarray,
         instance_path: Path | None,
+        *,
+        media_format: str = "dicom",
+        phase: str | None = None,
     ) -> tuple[float, float, float, float] | None:
-        """B-mode panel bounds for EchoNet crop (DICOM regions, else heuristic)."""
-        if instance_path is not None:
-            layout = try_parse_from_path(instance_path)
-            if layout is not None and layout.b_mode is not None:
-                bounds = layout.b_mode.bounds
-                return (bounds.x0, bounds.y0, bounds.x0 + bounds.width, bounds.y0 + bounds.height)
+        """B-mode ROI for ONNX: DICOM tags for DICOM; frozen heuristic ROI for cine."""
+        if media_format == "dicom":
+            return resolve_segment_roi_xyxy(
+                frame,
+                media_format=media_format,
+                instance_path=instance_path,
+            )
 
-        try:
-            grayscale = to_grayscale_uint8(frame)
-        except ValueError:
-            return None
-        layout = detect_panels_heuristic(grayscale)
-        if layout is None or layout.b_mode is None:
-            return None
-        bounds = layout.b_mode.bounds
-        return (bounds.x0, bounds.y0, bounds.x0 + bounds.width, bounds.y0 + bounds.height)
+        if phase == "ED":
+            roi = resolve_cine_segment_roi_xyxy(frame)
+            self._cache_cine_segment_roi(roi)
+            return roi
+
+        frozen = self._frozen_cine_segment_roi()
+        if frozen is not None:
+            return frozen
+        return resolve_cine_segment_roi_xyxy(frame)
+
+    def _open_arc_from_cleaned_mask(
+        self,
+        cleaned_mask: np.ndarray,
+        *,
+        original_shape: tuple[int, int],
+        view: str,
+        cine: bool,
+    ) -> tuple[
+        list[tuple[float, float]],
+        tuple[tuple[float, float], tuple[float, float]],
+        tuple[float, float],
+    ]:
+        del cine
+        return open_arc_from_cavity_mask(
+            cleaned_mask,
+            original_shape=original_shape,
+            num_nodes=32,
+            view_hint=view,
+        )
 
     def _auto_segment_context_matches(
         self,
@@ -1045,12 +1176,17 @@ class AppController(QObject):
             )
             return
 
+        is_cine = (
+            self._current_instance is not None
+            and self._current_instance.media_format != "dicom"
+        )
+
         try:
-            open_points, annulus, apex = open_arc_from_cavity_mask(
+            open_points, annulus, apex = self._open_arc_from_cleaned_mask(
                 cleaned_mask,
                 original_shape=original_shape,
-                num_nodes=32,
-                view_hint=view,
+                view=view,
+                cine=is_cine,
             )
         except ValueError:
             closed_points = smooth_contour(
@@ -1109,6 +1245,8 @@ class AppController(QObject):
             frame_index=frame_index,
             sop_instance_uid=instance_uid,
             review_pending=True,
+            refine_step=0,
+            refine_locked_indices=(),
         )
         pixel_spacing, _ = self._resolve_pixel_spacing(self._state_manager.snapshot)
         reject_reason = explain_lv_auto_reject_reason(contour, pixel_spacing)

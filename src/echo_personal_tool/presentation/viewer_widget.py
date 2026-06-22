@@ -22,6 +22,13 @@ from PySide6.QtWidgets import (
 )
 
 from echo_personal_tool.domain.calculations.lvef_simpson import format_contour_overlay
+from echo_personal_tool.domain.calculations.planimeter import (
+    GENERIC_AREA_CHAMBER,
+    GENERIC_VOLUME_CHAMBER,
+    is_planimeter_polygon,
+    next_area_label,
+    next_volume_label,
+)
 from echo_personal_tool.domain.models import Contour
 from echo_personal_tool.domain.models.doppler_axis import DopplerAxisMapping
 from echo_personal_tool.domain.models.doppler_roi import (
@@ -67,6 +74,7 @@ from echo_personal_tool.domain.services.mbs_lite_service import (
     fit_contour_from_landmarks,
     refine_open_arc_contour,
 )
+from echo_personal_tool.domain.services.planimeter_formatter import format_planimeter_overlay_line
 from echo_personal_tool.domain.services.mmode_calibration import mmode_state_from_panel
 from echo_personal_tool.domain.services.pixel_spacing_resolver import (
     spacing_from_known_distance,
@@ -304,6 +312,7 @@ class ViewerWidget(QWidget):
     contour_completed = Signal(object)
     contours_changed = Signal(object)
     linear_measurements_changed = Signal(object)
+    linear_caliper_sequence_completed = Signal()
     calibration_completed = Signal(object)
     doppler_markers_changed = Signal(object)
     spectral_calibration_completed = Signal(object)
@@ -406,6 +415,7 @@ class ViewerWidget(QWidget):
         self._stored_linear_measurements: dict[tuple[str, int], LinearMeasurement] = {}
         self._persistent_linear_graphics: list[tuple[pg.PlotDataItem, pg.ScatterPlotItem]] = []
         self._caliper_sequence: list[str] = []
+        self._caliper_sequence_size = 0
         self._syncing_state = False
         self._is_color_frame = False
         self._drag_session: tuple[int, float, float, int, int] | None = None
@@ -428,7 +438,7 @@ class ViewerWidget(QWidget):
         self._results_overlay_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._results_overlay_label.setStyleSheet(_RESULTS_OVERLAY_STYLE)
         self._results_overlay_label.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
         )
         self._results_overlay_label.hide()
 
@@ -582,7 +592,7 @@ class ViewerWidget(QWidget):
             self._results_overlay_label.move(x, y)
 
     def set_results_overlay(self, text: str) -> None:
-        """Show session measurement summary (top-right, GE-style)."""
+        """Show session measurement summary (top-right box, left-aligned text)."""
         if text.strip():
             self._results_overlay_label.setText(text)
             self._results_overlay_label.adjustSize()
@@ -1317,6 +1327,7 @@ class ViewerWidget(QWidget):
 
     def start_linear_caliper_for(self, label: str) -> bool:
         self._caliper_sequence = []
+        self._caliper_sequence_size = 0
         return self._begin_linear_caliper(label)
 
     def activate_linear_caliper(self) -> bool:
@@ -1328,6 +1339,7 @@ class ViewerWidget(QWidget):
         if not labels:
             return False
         self._caliper_sequence = list(labels[1:])
+        self._caliper_sequence_size = len(labels)
         return self._begin_linear_caliper(labels[0])
 
     def _begin_linear_caliper(self, label: str) -> bool:
@@ -1396,6 +1408,36 @@ class ViewerWidget(QWidget):
             chamber=chamber,
         )
 
+    def start_generic_area_contour(self) -> bool:
+        """Closed polygon planimeter (Площадь1, Площадь2, …)."""
+        if not self._start_contour_drawing(
+            mode_kind="closed",
+            pen=self._contour_pen_manual,
+            phase="GEN",
+            view="A4C",
+            chamber=GENERIC_AREA_CHAMBER,
+        ):
+            return False
+        self._measurement_label.setText(
+            "Площадь: клики по контуру, двойной щелчок — замкнуть"
+        )
+        return True
+
+    def start_generic_volume_contour(self) -> bool:
+        """Closed polygon → Simpson volume (Объем1, Объем2, …)."""
+        if not self._start_contour_drawing(
+            mode_kind="closed",
+            pen=self._contour_pen_manual,
+            phase="GEN",
+            view="A4C",
+            chamber=GENERIC_VOLUME_CHAMBER,
+        ):
+            return False
+        self._measurement_label.setText(
+            "Объем: клики по контуру, двойной щелчок — замкнуть"
+        )
+        return True
+
     def _start_contour_drawing(
         self,
         *,
@@ -1461,6 +1503,15 @@ class ViewerWidget(QWidget):
         elif self._contour_stage == "apex":
             if self._contour_mode_kind == "model":
                 return self._finish_model_contour(apex=click)
+            chamber = self._active_contour_chamber.upper()
+            if chamber == "RV":
+                self._active_arc_points = [click]
+                self._contour_stage = "arc"
+                self._measurement_label.setText(
+                    f"{chamber}: точки вдоль контура, Enter — завершить"
+                )
+                self._update_active_contour_item()
+                return True
             return self._finish_manual_contour(apex=click)
         elif self._contour_stage == "arc":
             self._active_arc_points.append(click)
@@ -1532,7 +1583,8 @@ class ViewerWidget(QWidget):
             return False
 
         septal, lateral = self._active_mitral_annulus
-        if self._active_contour_chamber.upper() == "LV":
+        chamber = self._active_contour_chamber.upper()
+        if chamber in {"LV", "LA", "RA"}:
             try:
                 contour = fit_contour_from_landmarks(
                     septal=septal,
@@ -1540,7 +1592,7 @@ class ViewerWidget(QWidget):
                     apex=apex,
                     phase=self._active_contour_phase or "ED",
                     view=self._active_contour_view,
-                    chamber="LV",
+                    chamber=chamber,
                 )
             except ValueError:
                 return False
@@ -1579,11 +1631,13 @@ class ViewerWidget(QWidget):
         septal, lateral = self._active_mitral_annulus
         raw_arc = [septal, *self._active_arc_points, lateral]
         resampled = resample_open_arc(raw_arc, num_nodes=DEFAULT_NODE_COUNT)
+        apex_landmark = self._active_arc_points[0] if self._active_arc_points else None
         contour = Contour(
-            phase=self._active_contour_phase or "ED",
+            phase=self._active_contour_phase or "GEN",
             view=self._active_contour_view,
             chamber=self._active_contour_chamber,
             mitral_annulus=self._active_mitral_annulus,
+            apex_landmark=apex_landmark,
             points=resampled,
             num_nodes=DEFAULT_NODE_COUNT,
             frame_index=self._contour_frame_index(),
@@ -1597,15 +1651,23 @@ class ViewerWidget(QWidget):
         if len(self._active_arc_points) < 3:
             return False
 
+        chamber = self._active_contour_chamber
+        chamber_key = chamber.upper()
+        measurement_label = None
+        if chamber_key == GENERIC_AREA_CHAMBER:
+            measurement_label = next_area_label(tuple(self._stored_contours))
+        elif chamber_key == GENERIC_VOLUME_CHAMBER:
+            measurement_label = next_volume_label(tuple(self._stored_contours))
+
         contour = Contour(
-            phase=self._active_contour_phase or "ES",
+            phase=self._active_contour_phase or "GEN",
             view=self._active_contour_view,
-            chamber=self._active_contour_chamber,
+            chamber=chamber,
             points=list(self._active_arc_points),
             frame_index=self._contour_frame_index(),
+            measurement_label=measurement_label,
         )
         self._clear_active_contour_drawing()
-        self.append_frame_overlay(f"{contour.view} {contour.chamber} {contour.phase} area contour")
         self.set_contour_from_domain(contour)
         self.contour_completed.emit(contour)
         return True
@@ -1761,6 +1823,7 @@ class ViewerWidget(QWidget):
         self._linear_caliper_start = None
         self._clear_linear_caliper_graphics()
         self._caliper_sequence = []
+        self._caliper_sequence_size = 0
         self._measurement_label.setText(f"{self._current_caliper_label()}: —")
         if not self._syncing_state:
             self._emit_stored_linear_measurements()
@@ -1964,8 +2027,11 @@ class ViewerWidget(QWidget):
         points = list(contour.points)
         if not points:
             return [], []
-        if contour.is_open_arc and len(points) >= 2:
-            # Polyline only: B-spline overshoots past MA/apex landmarks on open arcs.
+        if is_planimeter_polygon(contour) or (
+            contour.is_open_arc and len(points) >= 2
+        ):
+            if closed and points:
+                points = [*points, points[0]]
             return [point[0] for point in points], [point[1] for point in points]
         if closed and points:
             points = sample_spline(points + [points[0]], num_samples=max(len(points) * 8, 128))
@@ -2309,6 +2375,16 @@ class ViewerWidget(QWidget):
             return False
 
         last_index = len(contour.points) - 1
+        if is_planimeter_polygon(contour):
+            contour.points[session_grab] = (x, y)
+            for idx, point in enumerate(contour.points):
+                self._contour_nodes[contour_index][idx].setData([point[0]], [point[1]])
+            self._refresh_rendered_contour_geometry(contour_index, during_drag=True)
+            self._last_drag_apply_pos = rounded_cursor
+            self._drag_session = (contour_index, x, y, session_grab, locked_tier)
+            self._flush_drag_paint()
+            return True
+
         if contour.is_open_arc and session_grab in (0, last_index):
             contour.points[session_grab] = (x, y)
             self._snap_open_arc_endpoints(contour)
@@ -2464,6 +2540,8 @@ class ViewerWidget(QWidget):
         )
         contour = self._contours[contour_index]
         locked_tier = self._drag_session[4] if self._drag_session is not None else 1
+        contour.refine_step = 0
+        contour.refine_locked_indices = ()
         if contour.is_open_arc:
             num_nodes = contour.num_nodes or DEFAULT_NODE_COUNT
             if contour.mitral_annulus is not None and len(contour.points) >= 2:
@@ -2506,6 +2584,8 @@ class ViewerWidget(QWidget):
         current_frame = self._contour_frame_index()
         if contour.is_open_arc and contour.frame_index == current_frame:
             self._refresh_frame_overlays()
+        elif is_planimeter_polygon(contour) and contour.frame_index == current_frame:
+            self._refresh_frame_overlays()
 
     def _refresh_rendered_contour_geometry(
         self,
@@ -2520,8 +2600,13 @@ class ViewerWidget(QWidget):
         contour = self._contours[contour_index]
         closed = not contour.is_open_arc
         if during_drag:
-            x_values = [point[0] for point in contour.points]
-            y_values = [point[1] for point in contour.points]
+            if not contour.is_open_arc and is_planimeter_polygon(contour) and contour.points:
+                closed_points = [*contour.points, contour.points[0]]
+                x_values = [point[0] for point in closed_points]
+                y_values = [point[1] for point in closed_points]
+            else:
+                x_values = [point[0] for point in contour.points]
+                y_values = [point[1] for point in contour.points]
         else:
             x_values, y_values = self._contour_xy(contour, closed=closed)
         self._contour_items[contour_index].setData(x_values, y_values)
@@ -2554,7 +2639,19 @@ class ViewerWidget(QWidget):
         spacing, spacing_calibrated = self._effective_pixel_spacing()
         if frame_index is not None:
             for contour in self._stored_contours:
-                if contour.is_open_arc and contour.frame_index == frame_index:
+                if contour.frame_index != frame_index:
+                    continue
+                chamber = contour.chamber.upper()
+                if chamber in {GENERIC_AREA_CHAMBER, GENERIC_VOLUME_CHAMBER}:
+                    line = format_planimeter_overlay_line(
+                        contour,
+                        spacing,
+                        spacing_calibrated=spacing_calibrated,
+                    )
+                    if line:
+                        self.append_frame_overlay(line)
+                    continue
+                if contour.is_open_arc:
                     self.append_frame_overlay(
                         format_contour_overlay(
                             contour,
@@ -2679,9 +2776,9 @@ class ViewerWidget(QWidget):
             markers = list(self._active_arc_points)
             if len(markers) >= 2:
                 closed = [*markers, markers[0]]
-                spline_points = (
-                    sample_spline(closed, num_samples=64) if len(closed) >= 3 else closed
-                )
+                spline_points = closed
+            else:
+                spline_points = markers
         if spline_points:
             x_values = [point[0] for point in spline_points]
             y_values = [point[1] for point in spline_points]
@@ -2838,19 +2935,20 @@ class ViewerWidget(QWidget):
             self.mmode_time_calibration_completed.emit(float(time_per_pixel_ms))
 
     def _prompt_mmode_depth_calibration(self, length_px: float) -> None:
-        known_mm, accepted = QInputDialog.getDouble(
+        known_cm, accepted = QInputDialog.getDouble(
             self,
             "Калибровка M-режима",
-            "Известное расстояние по глубине в полосе M-режима (мм):",
-            10.0,
-            0.1,
-            1000.0,
-            1,
+            "Известное расстояние по глубине (см):",
+            1.0,
+            0.01,
+            100.0,
+            2,
         )
         self._clear_calibration_caliper()
         if not accepted or self._mmode_pending_roi is None or length_px <= 0.0:
             self._mmode_pending_roi = None
             return
+        known_mm = known_cm * 10.0
         state = MmodeCalibrationState(
             roi=self._mmode_pending_roi,
             vertical_mm_per_pixel=known_mm / length_px,
@@ -2859,20 +2957,21 @@ class ViewerWidget(QWidget):
         self.apply_mmode_calibration_state(state)
 
     def _prompt_calibration_distance(self, length_px: float) -> None:
-        known_mm, accepted = QInputDialog.getDouble(
+        known_cm, accepted = QInputDialog.getDouble(
             self,
             "Калибровка по шкале глубины",
-            "Известное расстояние (мм), например 50 для отметок 0–5 см:",
-            50.0,
-            0.1,
-            10000.0,
-            1,
+            "Известное расстояние (см), например 5 для отметок 0–5 см:",
+            5.0,
+            0.01,
+            1000.0,
+            2,
         )
         self._clear_calibration_caliper()
         if not accepted:
             if self._needs_calibration_prompt():
                 self.start_calibration_caliper()
             return
+        known_mm = known_cm * 10.0
         spacing = spacing_from_known_distance(length_px, known_mm)
         if not self._syncing_state:
             self.calibration_completed.emit(spacing)
@@ -3097,6 +3196,10 @@ class ViewerWidget(QWidget):
             self._measurement_label.setText(f"{next_label}: 1-й клик — начало")
         else:
             self._linear_caliper_active = False
+            if self._caliper_sequence_size > 1:
+                self._caliper_sequence_size = 0
+                if not self._syncing_state:
+                    self.linear_caliper_sequence_completed.emit()
 
     def _emit_stored_linear_measurements(self) -> None:
         measurements = list(self._stored_linear_measurements.values())

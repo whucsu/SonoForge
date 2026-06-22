@@ -18,6 +18,9 @@ class Contour:
     frame_index: int | None = None
     sop_instance_uid: str | None = None
     review_pending: bool = False
+    refine_step: int = 0
+    refine_locked_indices: tuple[int, ...] = ()
+    measurement_label: str | None = None
 
     @property
     def is_open_arc(self) -> bool:

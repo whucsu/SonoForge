@@ -1,0 +1,12 @@
+---
+description: "lean-ctx — экономия токенов"
+alwaysApply: true
+---
+
+# lean-ctx
+ctx_read > Read (cached)
+ctx_search > Grep (limit:20)
+ctx_shell > Shell
+ctx_tree > ls
+
+Modes: full, map, signatures, diff, lines:N-M

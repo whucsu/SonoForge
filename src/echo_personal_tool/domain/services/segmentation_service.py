@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from enum import Enum
 
 import numpy as np
 from scipy import ndimage
@@ -31,7 +32,21 @@ class EchoNetCropTransform:
     frame_width: int
     crop_y0: int
     crop_x0: int
-    crop_size: int
+    crop_height: int
+    crop_width: int
+
+    @property
+    def crop_size(self) -> int:
+        """Square crop edge length (center_square mode only)."""
+        if self.crop_height != self.crop_width:
+            msg = "crop_size is only defined for square EchoNet crops"
+            raise AttributeError(msg)
+        return self.crop_height
+
+
+class EchoNetCropMode(str, Enum):
+    CENTER_SQUARE = "center_square"
+    FULL_ROI = "full_roi"
 
 
 def resolve_echonet_roi_bounds(
@@ -56,42 +71,55 @@ def crop_frame_for_echonet(
     frame: np.ndarray,
     *,
     roi_xyxy: tuple[float, float, float, float] | None = None,
+    crop_mode: str | EchoNetCropMode = EchoNetCropMode.CENTER_SQUARE,
 ) -> tuple[np.ndarray, EchoNetCropTransform]:
-    """Center square within B-mode ROI for EchoNet (resize to 112×112 in prepare_tensor)."""
+    """Extract B-mode ROI for EchoNet (resize to 112×112 in prepare_tensor)."""
+    mode = EchoNetCropMode(crop_mode) if isinstance(crop_mode, str) else crop_mode
     array = np.asarray(frame)
     height, width = array.shape[:2]
     y0, x0, y1, x1 = resolve_echonet_roi_bounds((height, width), roi_xyxy=roi_xyxy)
     region_height = y1 - y0
     region_width = x1 - x0
-    crop_size = min(region_height, region_width)
-    crop_y0 = y0 + (region_height - crop_size) // 2
-    crop_x0 = x0 + (region_width - crop_size) // 2
+    if mode is EchoNetCropMode.FULL_ROI:
+        crop_y0, crop_x0 = y0, x0
+        crop_height, crop_width = region_height, region_width
+    else:
+        crop_size = min(region_height, region_width)
+        crop_y0 = y0 + (region_height - crop_size) // 2
+        crop_x0 = x0 + (region_width - crop_size) // 2
+        crop_height = crop_width = crop_size
     transform = EchoNetCropTransform(
         frame_height=height,
         frame_width=width,
         crop_y0=crop_y0,
         crop_x0=crop_x0,
-        crop_size=crop_size,
+        crop_height=crop_height,
+        crop_width=crop_width,
     )
-    return array[crop_y0 : crop_y0 + crop_size, crop_x0 : crop_x0 + crop_size], transform
+    return (
+        array[crop_y0 : crop_y0 + crop_height, crop_x0 : crop_x0 + crop_width],
+        transform,
+    )
 
 
 def embed_echonet_mask(mask: np.ndarray, transform: EchoNetCropTransform) -> np.ndarray:
     """Place 112×112 ONNX mask into full-frame coordinates."""
     full = np.zeros((transform.frame_height, transform.frame_width), dtype=np.uint8)
-    if transform.crop_size <= 0:
+    if transform.crop_height <= 0 or transform.crop_width <= 0:
         return full
 
     array = np.asarray(mask)
     if array.ndim != 2 or array.size == 0:
         return full
 
-    zoom = transform.crop_size / array.shape[0]
-    upscaled = ndimage.zoom(array.astype(np.float32), (zoom, zoom), order=0)
+    zoom_y = transform.crop_height / array.shape[0]
+    zoom_x = transform.crop_width / array.shape[1]
+    upscaled = ndimage.zoom(array.astype(np.float32), (zoom_y, zoom_x), order=0)
     upscaled = (upscaled >= 0.5).astype(np.uint8)
-    paste = min(transform.crop_size, upscaled.shape[0], upscaled.shape[1])
+    paste_h = min(transform.crop_height, upscaled.shape[0])
+    paste_w = min(transform.crop_width, upscaled.shape[1])
     y0, x0 = transform.crop_y0, transform.crop_x0
-    full[y0 : y0 + paste, x0 : x0 + paste] = upscaled[:paste, :paste]
+    full[y0 : y0 + paste_h, x0 : x0 + paste_w] = upscaled[:paste_h, :paste_w]
     return full
 
 
@@ -426,12 +454,49 @@ def _band_horizontal_width(
     return float(np.max(band_xs) - np.min(band_xs))
 
 
+def _mitral_annulus_endpoints(
+    ann_xs: np.ndarray,
+    ann_ys: np.ndarray,
+    *,
+    trim_percentile: float = 12.0,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Septal/lateral MV points with independent Y (sloped annulus), trimmed from mask edges."""
+    if ann_xs.size < 2:
+        msg = "cannot locate mitral annulus on cavity mask"
+        raise ValueError(msg)
+
+    x_cut_low = float(np.percentile(ann_xs, trim_percentile))
+    x_cut_high = float(np.percentile(ann_xs, 100.0 - trim_percentile))
+    septal_mask = ann_xs <= x_cut_low
+    lateral_mask = ann_xs >= x_cut_high
+    if np.any(septal_mask):
+        septal = (
+            float(np.mean(ann_xs[septal_mask])),
+            float(np.mean(ann_ys[septal_mask])),
+        )
+    else:
+        min_index = int(np.argmin(ann_xs))
+        septal = (float(ann_xs[min_index]), float(ann_ys[min_index]))
+    if np.any(lateral_mask):
+        lateral = (
+            float(np.mean(ann_xs[lateral_mask])),
+            float(np.mean(ann_ys[lateral_mask])),
+        )
+    else:
+        max_index = int(np.argmax(ann_xs))
+        lateral = (float(ann_xs[max_index]), float(ann_ys[max_index]))
+    if septal[0] > lateral[0]:
+        septal, lateral = lateral, septal
+    return septal, lateral
+
+
 def _annulus_and_apex_from_mask_pixels(
     ys: np.ndarray,
     xs: np.ndarray,
     *,
     y_min: int,
     y_max: int,
+    annulus_end: str = "auto",
 ) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
     """Annulus = wider cavity opening; apex = opposite narrow end (A4C)."""
     height = y_max - y_min + 1
@@ -443,7 +508,14 @@ def _annulus_and_apex_from_mask_pixels(
     top_width = _band_horizontal_width(ys, xs, *top_band)
     bottom_width = _band_horizontal_width(ys, xs, *bottom_band)
 
-    if bottom_width > top_width:
+    if annulus_end == "top":
+        annulus_at_bottom = False
+    elif annulus_end == "bottom":
+        annulus_at_bottom = True
+    else:
+        annulus_at_bottom = bottom_width > top_width
+
+    if annulus_at_bottom:
         annulus_mask = (ys >= bottom_band[0]) & (ys <= bottom_band[1])
         apex_mask = (ys >= y_min) & (ys <= y_min + apex_band)
         apex_y = float(y_min + apex_band / 2.0)
@@ -458,8 +530,7 @@ def _annulus_and_apex_from_mask_pixels(
         msg = "cannot locate mitral annulus on cavity mask"
         raise ValueError(msg)
 
-    septal = (float(np.min(ann_xs)), float(np.median(ann_ys)))
-    lateral = (float(np.max(ann_xs)), float(np.median(ann_ys)))
+    septal, lateral = _mitral_annulus_endpoints(ann_xs, ann_ys)
     if np.any(apex_mask):
         apex = (float(np.median(xs[apex_mask])), float(np.median(ys[apex_mask])))
     else:
@@ -473,13 +544,14 @@ def open_arc_from_cavity_mask(
     original_shape: tuple[int, int] | None = None,
     num_nodes: int = 32,
     view_hint: str = "A4C",
+    annulus_end: str = "auto",
 ) -> tuple[
     list[tuple[float, float]],
     tuple[tuple[float, float], tuple[float, float]],
     tuple[float, float],
 ]:
-    """Build A4C LV open arc: annulus = top opening of cavity mask, arc via apex side."""
-    del view_hint
+    """Build A4C LV open arc: annulus = wider cavity opening, arc via apex side."""
+    view = (view_hint or "A4C").upper()
     binary = np.asarray(mask) > 0
     if not binary.any():
         msg = "empty cavity mask"
@@ -506,7 +578,23 @@ def open_arc_from_cavity_mask(
         msg = "cavity mask bounding box too small"
         raise ValueError(msg)
 
-    septal, lateral, apex = _annulus_and_apex_from_mask_pixels(ys, xs, y_min=y_min, y_max=y_max)
+    septal, lateral, apex = _annulus_and_apex_from_mask_pixels(
+        ys,
+        xs,
+        y_min=y_min,
+        y_max=y_max,
+        annulus_end=annulus_end,
+    )
+    if view == "A4C" and annulus_end == "auto":
+        annulus_mid_y = (septal[1] + lateral[1]) / 2.0
+        if annulus_mid_y < apex[1]:
+            septal, lateral, apex = _annulus_and_apex_from_mask_pixels(
+                ys,
+                xs,
+                y_min=y_min,
+                y_max=y_max,
+                annulus_end="bottom",
+            )
     annulus = (septal, lateral)
 
     frame_shape = original_shape or binary.shape[:2]

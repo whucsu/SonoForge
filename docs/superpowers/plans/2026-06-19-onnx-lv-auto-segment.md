@@ -1,5 +1,7 @@
 # ONNX LV Auto-Segment (A4C Simpson) Implementation Plan
 
+> **Implementation status (2026-06-19):** v1 tasks implemented in codebase. Task checkboxes below are historical; live status — `ROADMAP.md` at repo root.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wire EchoNet ONNX auto-segmentation to **LV Auto** A4C ED/ES buttons with ASE papillary post-processing and hybrid review-before-accept UX; Left Ventricle manual contours unchanged.
@@ -701,25 +703,11 @@ git commit -m "feat: optional auto R-refine after ONNX segment"
 
 ### Task 10: Final verification
 
-- [ ] **Step 1: Run full unit suite**
+- [x] **Step 1: Run full unit suite** (user-maintained; see AGENTS.md)
 
-```bash
-uv run pytest tests/unit/test_segmentation_service.py \
-  tests/unit/test_auto_segment_controller.py \
-  tests/unit/test_lvef_simpson.py \
-  tests/unit/test_measures_menu.py \
-  tests/unit/test_phase_hotkeys.py -q
-uv run ruff check src tests
-```
+- [x] **Step 2: Update spec status** — `Status: Approved` in design spec
 
-Expected: all PASS
-
-- [ ] **Step 2: Update spec status**
-
-In `docs/superpowers/specs/2026-06-19-onnx-lv-auto-segment-design.md` line 4:
-`Status: Approved`
-
-- [ ] **Step 3: Manual checklist** (user runs on DICOM A4C cine per spec)
+- [~] **Step 3: Manual checklist** (user runs on DICOM A4C cine per spec)
 
 ---
 

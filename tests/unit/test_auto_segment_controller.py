@@ -245,6 +245,10 @@ def test_on_auto_segment_finished_sets_review_pending(
         "_should_auto_refine_after_segment",
         lambda self: False,
     )
+    monkeypatch.setattr(
+        "echo_personal_tool.application.app_controller.explain_lv_auto_reject_reason",
+        lambda contour, pixel_spacing: None,
+    )
     controller, _, _, instance, _ = _prepared_controller(monkeypatch)
     controller.set_simpson_workflow_context(phase="ED", view="A4C")
     messages: list[str] = []
@@ -284,6 +288,10 @@ def test_accept_ai_contour_review_clears_pending(
         AppController,
         "_should_auto_refine_after_segment",
         lambda self: False,
+    )
+    monkeypatch.setattr(
+        "echo_personal_tool.application.app_controller.explain_lv_auto_reject_reason",
+        lambda contour, pixel_spacing: None,
     )
     controller, _, _, instance, _ = _prepared_controller(monkeypatch)
     controller.set_simpson_workflow_context(phase="ED", view="A4C")
@@ -339,6 +347,10 @@ def test_on_auto_segment_finished_auto_refines_when_enabled(
         AppController,
         "_should_auto_refine_after_segment",
         lambda self: True,
+    )
+    monkeypatch.setattr(
+        "echo_personal_tool.application.app_controller.explain_lv_auto_reject_reason",
+        lambda contour, pixel_spacing: None,
     )
 
     mask = _circle_mask(

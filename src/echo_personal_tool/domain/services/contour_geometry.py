@@ -466,8 +466,10 @@ def smooth_open_arc(
     apex: tuple[float, float] | None = None,
     iterations: int = SMOOTH_OPEN_ARC_ITERATIONS,
     blend: float = SMOOTH_OPEN_ARC_BLEND,
+    pinned_indices: frozenset[int] | set[int] | None = None,
 ) -> list[tuple[float, float]]:
-    """Laplacian smooth interior nodes; MA endpoints stay fixed."""
+    """Laplacian smooth interior nodes; MA endpoints and pinned nodes stay fixed."""
+    del apex
     if len(points) < 3:
         return [(float(x), float(y)) for x, y in points]
 
@@ -476,6 +478,8 @@ def smooth_open_arc(
     coords[0] = [float(septal[0]), float(septal[1])]
     coords[-1] = [float(lateral[0]), float(lateral[1])]
     pinned = {0, len(coords) - 1}
+    if pinned_indices:
+        pinned |= {int(index) for index in pinned_indices}
 
     for _ in range(max(int(iterations), 1)):
         next_coords = [point[:] for point in coords]

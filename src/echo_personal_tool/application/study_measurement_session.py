@@ -69,11 +69,14 @@ def aggregate_doppler_by_instance(
 
 def contour_key(contour: Contour) -> tuple[str, str, str, str]:
     """Stable identity for LV/LA contours within a study session."""
+    phase_key = contour.phase
+    if contour.chamber.upper() in {"AREA", "VOL"} and contour.measurement_label:
+        phase_key = contour.measurement_label
     return (
         contour.sop_instance_uid or "",
         contour.chamber,
         contour.view,
-        contour.phase,
+        phase_key,
     )
 
 
@@ -128,6 +131,7 @@ class StudyMeasurementData:
         tuple[str, int, DopplerCalibrationState], ...
     ] = ()
     mmode_calibration_by_instance: tuple[tuple[str, MmodeCalibrationState], ...] = ()
+    cine_segment_roi_by_instance: tuple[tuple[str, tuple[float, float, float, float]], ...] = ()
     manual_pixel_spacing: tuple[float, float] | None = None
     height_cm: float | None = None
     weight_kg: float | None = None
@@ -326,6 +330,34 @@ class StudyMeasurementSessionStore:
             if uid == instance_uid:
                 return calibration
         return None
+
+    def get_cine_segment_roi(
+        self,
+        study_uid: str,
+        instance_uid: str,
+    ) -> tuple[float, float, float, float] | None:
+        data = self.get(study_uid)
+        for uid, roi in data.cine_segment_roi_by_instance:
+            if uid == instance_uid:
+                return roi
+        return None
+
+    def set_cine_segment_roi(
+        self,
+        study_uid: str,
+        instance_uid: str,
+        roi_xyxy: tuple[float, float, float, float] | None,
+    ) -> None:
+        data = self.get(study_uid)
+        current = dict(data.cine_segment_roi_by_instance)
+        if roi_xyxy is None:
+            current.pop(instance_uid, None)
+        else:
+            current[instance_uid] = roi_xyxy
+        self._studies[study_uid] = replace(
+            data,
+            cine_segment_roi_by_instance=tuple(current.items()),
+        )
 
     def set_doppler_measurement(
         self,

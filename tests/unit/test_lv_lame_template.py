@@ -6,12 +6,14 @@ import pytest
 
 from echo_personal_tool.domain.services.contour_geometry import point_line_distance
 from echo_personal_tool.domain.services.lv_shape_template import (
+    ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
     LAME_A2C_ED,
     LAME_A2C_ES,
     LAME_A4C_ED,
     LAME_A4C_ES,
     lame_lift_height,
     lame_profile_for_view_phase,
+    warp_elliptical_open_arc,
     warp_lame_open_arc,
 )
 
@@ -122,3 +124,34 @@ def test_warp_lame_arc_not_triangle() -> None:
     triangle_y = 0.25 * apex[1]
     assert quarter[0] > triangle_x + 10.0
     assert quarter[1] > triangle_y + 5.0
+
+
+def test_atrial_ellipse_short_axis_ratio_default() -> None:
+    assert ATRIAL_ELLIPSE_SHORT_AXIS_RATIO == 0.85
+
+
+def test_warp_elliptical_open_arc_pins_endpoints_and_passes_through_apex() -> None:
+    septal = (0.0, 0.0)
+    lateral = (100.0, 0.0)
+    apex = (50.0, 60.0)
+    warped = warp_elliptical_open_arc(septal, lateral, apex, num_points=81)
+    assert warped[0] == pytest.approx(septal, abs=1e-6)
+    assert warped[-1] == pytest.approx(lateral, abs=1e-6)
+    mid = warped[len(warped) // 2]
+    assert mid[0] == pytest.approx(apex[0], abs=1e-6)
+    assert mid[1] == pytest.approx(apex[1], abs=1e-6)
+
+
+def test_warp_elliptical_short_axis_is_ratio_of_long_axis() -> None:
+    septal = (0.0, 0.0)
+    lateral = (100.0, 0.0)
+    apex = (50.0, 80.0)
+    long_length = 80.0
+    short_diameter = long_length * ATRIAL_ELLIPSE_SHORT_AXIS_RATIO
+    warped = warp_elliptical_open_arc(septal, lateral, apex, num_points=81)
+    # θ = π/2 → apex; θ = π → septal side of short axis (unpinned model point).
+    model_septal = (50.0 - short_diameter / 2.0, 0.0)
+    assert warped[0] == pytest.approx(septal, abs=1e-6)
+    assert warped[-1] == pytest.approx(lateral, abs=1e-6)
+    assert warped[len(warped) // 2] == pytest.approx(apex, abs=1e-6)
+    assert model_septal[0] < warped[len(warped) // 4][0] < 50.0

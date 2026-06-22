@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QSplitter,
     QStatusBar,
@@ -27,8 +28,10 @@ from echo_personal_tool.domain.models.viewer_state import ViewerState
 from echo_personal_tool.domain.services.measurement_results_formatter import (
     format_results_overlay,
 )
+from echo_personal_tool.presentation.ase_reference_dialog import show_ase_reference_dialog
 from echo_personal_tool.presentation.echopac_theme import apply_echopac_theme
 from echo_personal_tool.presentation.measurement_action import MeasurementAction
+from echo_personal_tool.presentation.measurement_results_dialog import MeasurementResultsDialog
 from echo_personal_tool.presentation.system_bar import SystemBar
 from echo_personal_tool.presentation.thumbnail_gallery import (
     _GALLERY_WIDTH,
@@ -60,6 +63,7 @@ class MainWindow(QMainWindow):
         self.showMaximized()
         self._click_to_frame_started_at: float | None = None
         self._lav_bi_active = False
+        self._instance_overlay_cache: dict[str, str] = {}
 
         self._controller = controller or AppController()
         self._controller.studies_loaded.connect(self._on_studies_loaded)
@@ -104,6 +108,9 @@ class MainWindow(QMainWindow):
         self._viewer.linear_measurements_changed.connect(
             self._controller.on_linear_measurements_changed
         )
+        self._viewer.linear_caliper_sequence_completed.connect(
+            self._on_linear_caliper_sequence_completed
+        )
         self._viewer.calibration_completed.connect(self._controller.on_manual_calibration)
         self._viewer.doppler_markers_changed.connect(self._controller.on_doppler_markers_changed)
         self._viewer.doppler_calibration_changed.connect(
@@ -141,7 +148,6 @@ class MainWindow(QMainWindow):
         )
         self._controller.state_manager.state_changed.connect(self._on_state_changed)
         self._wire_ui()
-        self._system_bar.set_auto_segment_enabled(False)
         self._viewer.installEventFilter(self)
         self._viewer._graphics.installEventFilter(self)
         self._viewer._view.installEventFilter(self)
@@ -190,6 +196,8 @@ class MainWindow(QMainWindow):
             self._show_status("Load a frame first (or finish the active contour)")
 
     def _request_auto_segment_shortcut(self) -> None:
+        if self._viewer.get_doppler_tool_mode() != "none":
+            return
         if not self._controller.is_lv_auto_session_active():
             self._show_status("Выберите LV Auto → EDV/ESV")
             return
@@ -221,6 +229,22 @@ class MainWindow(QMainWindow):
             self._controller.on_contours_changed(self._viewer.contours())
             self._show_status("Contour deleted")
 
+    def _show_references(self) -> None:
+        show_ase_reference_dialog(self)
+
+    def _show_settings_menu(self) -> None:
+        menu = QMenu(self)
+        snap_action = menu.addAction("Магнит к стенке")
+        snap_action.setCheckable(True)
+        snap_action.setChecked(
+            self._tool_panel.controls._magnetic_snap_check.isChecked()
+        )
+        snap_action.toggled.connect(
+            self._tool_panel.controls._magnetic_snap_check.setChecked
+        )
+        anchor = self._system_bar._btn_settings
+        menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
     def _open_folder(self) -> None:
         directory = QFileDialog.getExistingDirectory(self, "Select study folder")
         if not directory:
@@ -249,6 +273,9 @@ class MainWindow(QMainWindow):
         self._click_to_frame_started_at = perf_counter()
         previous = self._controller.state_manager.snapshot.instance
         if previous is not None:
+            self._instance_overlay_cache[previous.sop_instance_uid] = (
+                self._viewer.results_overlay_text()
+            )
             frame_index = self._controller.state_manager.snapshot.current_frame_index
             self._controller.save_doppler_for_frame(
                 previous.sop_instance_uid,
@@ -381,14 +408,44 @@ class MainWindow(QMainWindow):
         return False
 
     def _sync_results_overlay(self, state: ViewerState) -> None:
-        snapshot = state.measurement_snapshot
         time_calibrated = self._viewer.is_doppler_time_calibrated()
-        self._viewer.set_results_overlay(
-            format_results_overlay(snapshot, time_calibrated=time_calibrated)
+        instance = state.instance
+        instance_uid = instance.sop_instance_uid if instance is not None else None
+
+        overlay_snapshot = self._controller.compute_overlay_snapshot(state)
+        fresh_text = format_results_overlay(
+            overlay_snapshot,
+            time_calibrated=time_calibrated,
         )
+
+        if instance_uid is not None:
+            if fresh_text.strip():
+                self._instance_overlay_cache[instance_uid] = fresh_text
+                display_text = fresh_text
+            else:
+                display_text = self._instance_overlay_cache.get(instance_uid, "")
+        else:
+            display_text = fresh_text
+
+        self._viewer.set_results_overlay(display_text)
+
+        snapshot = state.measurement_snapshot
         if snapshot is not None:
             self._tool_panel.set_patient_metrics(snapshot.height_cm, snapshot.weight_kg)
         self._sync_doppler_tool_availability()
+
+    def _show_results_dialog(self) -> None:
+        snapshot = self._controller.state_manager.snapshot.measurement_snapshot
+        default_name = "echo_measurements.pdf"
+        instance = self._controller.state_manager.snapshot.instance
+        if instance is not None and instance.path is not None:
+            default_name = f"{instance.path.stem}_results.pdf"
+        dialog = MeasurementResultsDialog(
+            snapshot,
+            parent=self,
+            default_pdf_name=default_name,
+        )
+        dialog.exec()
 
     def _sync_doppler_tool_availability(self) -> None:
         self._tool_panel.set_doppler_tool_availability(
@@ -417,11 +474,13 @@ class MainWindow(QMainWindow):
         self._system_bar.doppler_calibration_requested.connect(
             self._on_doppler_calibration_requested
         )
-        self._system_bar.auto_segment_requested.connect(self._request_auto_segment_shortcut)
+        self._system_bar.settings_requested.connect(self._show_settings_menu)
+        self._system_bar.references_requested.connect(self._show_references)
         self._tool_panel.action_requested.connect(self._on_measure_action)
         self._tool_panel.patient_metrics_changed.connect(
             self._controller.on_patient_metrics_changed
         )
+        self._tool_panel.results_requested.connect(self._show_results_dialog)
         self._tool_panel.magnetic_snap_changed.connect(self._viewer.set_magnetic_snap_enabled)
         self._viewer.set_magnetic_snap_enabled(self._tool_panel.controls._magnetic_snap_check.isChecked())
 
@@ -440,11 +499,11 @@ class MainWindow(QMainWindow):
                 view=view,
                 chamber="LV",
             )
-            self._system_bar.set_auto_segment_enabled(True)
         handlers: dict[MeasurementAction, object] = {
             MeasurementAction.CALIBRATION: self._on_calibration_requested,
             MeasurementAction.RESET: self._on_reset_measurements_requested,
             MeasurementAction.SPLINE_AREA: self._on_spline_area_requested,
+            MeasurementAction.SPLINE_VOLUME: self._on_spline_volume_requested,
             MeasurementAction.MANUAL_SIMPSON: (
                 lambda: self._on_manual_simpson_requested(view, phase)
             ),
@@ -484,10 +543,18 @@ class MainWindow(QMainWindow):
             handler()  # type: ignore[operator]
 
     def _on_spline_area_requested(self) -> None:
-        if self._viewer.start_contour():
+        self._tool_panel.measure.clear_action_highlight()
+        if self._viewer.start_generic_area_contour():
             self._viewer.clear_frame_overlay()
-            self._viewer.append_frame_overlay("Spline area: MA septal → lateral → apex")
-            self._show_status("Spline area: click annulus septal, lateral, apex")
+            self._show_status("Площадь: клики по контуру, двойной щелчок — замкнуть; точки можно двигать")
+        else:
+            self._show_status("Load a frame first (or finish the active tool)")
+
+    def _on_spline_volume_requested(self) -> None:
+        self._tool_panel.measure.clear_action_highlight()
+        if self._viewer.start_generic_volume_contour():
+            self._viewer.clear_frame_overlay()
+            self._show_status("Объем: клики по контуру, двойной щелчок — замкнуть; точки можно двигать")
         else:
             self._show_status("Load a frame first (or finish the active tool)")
 
@@ -550,6 +617,7 @@ class MainWindow(QMainWindow):
 
     def _on_reset_measurements_requested(self) -> None:
         self._lav_bi_active = False
+        self._instance_overlay_cache.clear()
         self._viewer.cancel_active_tool()
         self._viewer.clear_doppler_calibration_display()
         self._viewer.clear_doppler_measurements()
@@ -604,7 +672,6 @@ class MainWindow(QMainWindow):
             self._show_status("A2C auto — в следующей версии")
             return
         self._controller.set_simpson_workflow_context(phase=phase, view=view, chamber="LV")
-        self._system_bar.set_auto_segment_enabled(True)
         self._viewer.clear_frame_overlay()
         self._viewer.append_frame_overlay(f"LV Auto {view} {phase}: сегментация…")
         self._controller.request_auto_segment(phase=phase, view=view, chamber="LV")
@@ -630,12 +697,17 @@ class MainWindow(QMainWindow):
         del view, phase
 
     def _on_lv2d_all_diastole(self) -> None:
+        self._tool_panel.measure.clear_action_highlight()
         if self._viewer.start_linear_caliper_sequence(("IVSd", "LVEDD", "LVPWd")):
             self._viewer.clear_frame_overlay()
             self._viewer.append_frame_overlay("LV diastole: IVSd → LVEDD → LVPWd")
             self._show_status("All Diastole: IVSd (2 клика) → LVEDD (2 клика) → LVPWd (2 клика)")
         else:
             self._show_status("Load a frame first")
+
+    def _on_linear_caliper_sequence_completed(self) -> None:
+        self._tool_panel.measure.highlight_action(MeasurementAction.LV2D_ES)
+        self._show_status("All Diastole завершён — нажмите ES Diameter (LVESD)")
 
     def _on_lv2d_es(self) -> None:
         if self._viewer.start_linear_caliper_for("LVESD"):
@@ -679,9 +751,14 @@ class MainWindow(QMainWindow):
 
     def _on_lav_4c(self) -> None:
         self._lav_bi_active = False
-        if self._viewer.start_atrial_area_length_contour(chamber="LA", view="A4C", phase="ES"):
-            self._viewer.clear_frame_overlay()
-            self._show_status("LAV 4C: closed LA contour, then LAL caliper")
+        if self._start_chamber_contour(
+            "LA",
+            "ES",
+            "A4C",
+            overlay="LAV 4C: МК septal → lateral → apex",
+            status="LAV 4C: МК septal → lateral → apex (овальный контур)",
+        ):
+            pass
         else:
             self._show_status("Load a frame first or cancel the active tool (Esc)")
 
@@ -690,16 +767,26 @@ class MainWindow(QMainWindow):
         has_a2c = self._has_chamber_contour("LA", "A2C", "ES")
         if has_a4c and not has_a2c:
             self._lav_bi_active = True
-            if self._viewer.start_atrial_area_length_contour(chamber="LA", view="A2C", phase="ES"):
-                self._viewer.clear_frame_overlay()
-                self._show_status("LAV Bi: closed LA 2C contour, then LAL caliper")
+            if self._start_chamber_contour(
+                "LA",
+                "ES",
+                "A2C",
+                overlay="LAV 2C: МК septal → lateral → apex",
+                status="LAV 2C: МК septal → lateral → apex (овальный контур)",
+            ):
+                pass
             else:
                 self._show_status("Load a frame first or cancel the active tool (Esc)")
             return
         self._lav_bi_active = True
-        if self._viewer.start_atrial_area_length_contour(chamber="LA", view="A4C", phase="ES"):
-            self._viewer.clear_frame_overlay()
-            self._show_status("LAV Bi: шаг 1 — LA 4C closed contour + LAL")
+        if self._start_chamber_contour(
+            "LA",
+            "ES",
+            "A4C",
+            overlay="LAV Bi: шаг 1 — LA 4C Simpson",
+            status="LAV Bi: шаг 1 — МК septal → lateral → apex",
+        ):
+            pass
         else:
             self._show_status("Load a frame first or cancel the active tool (Esc)")
 
@@ -720,9 +807,14 @@ class MainWindow(QMainWindow):
             self._show_status("Load a frame first or cancel the active tool (Esc)")
 
     def _on_rav_volume(self) -> None:
-        if self._viewer.start_atrial_area_length_contour(chamber="RA", view="A4C", phase="ES"):
-            self._viewer.clear_frame_overlay()
-            self._show_status("RAV: closed RA contour, then RA length caliper")
+        if self._start_chamber_contour(
+            "RA",
+            "ES",
+            "A4C",
+            overlay="RAV 4C: TV septal → lateral → apex",
+            status="RAV 4C: TV septal → lateral → apex (овальный контур)",
+        ):
+            pass
         else:
             self._show_status("Load a frame first or cancel the active tool (Esc)")
 
@@ -730,33 +822,110 @@ class MainWindow(QMainWindow):
         if not isinstance(contour, Contour):
             return
         chamber = contour.chamber.upper()
-        if chamber not in {"LV", "LA", "RA", "RV"}:
+        if chamber not in {"LV", "LA", "RA", "RV", "AREA", "VOL"}:
+            return
+        extra_lines: tuple[str, ...] = ()
+        if chamber in {"AREA", "VOL"}:
+            spacing = self._controller.state_manager.snapshot.effective_pixel_spacing
+            calibrated = spacing is not None
+            from echo_personal_tool.domain.services.planimeter_formatter import (
+                format_planimeter_overlay_line,
+            )
+
+            line = format_planimeter_overlay_line(
+                contour,
+                spacing,
+                spacing_calibrated=calibrated,
+            )
+            if line:
+                self._show_status(f"Готово: {line}")
+            self._viewer._refresh_frame_overlays()
+            self._sync_results_overlay(self._controller.state_manager.snapshot)
             return
         if not contour.is_open_arc:
             return
 
-        extra_lines: tuple[str, ...] = ()
         if chamber == "LV" and contour.phase.upper() == "ED":
             mode = "mbs" if contour.source in {"model", "ai"} else "manual"
-            view_label = "4C" if contour.view.upper() == "A4C" else "2C"
-            es_name = "ESV Auto" if mode == "mbs" else "Systole"
-            extra_lines = (f"Перейдите на кадр систолы и нажмите {es_name} ({view_label})",)
-            status = f"Перейдите на кадр систолы и нажмите {es_name} ({view_label})"
+            view = contour.view.upper()
+            es_action = (
+                MeasurementAction.MBS_SIMPSON if mode == "mbs" else MeasurementAction.MANUAL_SIMPSON
+            )
+            self._tool_panel.measure.highlight_action(es_action, view=view, phase="ES")
+            view_label = "4C" if view == "A4C" else "2C"
+            es_name = "ESV Auto" if mode == "mbs" else "LVEF Simpson ESV"
+            extra_lines = (f"Нажмите {es_name} ({view_label})",)
+            status = f"Нажмите {es_name} ({view_label})"
             if self._controller.state_manager.snapshot.effective_pixel_spacing is None:
                 status += " · нет PixelSpacing (K — калибровка, px / px³)"
             self._show_status(status)
-        elif (
-            self._lav_bi_active
-            and chamber == "LA"
-            and contour.phase.upper() == "ES"
-            and contour.view.upper() == "A4C"
-        ):
-            extra_lines = ("LAV Bi: перейдите на 2C ES и нажмите LAV Bi",)
-            self._show_status("LAV Bi: шаг 1 завершён — перейдите на 2C ES и нажмите LAV Bi")
-        elif contour.phase.upper() == "ES" and chamber == "LA" and contour.view.upper() == "A2C":
-            self._lav_bi_active = False
+        elif chamber == "LV" and contour.phase.upper() == "ES":
+            self._tool_panel.measure.clear_action_highlight()
+        elif chamber == "LA" and contour.phase.upper() == "ES":
+            if self._lav_bi_active and contour.view.upper() == "A4C":
+                self._tool_panel.measure.highlight_action(MeasurementAction.LAV_BI)
+                extra_lines = (
+                    *extra_lines,
+                    "LAV Bi: перейдите на 2C ES и нажмите LAV 2C",
+                )
+            elif contour.view.upper() == "A2C":
+                self._lav_bi_active = False
+                self._tool_panel.measure.clear_action_highlight()
+
+            spacing, spacing_calibrated = self._viewer._effective_pixel_spacing()
+            from echo_personal_tool.domain.calculations.lvef_simpson import format_contour_overlay
+            from echo_personal_tool.domain.calculations.chamber_simpson import (
+                biplane_es_volume_ml,
+                es_volume_from_view,
+            )
+
+            line = format_contour_overlay(
+                contour,
+                spacing,
+                spacing_calibrated=spacing_calibrated,
+            )
+            self._show_status(line)
+            snapshot = self._controller.state_manager.snapshot.measurement_snapshot
+            if snapshot is not None and snapshot.la_simpson is not None:
+                volume_unit = "mL" if snapshot.spacing_calibrated else "px³"
+                lav_4c = es_volume_from_view(snapshot.la_simpson.a4c)
+                if lav_4c is not None and contour.view.upper() == "A4C":
+                    extra_lines = (
+                        *extra_lines,
+                        f"LAV 4C: {lav_4c:.1f} {volume_unit}",
+                    )
+                lav_bi = biplane_es_volume_ml(
+                    snapshot.la_simpson.a4c,
+                    snapshot.la_simpson.a2c,
+                )
+                if lav_bi is not None:
+                    extra_lines = (
+                        *extra_lines,
+                        f"LAV Bi: {lav_bi:.1f} {volume_unit}",
+                    )
+        elif chamber == "RA" and contour.phase.upper() == "ES":
+            spacing, spacing_calibrated = self._viewer._effective_pixel_spacing()
+            from echo_personal_tool.domain.calculations.lvef_simpson import format_contour_overlay
+            from echo_personal_tool.domain.calculations.chamber_simpson import es_volume_from_view
+
+            line = format_contour_overlay(
+                contour,
+                spacing,
+                spacing_calibrated=spacing_calibrated,
+            )
+            self._show_status(line)
+            snapshot = self._controller.state_manager.snapshot.measurement_snapshot
+            if snapshot is not None and snapshot.ra_simpson is not None:
+                volume_unit = "mL" if snapshot.spacing_calibrated else "px³"
+                rav = es_volume_from_view(snapshot.ra_simpson.a4c) or snapshot.ra_simpson.max_volume_ml
+                if rav is not None:
+                    extra_lines = (
+                        *extra_lines,
+                        f"RAV 4C: {rav:.1f} {volume_unit}",
+                    )
 
         self._viewer._refresh_frame_overlays(extra_lines=extra_lines)
+        self._sync_results_overlay(self._controller.state_manager.snapshot)
 
     def _on_rv_basal(self) -> None:
         if self._viewer.start_linear_caliper_for("RV basal"):
@@ -849,9 +1018,12 @@ class MainWindow(QMainWindow):
             refined, mode = self._viewer.refine_active_open_contour()
             if refined:
                 self._controller.on_contours_changed(self._viewer.contours())
-                self._show_status(
-                    "Gradient refine (R)" if mode == "gradient" else "Geometry smooth (R)"
-                )
+                if mode.startswith(("step:", "complete")):
+                    self._show_status(f"Refine {mode}")
+                elif mode == "gradient":
+                    self._show_status("Gradient refine (R)")
+                else:
+                    self._show_status("Geometry smooth (R)")
             else:
                 self._show_status("Нет LV open-arc контура на текущем кадре")
             event.accept()
@@ -859,9 +1031,8 @@ class MainWindow(QMainWindow):
         if (
             event.key() == Qt.Key.Key_I
             and event.modifiers() == Qt.KeyboardModifier.NoModifier
-            and not self._controller.state_manager.snapshot.is_playing
         ):
-            self._controller.request_auto_segment()
+            self._request_auto_segment_shortcut()
             event.accept()
             return True
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):

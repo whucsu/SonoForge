@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
+from echo_personal_tool.domain.calculations.chamber_simpson import (
+    biplane_es_volume_ml,
+    es_volume_from_view,
+)
+from echo_personal_tool.domain.services.indexed_results_formatter import (
+    append_indexed_for_overlay,
+)
 
 
 def format_results_overlay(
@@ -66,8 +73,31 @@ def format_results_overlay(
     if snapshot.lvm_g is not None:
         _append(lines, "LVM", snapshot.lvm_g, "g")
 
-    if snapshot.la_volume and snapshot.la_volume.volume_ml is not None:
+    if snapshot.rwt is not None:
+        _append(lines, "ОТС", snapshot.rwt, "", decimals=2)
+
+    la = snapshot.la_simpson
+    if la is not None:
+        lav_4c = es_volume_from_view(la.a4c)
+        if lav_4c is not None:
+            _append(lines, "LAV 4C", lav_4c, volume_unit)
+        lav_bi = biplane_es_volume_ml(la.a4c, la.a2c)
+        if lav_bi is not None:
+            _append(lines, "LAV Bi", lav_bi, volume_unit)
+        if la.area_cm2 is not None:
+            area_unit = "cm²" if snapshot.spacing_calibrated else "px²"
+            _append(lines, "S ЛП", la.area_cm2, area_unit, decimals=2)
+    elif snapshot.la_volume and snapshot.la_volume.volume_ml is not None:
         _append(lines, "LAV", snapshot.la_volume.volume_ml, volume_unit)
+
+    ra = snapshot.ra_simpson
+    if ra is not None:
+        rav = es_volume_from_view(ra.a4c) or ra.max_volume_ml
+        if rav is not None:
+            _append(lines, "RAV 4C", rav, volume_unit)
+        if ra.area_cm2 is not None:
+            area_unit = "cm²" if snapshot.spacing_calibrated else "px²"
+            _append(lines, "S ПП", ra.area_cm2, area_unit, decimals=2)
 
     if snapshot.rv_fac_percent is not None:
         _append(lines, "FAC", snapshot.rv_fac_percent, "%")
@@ -75,9 +105,10 @@ def format_results_overlay(
     if snapshot.diastology_grade:
         lines.append(snapshot.diastology_grade)
 
-    idx = snapshot.indexed
-    if idx is not None and idx.bsa_m2 is not None:
-        _append(lines, "BSA", idx.bsa_m2, "m²", decimals=2)
+    append_indexed_for_overlay(lines, snapshot)
+
+    for item in snapshot.planimeter:
+        _append(lines, item.label, item.value, item.unit, decimals=2 if item.kind == "area" else 1)
 
     for measurement in snapshot.linear_measurements:
         lines.append(f"  {measurement.display_text()}")

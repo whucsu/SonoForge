@@ -57,10 +57,10 @@ def test_main_window_measurement_panel_updates_after_contour(qtbot) -> None:
     )
     controller.on_contours_changed([ed, es])
 
-    text = window._measurement_panel._summary_label.text()
-    assert "Объёмы ЛЖ (Симпсон)" in text
-    assert "КДО ЛЖ 4C" in text
-    assert "ФВ ЛЖ" in text
+    text = window._viewer.results_overlay_text()
+    assert "EDV 4C" in text
+    assert "ESV 4C" in text
+    assert "LVEF" in text
 
 
 def test_main_window_measurement_panel_updates_after_linear_caliper(qtbot) -> None:
@@ -83,8 +83,7 @@ def test_main_window_measurement_panel_updates_after_linear_caliper(qtbot) -> No
         ]
     )
 
-    text = window._measurement_panel._summary_label.text()
-    assert "Linear geometry" in text
+    text = window._viewer.results_overlay_text()
     assert "LVEDD: 50.0 mm" in text
 
 

@@ -141,6 +141,7 @@ class OnnxInferenceEngine:
         frame: np.ndarray,
         *,
         roi_xyxy: tuple[float, float, float, float] | None = None,
+        crop_mode: str = "center_square",
     ) -> np.ndarray:
         if self._session is None:
             msg = "ONNX segmentation model is not available"
@@ -155,7 +156,11 @@ class OnnxInferenceEngine:
             msg = "frame must be grayscale H×W or color H×W×3"
             raise ValueError(msg)
 
-        cropped, transform = crop_frame_for_echonet(array, roi_xyxy=roi_xyxy)
+        cropped, transform = crop_frame_for_echonet(
+            array,
+            roi_xyxy=roi_xyxy,
+            crop_mode=crop_mode,
+        )
         tensor = prepare_tensor(cropped)
         outputs = self._session.run(
             [self._output_name],

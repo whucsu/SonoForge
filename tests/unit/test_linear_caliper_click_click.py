@@ -141,8 +141,7 @@ def test_main_window_panel_updates_after_click_click_caliper(qtbot) -> None:
     window._viewer.start_linear_caliper_for("LVEDD")
     _place_caliper(window._viewer, 10.0, 50.0)
 
-    text = window._measurement_panel._summary_label.text()
-    assert "Linear geometry" in text
+    text = window._viewer.results_overlay_text()
     assert "LVEDD: 20.0 mm" in text
 
 

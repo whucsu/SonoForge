@@ -46,8 +46,9 @@ include = ["src/echo_personal_tool", "README.md"]
 testpaths = ["tests"]
 markers = [
     "integration: tests requiring real DICOM files on disk",
+    "interactive: manual cine segmentation diagnostics (MP4 without DICOM tags)",
 ]
-addopts = "-q"
+addopts = "-q -m 'not interactive'"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

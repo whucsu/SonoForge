@@ -1,0 +1,77 @@
+"""Dialog for study-wide measurement results and PDF export."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+)
+
+from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
+from echo_personal_tool.domain.services.measurement_report_formatter import (
+    format_measurement_report,
+)
+from echo_personal_tool.infrastructure.measurement_report_pdf import (
+    PdfExportError,
+    export_measurement_report_pdf,
+)
+
+
+class MeasurementResultsDialog(QDialog):
+    """Show study report and export to PDF."""
+
+    def __init__(
+        self,
+        snapshot: MeasurementSnapshot | None,
+        *,
+        parent=None,
+        default_pdf_name: str = "echo_measurements.pdf",
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Результаты измерений")
+        self.resize(520, 640)
+        self._report_text = format_measurement_report(snapshot)
+        self._default_pdf_name = default_pdf_name
+
+        self._text = QPlainTextEdit(self._report_text)
+        self._text.setReadOnly(True)
+
+        export_button = QPushButton("Экспорт в PDF")
+        export_button.clicked.connect(self._export_pdf)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self._text)
+        layout.addWidget(export_button)
+        layout.addWidget(buttons)
+
+    def _export_pdf(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить PDF",
+            self._default_pdf_name,
+            "PDF (*.pdf)",
+        )
+        if not path:
+            return
+        output_path = Path(path)
+        if output_path.suffix.lower() != ".pdf":
+            output_path = output_path.with_suffix(".pdf")
+        try:
+            export_measurement_report_pdf(self._report_text, output_path)
+        except PdfExportError as exc:
+            QMessageBox.warning(self, "Экспорт PDF", str(exc))
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_path.resolve())))

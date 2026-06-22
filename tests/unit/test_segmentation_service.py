@@ -54,7 +54,8 @@ def test_embed_echonet_mask_places_crop_in_frame() -> None:
         frame_width=640,
         crop_y0=40,
         crop_x0=120,
-        crop_size=224,
+        crop_height=224,
+        crop_width=224,
     )
 
     embedded = embed_echonet_mask(mask, transform)
@@ -73,10 +74,31 @@ def test_crop_frame_for_echonet_uses_b_mode_roi() -> None:
 
     cropped, transform = crop_frame_for_echonet(frame, roi_xyxy=roi)
 
-    assert cropped.shape[:2] == (transform.crop_size, transform.crop_size)
-    assert transform.crop_size == 500
+    assert cropped.shape[:2] == (transform.crop_height, transform.crop_width)
+    assert transform.crop_height == 500
+    assert transform.crop_width == 500
     assert transform.crop_y0 >= 50
     assert transform.crop_x0 >= 100
+
+
+def test_crop_frame_for_echonet_full_roi_uses_entire_b_mode_rectangle() -> None:
+    from echo_personal_tool.domain.services.segmentation_service import (
+        EchoNetCropMode,
+        crop_frame_for_echonet,
+    )
+
+    frame = np.zeros((600, 800, 3), dtype=np.uint8)
+    roi = (100.0, 50.0, 700.0, 550.0)
+
+    cropped, transform = crop_frame_for_echonet(
+        frame,
+        roi_xyxy=roi,
+        crop_mode=EchoNetCropMode.FULL_ROI,
+    )
+
+    assert transform.crop_height == 500
+    assert transform.crop_width == 600
+    assert cropped.shape[:2] == (500, 600)
 
 
 def test_prepare_tensor_grayscale_shape_and_dtype() -> None:
@@ -151,7 +173,7 @@ def test_open_arc_from_cavity_mask_uses_wider_end_as_annulus() -> None:
     septal, lateral = annulus
 
     annulus_y = (septal[1] + lateral[1]) / 2.0
-    assert annulus_y < apex[1]
+    assert annulus_y > apex[1]
     assert abs(lateral[0] - septal[0]) > 20.0
     assert open_points[0] == septal
     assert open_points[-1] == lateral
@@ -167,9 +189,20 @@ def test_open_arc_from_cavity_mask_flips_when_base_is_at_bottom() -> None:
         center_x = width // 2
         mask[y, center_x - half_width : center_x + half_width] = 1
 
-    _, annulus, apex = open_arc_from_cavity_mask(mask, num_nodes=32)
+    _, annulus, apex = open_arc_from_cavity_mask(mask, num_nodes=32, view_hint="A4C")
     annulus_y = (annulus[0][1] + annulus[1][1]) / 2.0
     assert annulus_y > apex[1]
+
+
+def test_mitral_annulus_endpoints_allow_sloped_mv_line() -> None:
+    from echo_personal_tool.domain.services.segmentation_service import _mitral_annulus_endpoints
+
+    xs = np.array([10.0, 11.0, 12.0, 13.0, 87.0, 88.0, 89.0, 90.0])
+    ys = np.array([100.0, 101.0, 100.0, 101.0, 118.0, 120.0, 119.0, 120.0])
+    septal, lateral = _mitral_annulus_endpoints(xs, ys)
+    assert septal[0] < lateral[0]
+    assert lateral[1] - septal[1] > 8.0
+    assert septal[1] != lateral[1]
 
 
 def test_mask_to_contour_embedded_echonet_blob_has_full_span() -> None:

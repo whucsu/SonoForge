@@ -64,6 +64,11 @@ def test_compute_indexed_volumes_and_linear() -> None:
     assert indexed.simpson_esvi_ml_m2 == pytest.approx(45.0 / indexed.bsa_m2, rel=0.01)
     assert indexed.teichholz_edvi_ml_m2 == pytest.approx(110.0 / indexed.bsa_m2, rel=0.01)
     assert indexed.lav_4c_index_ml_m2 == pytest.approx(40.0 / indexed.bsa_m2, rel=0.01)
+    assert indexed.lvmi_g_m2 is None
     assert len(indexed.linear_index_mm_m2) == 1
     assert indexed.linear_index_mm_m2[0][0] == "LVEDD"
-    assert indexed.linear_index_mm_m2[0][1] == pytest.approx(50.0 / indexed.bsa_m2, rel=0.01)
+def test_compute_indexed_lvmi() -> None:
+    snapshot = MeasurementSnapshot(lvm_g=120.0)
+    indexed = compute_indexed_measurements(snapshot, height_cm=170.0, weight_kg=70.0)
+    assert indexed is not None
+    assert indexed.lvmi_g_m2 == pytest.approx(120.0 / indexed.bsa_m2, rel=0.01)

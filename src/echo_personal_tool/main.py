@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import sys
+
+# KDE Sonnet tries to load hspell (Hebrew) on some Linux desktops; ignore if missing.
+# KDE sycoca warns about Cursor's custom MIME type when launched from Cursor terminal.
+os.environ.setdefault(
+    "QT_LOGGING_RULES",
+    "kf.sonnet*=false;kf.sonnet.clients.hspell=false;kf.service.sycoca=false",
+)
 
 from PySide6.QtWidgets import QApplication
 

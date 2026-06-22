@@ -180,6 +180,30 @@ def _contour_length_mm(
     return length if length > 0.0 else None
 
 
+def simpson_volume_ml_from_contour(
+    contour: Contour,
+    pixel_spacing: tuple[float, float],
+) -> float | None:
+    """Public Simpson disk volume for any open-arc contour."""
+    return _contour_volume_ml(contour, pixel_spacing)
+
+
+def simpson_volume_ml_from_closed_polygon(
+    contour: Contour,
+    pixel_spacing: tuple[float, float],
+) -> float | None:
+    """Simpson disk volume from a closed polygon (vertical slice method)."""
+    if len(contour.points) < 3:
+        return None
+    row_spacing, col_spacing = pixel_spacing
+    points_mm = tuple(
+        (float(col) * col_spacing, float(row) * row_spacing)
+        for col, row in contour.points
+    )
+    volume = _simpson_volume_ml(points_mm, None)
+    return volume if volume > 0.0 else None
+
+
 def _contour_volume_ml(
     contour: Contour,
     pixel_spacing: tuple[float, float],
