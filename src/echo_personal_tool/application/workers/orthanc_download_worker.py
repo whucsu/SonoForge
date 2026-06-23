@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
-from echo_personal_tool.domain.ports.dicom_web import DicomWebClient
+from echo_personal_tool.domain.ports import DicomWebClient
 from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
 
 
