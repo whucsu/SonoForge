@@ -1,6 +1,6 @@
 # ROADMAP — ECHO Personal Tool
 
-**Обновлено:** 2026-06-19  
+**Обновлено:** 2026-06-23  
 **Источник истины по коду:** этот файл + `CHANGELOG_SESSION.md` (последние записи).  
 **Детальные спеки:** `docs/superpowers/specs/`, планы — `docs/superpowers/plans/`.
 
@@ -110,6 +110,19 @@
 | RBF contour deform | [x] |
 | MBS Advanced (ED→ES propagate, sinusoidal) | [~] superseded: Lamé + R-refine, без ED→ES propagate |
 | Open-arc Simpson (2026-06-11) | [x] |
+| DICOMweb Orthanc (QIDO/WADO, mock offline, session cache) | [x] |
+
+---
+
+## DICOMweb Orthanc (спека 2026-06-23)
+
+- [x] QIDO-RS + WADO-RS через `OrthancDicomWebClient` (httpx)
+- [x] Сессионный кэш `OrthancSessionCache`, очистка при выходе
+- [x] Mock offline: `FakeDicomWebClient` + JSON/DICOM фикстуры
+- [x] UI: `OrthancStudyDialog`, «Загрузить с сервера…», настройки сервера
+- [x] Интеграция: `open_folder(study_path)` после загрузки
+
+**Спека:** `docs/superpowers/specs/2026-06-23-dicomweb-orthanc-design.md`
 
 ---
 
