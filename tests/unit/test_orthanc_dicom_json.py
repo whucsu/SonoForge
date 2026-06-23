@@ -66,6 +66,7 @@ def test_parse_series_injects_study_uid() -> None:
             "0020000E": {"vr": "UI", "Value": ["1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.2"]},
             "00080060": {"vr": "CS", "Value": ["US"]},
             "0008103E": {"vr": "LO", "Value": ["Echo series"]},
+            "00201209": {"vr": "IS", "Value": ["10"]},
         }
     ]
     series_list = parse_series(payload, study_uid)
@@ -76,6 +77,7 @@ def test_parse_series_injects_study_uid() -> None:
     assert series_list[0].study_uid == study_uid
     assert series_list[0].modality == "US"
     assert series_list[0].description == "Echo series"
+    assert series_list[0].instance_count == 10
 
 
 def test_parse_instances_injects_study_and_series_uid() -> None:

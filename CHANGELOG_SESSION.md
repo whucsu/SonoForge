@@ -6,6 +6,11 @@
 
 ---
 
+## [2026-06-23 16:00] DICOMweb — cancel, прогресс, includefield
+- **Тип:** fix
+- **Файлы:** `orthanc_download_worker.py`, `orthanc_study_dialog.py`, `orthanc_client.py`, `main_window.py`, `DICOM_parsing.md`
+- **Суть:** Отмена загрузки останавливает worker и чистит session cache; суммарный progress-bar; httpx client закрывается после worker; QIDO includefield.
+
 ## [2026-06-22 14:00] RV FAC — одна кнопка, crescent template, ED→ES blink
 - **Тип:** feature
 - **Файлы:** `rv_shape_template.py`, `rv_fac.py`, `mbs_lite_service.py`, `measures_menu.py`, `main_window.py`, `viewer_widget.py`, `test_rv_shape_template.py`, `test_rv_fac.py`, spec `2026-06-22-rv-fac-design.md`

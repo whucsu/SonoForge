@@ -13,6 +13,7 @@ TAG_STUDY_INSTANCE_UID = "0020000D"
 TAG_SERIES_INSTANCE_UID = "0020000E"
 TAG_STUDY_DESCRIPTION = "00081030"
 TAG_SERIES_DESCRIPTION = "0008103E"
+TAG_NUMBER_OF_SERIES_RELATED_INSTANCES = "00201209"
 
 
 def tag_value(item: dict, tag: str, default: str = "") -> str:
@@ -46,6 +47,7 @@ def parse_series(payload: list[dict], study_uid: str) -> list[SeriesInfo]:
             study_uid=study_uid,
             modality=tag_value(item, TAG_MODALITY),
             description=tag_value(item, TAG_SERIES_DESCRIPTION),
+            instance_count=int(c) if (c := tag_value(item, TAG_NUMBER_OF_SERIES_RELATED_INSTANCES)) else None,
         )
         for item in payload
     ]
