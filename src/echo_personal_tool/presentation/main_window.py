@@ -29,6 +29,7 @@ from echo_personal_tool.domain.services.measurement_results_formatter import (
     format_results_overlay,
 )
 from echo_personal_tool.presentation.ase_reference_dialog import show_ase_reference_dialog
+from echo_personal_tool.presentation.server_settings_dialog import show_server_settings_dialog
 from echo_personal_tool.presentation.echopac_theme import apply_echopac_theme
 from echo_personal_tool.presentation.measurement_action import MeasurementAction
 from echo_personal_tool.presentation.measurement_results_dialog import MeasurementResultsDialog
@@ -232,6 +233,9 @@ class MainWindow(QMainWindow):
     def _show_references(self) -> None:
         show_ase_reference_dialog(self)
 
+    def _show_server_settings(self) -> None:
+        show_server_settings_dialog(self)
+
     def _show_settings_menu(self) -> None:
         menu = QMenu(self)
         snap_action = menu.addAction("Магнит к стенке")
@@ -242,6 +246,9 @@ class MainWindow(QMainWindow):
         snap_action.toggled.connect(
             self._tool_panel.controls._magnetic_snap_check.setChecked
         )
+        menu.addSeparator()
+        server_action = menu.addAction("Сервер…")
+        server_action.triggered.connect(self._show_server_settings)
         anchor = self._system_bar._btn_settings
         menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
 
