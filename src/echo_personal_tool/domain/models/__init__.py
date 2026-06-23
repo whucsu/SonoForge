@@ -25,6 +25,11 @@ from echo_personal_tool.domain.models.metadata import (
     SeriesMetadata,
     StudyMetadata,
 )
+from echo_personal_tool.domain.models.orthanc import (
+    InstanceInfo,
+    SeriesInfo,
+    StudyInfo,
+)
 from echo_personal_tool.domain.models.viewer_state import ViewerState
 
 __all__ = [
@@ -36,6 +41,7 @@ __all__ = [
     "DopplerResults",
     "DopplerTrace",
     "IndexedMeasurements",
+    "InstanceInfo",
     "InstanceMetadata",
     "InstanceRef",
     "LinearMeasurement",
@@ -43,7 +49,9 @@ __all__ = [
     "LvViewMetrics",
     "LvefResult",
     "MeasurementSnapshot",
+    "SeriesInfo",
     "SeriesMetadata",
+    "StudyInfo",
     "TeichholzResult",
     "StudyMetadata",
     "ViewerState",
