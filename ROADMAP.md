@@ -79,8 +79,8 @@
 
 Код handlers есть, **кнопок в `measures_menu.py` нет:**
 
-- [ ] **S ПП** (`RA_AREA` / `_on_ra_area`)
-- [ ] **RV FAC** ED/ES (`RV_FAC_ED`, `RV_FAC_ES`)
+- [x] ~~**S ПП**~~ — **закрыто**: площадь ПП через RAV 4C (Simpson), отдельной кнопки не будет
+- [x] **RV FAC** — одна кнопка, ED→blink→ES, шаблон quarter-sine (спека `2026-06-22-rv-fac-design.md`)
 
 **Реализовано в меню:** LV, LV Auto (EDV/ESV A4C), Aorta, LA, RA (диаметр + RAV 4C), RV (без FAC), Diastology, MV/AV, TV/PV.
 
@@ -128,7 +128,7 @@
 
 ## Следующие приоритеты (рекомендация)
 
-1. [ ] FAC + S ПП в `measures_menu.py`
+1. [x] RV FAC (одна кнопка, quarter-sine, blink ED→ES)
 2. [ ] ONNX v1.1 (mean/std, annulus)
 3. [ ] ONNX v2 / A2C auto
 4. [ ] CSV/JSON отчёт

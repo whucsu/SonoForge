@@ -310,6 +310,7 @@ class ViewerWidget(QWidget):
     play_pause_requested = Signal()
     frame_selected = Signal(int)
     contour_completed = Signal(object)
+    contour_landmark_rejected = Signal(str)
     contours_changed = Signal(object)
     linear_measurements_changed = Signal(object)
     linear_caliper_sequence_completed = Signal()
@@ -397,6 +398,7 @@ class ViewerWidget(QWidget):
         )
         self._active_mitral_septal: tuple[float, float] | None = None
         self._active_mitral_annulus: tuple[tuple[float, float], tuple[float, float]] | None = None
+        self._active_apex_landmark: tuple[float, float] | None = None
         self._active_arc_points: list[tuple[float, float]] = []
         self._active_contour_item: pg.PlotDataItem | None = None
         self._active_ma_chord_item: pg.PlotDataItem | None = None
@@ -1461,6 +1463,7 @@ class ViewerWidget(QWidget):
         self._contour_stage = "polygon" if mode_kind == "closed" else "ma_septal"
         self._active_mitral_septal = None
         self._active_mitral_annulus = None
+        self._active_apex_landmark = None
         self._active_arc_points = []
         active_pen = self._contour_pen_manual
         self._active_contour_item = pg.PlotDataItem(
@@ -1501,18 +1504,15 @@ class ViewerWidget(QWidget):
             self._show_active_ma_chord()
             self._contour_stage = "apex"
         elif self._contour_stage == "apex":
+            self._active_apex_landmark = click
+            self._update_active_contour_item()
             if self._contour_mode_kind == "model":
-                return self._finish_model_contour(apex=click)
-            chamber = self._active_contour_chamber.upper()
-            if chamber == "RV":
-                self._active_arc_points = [click]
-                self._contour_stage = "arc"
-                self._measurement_label.setText(
-                    f"{chamber}: точки вдоль контура, Enter — завершить"
-                )
-                self._update_active_contour_item()
-                return True
-            return self._finish_manual_contour(apex=click)
+                finished = self._finish_model_contour(apex=click)
+            else:
+                finished = self._finish_manual_contour(apex=click)
+            if not finished:
+                self._contour_stage = "apex"
+            return True
         elif self._contour_stage == "arc":
             self._active_arc_points.append(click)
         elif self._contour_stage == "polygon":
@@ -1534,7 +1534,8 @@ class ViewerWidget(QWidget):
                 chamber=self._active_contour_chamber,
             )
             contour.frame_index = self._contour_frame_index()
-        except ValueError:
+        except ValueError as exc:
+            self.contour_landmark_rejected.emit(str(exc))
             return False
         self._clear_active_contour_drawing()
         self.set_contour_from_domain(contour)
@@ -1584,7 +1585,7 @@ class ViewerWidget(QWidget):
 
         septal, lateral = self._active_mitral_annulus
         chamber = self._active_contour_chamber.upper()
-        if chamber in {"LV", "LA", "RA"}:
+        if chamber in {"LV", "LA", "RA", "RV"}:
             try:
                 contour = fit_contour_from_landmarks(
                     septal=septal,
@@ -1594,7 +1595,8 @@ class ViewerWidget(QWidget):
                     view=self._active_contour_view,
                     chamber=chamber,
                 )
-            except ValueError:
+            except ValueError as exc:
+                self.contour_landmark_rejected.emit(str(exc))
                 return False
             contour.source = "manual"
             contour.frame_index = self._contour_frame_index()
@@ -1949,6 +1951,7 @@ class ViewerWidget(QWidget):
             self._active_ma_chord_item = None
         self._active_mitral_septal = None
         self._active_mitral_annulus = None
+        self._active_apex_landmark = None
         self._active_arc_points = []
         self._active_contour_phase = None
         self._contour_stage = None
@@ -2752,6 +2755,27 @@ class ViewerWidget(QWidget):
         septal, lateral = self._active_mitral_annulus
         self._active_ma_chord_item.setData([septal[0], lateral[0]], [septal[1], lateral[1]])
 
+    def _preview_open_arc_points(
+        self,
+        septal: tuple[float, float],
+        lateral: tuple[float, float],
+        apex: tuple[float, float],
+    ) -> list[tuple[float, float]]:
+        from echo_personal_tool.domain.services.mbs_lite_service import fit_contour_from_landmarks
+
+        try:
+            contour = fit_contour_from_landmarks(
+                septal=septal,
+                lateral=lateral,
+                apex=apex,
+                phase=self._active_contour_phase or "ED",
+                view=self._active_contour_view,
+                chamber=self._active_contour_chamber,
+            )
+        except ValueError:
+            return []
+        return list(contour.points)
+
     def _update_active_contour_item(self) -> None:
         if self._active_contour_item is None:
             return
@@ -2765,6 +2789,13 @@ class ViewerWidget(QWidget):
         elif self._contour_stage == "apex" and self._active_mitral_annulus is not None:
             septal, lateral = self._active_mitral_annulus
             markers = [septal, lateral]
+            if self._active_apex_landmark is not None:
+                markers.append(self._active_apex_landmark)
+                spline_points = self._preview_open_arc_points(
+                    septal,
+                    lateral,
+                    self._active_apex_landmark,
+                )
         elif self._contour_stage == "arc" and self._active_mitral_annulus is not None:
             septal, lateral = self._active_mitral_annulus
             markers = [septal, *self._active_arc_points, lateral]

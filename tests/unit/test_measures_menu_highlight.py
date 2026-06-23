@@ -30,6 +30,15 @@ def test_highlight_es_diameter_after_all_diastole_chain() -> None:
     assert menu._blink_target is None
 
 
+def test_highlight_fac_after_ed_contour() -> None:
+    menu = MeasuresMenuWidget()
+    menu.highlight_action(MeasurementAction.RV_FAC)
+    fac_button = next(
+        btn for btn in menu.findChildren(QPushButton) if btn.text() == "FAC"
+    )
+    assert menu._blink_target is fac_button
+
+
 def test_highlight_manual_esv_after_edv() -> None:
     menu = MeasuresMenuWidget()
     menu.highlight_action(MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ES")
@@ -39,3 +48,11 @@ def test_highlight_manual_esv_after_edv() -> None:
         if btn.text() == "LVEF Simpson ESV"
     )
     assert menu._blink_target is esv_button
+
+
+def test_rv_section_has_fac_button() -> None:
+    menu = MeasuresMenuWidget()
+    fac_buttons = [
+        btn for btn in menu.findChildren(QPushButton) if btn.text() == "FAC"
+    ]
+    assert len(fac_buttons) == 1

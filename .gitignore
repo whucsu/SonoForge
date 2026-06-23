@@ -49,3 +49,4 @@ htmlcov/
 .worktrees/
 scan_errors.log
 uv.lock
+orthanc_analysis.md

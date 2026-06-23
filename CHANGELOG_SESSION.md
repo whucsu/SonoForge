@@ -6,6 +6,16 @@
 
 ---
 
+## [2026-06-22 14:00] RV FAC — одна кнопка, crescent template, ED→ES blink
+- **Тип:** feature
+- **Файлы:** `rv_shape_template.py`, `rv_fac.py`, `mbs_lite_service.py`, `measures_menu.py`, `main_window.py`, `viewer_widget.py`, `test_rv_shape_template.py`, `test_rv_fac.py`, spec `2026-06-22-rv-fac-design.md`
+- **Суть:** RV FAC через одну кнопку: контур ED (3 клика + crescent open-arc), blink, систола ES, FAC% в overlay; S ПП закрыт (площадь через RAV 4C).
+
+## [2026-06-22 12:00] DICOMweb Orthanc — merge в phase2
+- **Тип:** feature
+- **Файлы:** `orthanc_client.py`, `orthanc_cache.py`, `fake_dicom_web_client.py`, `orthanc_study_dialog.py`, `server_settings.py`, `main_window.py`, `system_bar.py`, `domain/ports.py`, `pyproject.toml`, тесты и фикстуры `tests/fixtures/orthanc/`
+- **Суть:** Fast-forward merge `feat/dicomweb-orthanc` → `feat/phase2-echopac-ui`: QIDO/WADO через httpx, mock offline, session cache, диалог браузера и «Загрузить с сервера…»; fix shadowing `domain/ports.py`.
+
 ## [2026-06-19 45:00] ROADMAP, чеклисты, LAV/RAV овал, LV Auto
 - **Тип:** feature
 - **Файлы:** `ROADMAP.md`, `lv_shape_template.py`, `mbs_lite_service.py`, `measures_menu.py`, `main.py`, `docs/superpowers/specs/2026-06-19-measurement-workflow-design.md`, `docs/superpowers/specs/2026-06-11-display-ux-design.md`, `docs/superpowers/specs/2026-06-19-onnx-lv-auto-segment-design.md`, `docs/superpowers/plans/2026-06-19-onnx-lv-auto-segment.md`

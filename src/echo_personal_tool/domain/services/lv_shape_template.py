@@ -9,7 +9,7 @@ _MIN_SEMI_AXIS_PX = 1e-6
 
 # LA / RA open-arc template: short diameter = long diameter × ratio (default 85%).
 # Long diameter = MA midpoint → apex; short axis is perpendicular to that line.
-ATRIAL_ELLIPSE_SHORT_AXIS_RATIO = 0.88
+ATRIAL_ELLIPSE_SHORT_AXIS_RATIO = 0.85
 
 
 @dataclass(frozen=True)

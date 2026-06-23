@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         self.showMaximized()
         self._click_to_frame_started_at: float | None = None
         self._lav_bi_active = False
+        self._rv_fac_awaiting_es = False
         self._instance_overlay_cache: dict[str, str] = {}
 
         self._controller = controller or AppController()
@@ -114,6 +115,7 @@ class MainWindow(QMainWindow):
         self._viewer.play_pause_requested.connect(self._controller.toggle_playback)
         self._viewer.frame_selected.connect(self._controller.state_manager.set_frame)
         self._viewer.contour_completed.connect(self._on_contour_completed)
+        self._viewer.contour_landmark_rejected.connect(self._show_status)
         self._viewer.contours_changed.connect(self._controller.on_contours_changed)
         self._viewer.linear_measurements_changed.connect(
             self._controller.on_linear_measurements_changed
@@ -561,8 +563,7 @@ class MainWindow(QMainWindow):
             MeasurementAction.RV_BASAL: self._on_rv_basal,
             MeasurementAction.RV_TAPSE: self._on_rv_tapse,
             MeasurementAction.RV_S_PRIME: self._on_rv_s_prime,
-            MeasurementAction.RV_FAC_ED: lambda: self._on_rv_fac_contour("ED"),
-            MeasurementAction.RV_FAC_ES: lambda: self._on_rv_fac_contour("ES"),
+            MeasurementAction.RV_FAC: self._on_rv_fac,
             MeasurementAction.AUTO_SEGMENT: self._request_auto_segment_shortcut,
         }
         if action == MeasurementAction.CALIPER:
@@ -635,13 +636,16 @@ class MainWindow(QMainWindow):
         self._viewer.set_doppler_tool_mode("peak", peak_label="s_sept")
         self._show_status("RV s': клик на пике septal TDI")
 
-    def _on_rv_fac_contour(self, phase: str) -> None:
+    def _on_rv_fac(self) -> None:
+        phase = "ES" if self._rv_fac_awaiting_es else "ED"
         if not self._start_chamber_contour(
             "RV",
             phase,
             "A4C",
-            overlay=f"RV FAC {phase}: trace RV endocardium",
-            status=f"RV FAC {phase}: annulus septal → lateral → apex",
+            overlay=f"RV FAC {phase}: TV septal → lateral → free wall",
+            status=(
+                f"RV FAC {phase}: 1) TV septal  2) TV lateral  3) free wall · Enter — подтвердить"
+            ),
         ):
             self._show_status("Load a frame first or cancel the active tool (Esc)")
 
@@ -659,6 +663,7 @@ class MainWindow(QMainWindow):
 
     def _on_reset_measurements_requested(self) -> None:
         self._lav_bi_active = False
+        self._rv_fac_awaiting_es = False
         self._instance_overlay_cache.clear()
         self._viewer.cancel_active_tool()
         self._viewer.clear_doppler_calibration_display()
@@ -964,6 +969,30 @@ class MainWindow(QMainWindow):
                     extra_lines = (
                         *extra_lines,
                         f"RAV 4C: {rav:.1f} {volume_unit}",
+                    )
+        elif chamber == "RV":
+            spacing, spacing_calibrated = self._viewer._effective_pixel_spacing()
+            from echo_personal_tool.domain.calculations.rv_fac import format_rv_area_overlay_line
+
+            line = format_rv_area_overlay_line(
+                contour,
+                spacing,
+                spacing_calibrated=spacing_calibrated,
+            )
+            self._show_status(line)
+            phase = contour.phase.upper()
+            if phase == "ED":
+                self._rv_fac_awaiting_es = True
+                self._tool_panel.measure.highlight_action(MeasurementAction.RV_FAC)
+                extra_lines = (*extra_lines, "Перейдите на кадр систолы и нажмите FAC")
+            elif phase == "ES":
+                self._rv_fac_awaiting_es = False
+                self._tool_panel.measure.clear_action_highlight()
+                snapshot = self._controller.state_manager.snapshot.measurement_snapshot
+                if snapshot is not None and snapshot.rv_fac_percent is not None:
+                    extra_lines = (
+                        *extra_lines,
+                        f"FAC: {snapshot.rv_fac_percent:.1f} %",
                     )
 
         self._viewer._refresh_frame_overlays(extra_lines=extra_lines)

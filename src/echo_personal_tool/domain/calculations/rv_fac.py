@@ -6,6 +6,35 @@ from echo_personal_tool.domain.models import Contour
 from echo_personal_tool.domain.services.contour_geometry import polygon_area_mm2
 
 
+def rv_area_mm2(
+    contour: Contour,
+    pixel_spacing: tuple[float, float],
+) -> float | None:
+    """Closed RV cavity area from open-arc contour and TV annulus chord."""
+    points = contour.closed_polygon_points()
+    if len(points) < 3:
+        return None
+    area = polygon_area_mm2(points, pixel_spacing)
+    return area if area > 0.0 else None
+
+
+def format_rv_area_overlay_line(
+    contour: Contour,
+    pixel_spacing: tuple[float, float] | None,
+    *,
+    spacing_calibrated: bool = True,
+) -> str:
+    """Frame overlay for RV FAC contour: phase and area only."""
+    phase = contour.phase.upper()
+    if pixel_spacing is None:
+        return f"RV FAC {phase}: площадь —"
+    area = rv_area_mm2(contour, pixel_spacing)
+    if area is None:
+        return f"RV FAC {phase}: площадь —"
+    unit = "mm²" if spacing_calibrated else "px²"
+    return f"RV FAC {phase}: {area:.1f} {unit}"
+
+
 def fac_percent(
     ed_area_mm2: float,
     es_area_mm2: float,

@@ -118,6 +118,7 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
             _btn("RV mid", caliper_label="RV mid"),
             _btn("TAPSE", MeasurementAction.RV_TAPSE),
             _btn("s' RV", MeasurementAction.RV_S_PRIME),
+            _btn("FAC", MeasurementAction.RV_FAC, view="A4C"),
         ),
     ),
     (
@@ -321,12 +322,16 @@ class MeasuresMenuWidget(QWidget):
     ) -> None:
         self.clear_highlight()
         for button, spec in self._tool_buttons:
-            if (
-                spec.enabled
-                and spec.action == action
-                and spec.view == view
-                and spec.phase == phase
-            ):
+            if not spec.enabled or spec.action != action:
+                continue
+            if action == MeasurementAction.RV_FAC:
+                if spec.view == view:
+                    self._blink_target = button
+                    self._blink_timer.start()
+                    self._ensure_section_visible(button)
+                    return
+                continue
+            if spec.view == view and spec.phase == phase:
                 self._blink_target = button
                 self._blink_timer.start()
                 self._ensure_section_visible(button)

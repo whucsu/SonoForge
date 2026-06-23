@@ -29,6 +29,10 @@ from echo_personal_tool.domain.services.lv_shape_template import (
     warp_elliptical_open_arc,
     warp_lame_open_arc,
 )
+from echo_personal_tool.domain.services.rv_shape_template import (
+    RV_FAC_NODE_COUNT,
+    warp_rv_crescent_open_arc,
+)
 
 _MIN_ANNULUS_LENGTH_PX = 10.0
 _MIN_APEX_DISTANCE_PX = 3.0
@@ -47,11 +51,13 @@ def fit_contour_from_landmarks(
 ) -> Contour:
     """Fit an open-arc contour from annulus and apex landmarks."""
     chamber_key = chamber.upper()
-    if chamber_key not in {"LV", "LA", "RA"}:
-        msg = "fit_contour_from_landmarks supports LV, LA, and RA only"
+    if chamber_key not in {"LV", "LA", "RA", "RV"}:
+        msg = "fit_contour_from_landmarks supports LV, LA, RA, and RV only"
         raise ValueError(msg)
 
     _validate_landmarks(septal, lateral, apex)
+
+    node_count = RV_FAC_NODE_COUNT if chamber_key == "RV" else num_nodes
 
     if chamber_key == "LV":
         warped = warp_lame_open_arc(
@@ -60,6 +66,13 @@ def fit_contour_from_landmarks(
             apex,
             view=view,
             phase=phase,
+            num_points=_TEMPLATE_POINT_COUNT,
+        )
+    elif chamber_key == "RV":
+        warped = warp_rv_crescent_open_arc(
+            septal,
+            lateral,
+            apex,
             num_points=_TEMPLATE_POINT_COUNT,
         )
     else:
@@ -75,7 +88,7 @@ def fit_contour_from_landmarks(
         septal=septal,
         lateral=lateral,
         apex=apex,
-        num_nodes=num_nodes,
+        num_nodes=node_count,
     )
     return Contour(
         phase=phase,
@@ -85,7 +98,7 @@ def fit_contour_from_landmarks(
         apex_landmark=apex,
         points=resampled,
         source="model",
-        num_nodes=num_nodes,
+        num_nodes=node_count,
     )
 
 
@@ -112,6 +125,29 @@ def build_atrial_ellipse_template_for_contour(contour: Contour) -> list[tuple[fl
         apex,
         num_points=_TEMPLATE_POINT_COUNT,
         short_axis_ratio=ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+    )
+    return resample_open_arc_landmarks(
+        warped,
+        septal=septal,
+        lateral=lateral,
+        apex=apex,
+        num_nodes=len(contour.points),
+    )
+
+
+def build_rv_quarter_sine_template_for_contour(contour: Contour) -> list[tuple[float, float]]:
+    """Regenerate RV quarter-sine template resampled to contour node count."""
+    if contour.mitral_annulus is None:
+        return list(contour.points)
+    septal, lateral = contour.mitral_annulus
+    apex = contour.apex_landmark or infer_apex_from_open_arc(
+        contour.points, septal, lateral
+    )
+    warped = warp_rv_crescent_open_arc(
+        septal,
+        lateral,
+        apex,
+        num_points=_TEMPLATE_POINT_COUNT,
     )
     return resample_open_arc_landmarks(
         warped,
@@ -241,6 +277,8 @@ def _refine_internal_template(contour: Contour) -> list[tuple[float, float]]:
         return build_lame_template_for_contour(contour)
     if chamber in {"LA", "RA"}:
         return build_atrial_ellipse_template_for_contour(contour)
+    if chamber == "RV":
+        return build_rv_quarter_sine_template_for_contour(contour)
     return list(contour.points)
 
 

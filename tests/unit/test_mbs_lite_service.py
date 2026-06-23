@@ -154,6 +154,34 @@ def test_fit_contour_la_matches_elliptical_template() -> None:
     assert contour.points[mid_index] == pytest.approx(expected[mid_index], abs=0.5)
 
 
+def test_fit_contour_rv_matches_crescent_template() -> None:
+    from echo_personal_tool.domain.services.contour_geometry import resample_open_arc_landmarks
+    from echo_personal_tool.domain.services.rv_shape_template import warp_rv_crescent_open_arc
+
+    septal = (80.0, 20.0)
+    lateral = (20.0, 20.0)
+    apex = (50.0, 70.0)
+    contour = fit_contour_from_landmarks(
+        septal=septal,
+        lateral=lateral,
+        apex=apex,
+        phase="ED",
+        view="A4C",
+        chamber="RV",
+    )
+    expected_arc = warp_rv_crescent_open_arc(septal, lateral, apex, num_points=81)
+    expected = resample_open_arc_landmarks(
+        expected_arc,
+        septal=septal,
+        lateral=lateral,
+        apex=apex,
+        num_nodes=RV_FAC_NODE_COUNT,
+    )
+    assert len(contour.points) == RV_FAC_NODE_COUNT
+    mid_index = len(contour.points) // 2
+    assert contour.points[mid_index] == pytest.approx(expected[mid_index], abs=0.5)
+
+
 def test_a2c_lame_profile_differs_from_a4c() -> None:
     a4c = lame_profile_for_view_phase("A4C", "ED")
     a2c = lame_profile_for_view_phase("A2C", "ED")
