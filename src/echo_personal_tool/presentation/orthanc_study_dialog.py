@@ -21,6 +21,7 @@ from echo_personal_tool.application.workers.orthanc_download_worker import Ortha
 from echo_personal_tool.domain.models.orthanc import SeriesInfo, StudyInfo
 from echo_personal_tool.domain.ports import DicomWebClient
 from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
+from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClient
 
 _STUDY_UID_ROLE = Qt.ItemDataRole.UserRole
 _SERIES_UID_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -38,6 +39,9 @@ class OrthancStudyDialog(QDialog):
         self._cache = cache
         self._result: tuple[str, str] | None = None
         self._downloading = False
+        self._worker: OrthancDownloadWorker | None = None
+        self._session_id: str | None = None
+        self._client_closed = False
 
         self.setWindowTitle("Загрузка с сервера")
         self.resize(640, 480)
@@ -65,7 +69,7 @@ class OrthancStudyDialog(QDialog):
         self._load_btn.clicked.connect(self._on_load)
 
         self._cancel_btn = QPushButton("Отмена")
-        self._cancel_btn.clicked.connect(self.reject)
+        self._cancel_btn.clicked.connect(self._on_cancel)
 
         buttons_row = QHBoxLayout()
         buttons_row.addStretch()
@@ -85,6 +89,32 @@ class OrthancStudyDialog(QDialog):
     def result_data(self) -> tuple[str, str] | None:
         """Return (session_id, study_uid) after successful download, else None."""
         return self._result
+
+    def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if self._downloading:
+            event.ignore()
+            self._on_cancel()
+            return
+        self._release_client()
+        super().closeEvent(event)
+
+    def reject(self) -> None:
+        if self._downloading:
+            self._on_cancel()
+            return
+        self._release_client()
+        super().reject()
+
+    def accept(self) -> None:
+        self._release_client()
+        super().accept()
+
+    def _release_client(self) -> None:
+        if self._client_closed:
+            return
+        if isinstance(self._client, OrthancDicomWebClient):
+            self._client.close()
+            self._client_closed = True
 
     def _check_ping(self) -> None:
         if self._client.ping():
@@ -188,11 +218,13 @@ class OrthancStudyDialog(QDialog):
         study_uid, series_uids = selection
 
         session_id = self._cache.create_session()
+        self._session_id = session_id
         self._downloading = True
         self._load_btn.setEnabled(False)
-        self._cancel_btn.setEnabled(False)
+        self._cancel_btn.setText("Отменить загрузку")
         self._find_btn.setEnabled(False)
         self._progress.setValue(0)
+        self._progress.setMaximum(1)
         self._progress.show()
         self._status_label.setText("Загрузка…")
 
@@ -204,26 +236,56 @@ class OrthancStudyDialog(QDialog):
             series_uids,
             self,
         )
+        self._worker = worker
         worker.signals.progress.connect(self._on_progress)
         worker.signals.done.connect(self._on_done)
         worker.signals.failed.connect(self._on_failed)
+        worker.signals.cancelled.connect(self._on_cancelled)
         QThreadPool.globalInstance().start(worker)
 
-    def _on_progress(self, series_uid: str, current: int, total: int) -> None:
+    def _on_cancel(self) -> None:
+        if self._downloading and self._worker is not None:
+            self._status_label.setText("Отмена загрузки…")
+            self._cancel_btn.setEnabled(False)
+            self._worker.cancel()
+            return
+        self.reject()
+
+    def _on_progress(self, current: int, total: int, series_uid: str) -> None:
         if total > 0:
             self._progress.setMaximum(total)
             self._progress.setValue(current)
         short_uid = series_uid[:12] + "…" if len(series_uid) > 12 else series_uid
-        self._status_label.setText(f"Серия {short_uid} — {current}/{total}")
+        self._status_label.setText(f"Загрузка — {current}/{total} (серия {short_uid})")
 
     def _on_done(self, session_id: str, study_uid: str) -> None:
+        self._downloading = False
+        self._worker = None
+        self._session_id = None
         self._result = (session_id, study_uid)
         self.accept()
 
     def _on_failed(self, _uid: str, message: str) -> None:
         self._downloading = False
+        self._worker = None
+        if self._session_id is not None:
+            self._cache.clear_session(self._session_id)
+            self._session_id = None
         self._progress.hide()
         self._find_btn.setEnabled(True)
+        self._cancel_btn.setText("Отмена")
         self._cancel_btn.setEnabled(True)
         self._update_load_button()
         QMessageBox.warning(self, "Загрузка", f"Ошибка загрузки: {message}")
+
+    def _on_cancelled(self, _session_id: str) -> None:
+        self._downloading = False
+        self._worker = None
+        self._session_id = None
+        self._progress.hide()
+        self._find_btn.setEnabled(True)
+        self._cancel_btn.setText("Отмена")
+        self._cancel_btn.setEnabled(True)
+        self._update_load_button()
+        self._release_client()
+        super().reject()

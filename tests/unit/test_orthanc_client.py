@@ -52,6 +52,9 @@ def test_query_studies_parses_dicom_json() -> None:
         assert request.url.path == "/dicom-web/studies"
         assert request.headers["Accept"] == "application/dicom+json"
         assert "PatientName" not in request.url.params
+        include_fields = request.url.params.get_list("includefield")
+        assert "00100010" in include_fields
+        assert "0020000D" in include_fields
         return httpx.Response(200, json=payload)
 
     client = _client_with_transport(handler)

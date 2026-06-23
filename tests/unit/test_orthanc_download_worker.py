@@ -19,15 +19,16 @@ INSTANCE_UID = "1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.3"
 
 class _SignalCapture:
     def __init__(self) -> None:
-        self.progress: list[tuple[str, int, int]] = []
+        self.progress: list[tuple[int, int, str]] = []
         self.series_done: list[tuple[str, str]] = []
         self.done: list[tuple[str, str]] = []
         self.failed: list[tuple[str, str]] = []
+        self.cancelled: list[str] = []
 
     def connect(self, worker: OrthancDownloadWorker) -> None:
         worker.signals.progress.connect(
-            lambda series_uid, current, total: self.progress.append(
-                (series_uid, current, total)
+            lambda current, total, series_uid: self.progress.append(
+                (current, total, series_uid)
             )
         )
         worker.signals.series_done.connect(
@@ -38,6 +39,9 @@ class _SignalCapture:
         )
         worker.signals.failed.connect(
             lambda uid, message: self.failed.append((uid, message))
+        )
+        worker.signals.cancelled.connect(
+            lambda session_id: self.cancelled.append(session_id)
         )
 
 
@@ -69,6 +73,21 @@ class _QueryErrorClient(FakeDicomWebClient):
         raise RuntimeError("QIDO failed")
 
 
+class _SlowDownloadClient(FakeDicomWebClient):
+    def __init__(self, worker: OrthancDownloadWorker, fixtures_dir: Path | None = None) -> None:
+        super().__init__(fixtures_dir)
+        self._worker = worker
+        self._calls = 0
+
+    def download_instance(
+        self, study_uid: str, series_uid: str, instance_uid: str
+    ) -> bytes:
+        self._calls += 1
+        if self._calls == 1:
+            self._worker.cancel()
+        return super().download_instance(study_uid, series_uid, instance_uid)
+
+
 def test_download_saves_instances_and_emits_done(tmp_path: Path) -> None:
     client = FakeDicomWebClient(FIXTURES)
     cache = OrthancSessionCache(tmp_path)
@@ -87,9 +106,10 @@ def test_download_saves_instances_and_emits_done(tmp_path: Path) -> None:
     assert expected_path.exists()
     assert expected_path.read_bytes()[128:132] == b"DICM"
     assert capture.series_done == [(SERIES_UID, "ok")]
-    assert capture.progress == [(SERIES_UID, 1, 1)]
+    assert capture.progress == [(1, 1, SERIES_UID)]
     assert capture.done == [(session_id, STUDY_UID)]
     assert capture.failed == []
+    assert capture.cancelled == []
 
 
 def test_download_retries_once_then_succeeds(tmp_path: Path) -> None:
@@ -122,7 +142,7 @@ def test_series_failed_when_download_fails_after_retry(tmp_path: Path) -> None:
     worker.run()
 
     assert capture.series_done == [(SERIES_UID, "failed")]
-    assert capture.progress == [(SERIES_UID, 1, 1)]
+    assert capture.progress == [(1, 1, SERIES_UID)]
     assert capture.done == []
     assert capture.failed == []
     assert list((tmp_path / f"session-{session_id}").rglob("*.dcm")) == []
@@ -143,3 +163,25 @@ def test_catastrophic_error_emits_failed(tmp_path: Path) -> None:
     assert capture.failed == [(STUDY_UID, "QIDO failed")]
     assert capture.done == []
     assert capture.series_done == []
+
+
+def test_cancel_clears_session_and_emits_cancelled(tmp_path: Path) -> None:
+    cache = OrthancSessionCache(tmp_path)
+    session_id = cache.create_session()
+    capture = _SignalCapture()
+
+    worker = OrthancDownloadWorker(
+        FakeDicomWebClient(FIXTURES),
+        cache,
+        session_id,
+        STUDY_UID,
+        [SERIES_UID],
+    )
+    client = _SlowDownloadClient(worker, FIXTURES)
+    worker._client = client
+    capture.connect(worker)
+    worker.run()
+
+    assert capture.cancelled == [session_id]
+    assert capture.done == []
+    assert not (tmp_path / f"session-{session_id}").exists()

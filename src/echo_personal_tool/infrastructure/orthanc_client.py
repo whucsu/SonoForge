@@ -11,6 +11,29 @@ from echo_personal_tool.infrastructure.orthanc_dicom_json import (
     parse_studies,
 )
 
+_STUDY_INCLUDE_FIELDS = (
+    "0020000D",  # StudyInstanceUID
+    "00100010",  # PatientName
+    "00100020",  # PatientID
+    "00080020",  # StudyDate
+    "00081030",  # StudyDescription
+)
+
+_SERIES_INCLUDE_FIELDS = (
+    "0020000E",  # SeriesInstanceUID
+    "00080060",  # Modality
+    "0008103E",  # SeriesDescription
+    "00201209",  # NumberOfSeriesRelatedInstances
+)
+
+_INSTANCE_INCLUDE_FIELDS = (
+    "00080018",  # SOPInstanceUID
+)
+
+
+def _include_params(tags: tuple[str, ...]) -> list[tuple[str, str]]:
+    return [("includefield", tag) for tag in tags]
+
 
 class OrthancDicomWebClient:
     def __init__(self, base_url: str, username: str, password: str, timeout: float = 30.0):
@@ -28,9 +51,9 @@ class OrthancDicomWebClient:
             return False
 
     def query_studies(self, patient_name: str | None = None) -> list[StudyInfo]:
-        params = {}
+        params: list[tuple[str, str]] = _include_params(_STUDY_INCLUDE_FIELDS)
         if patient_name:
-            params["PatientName"] = f"*{patient_name}*"
+            params.append(("PatientName", f"*{patient_name}*"))
         r = self._client.get(
             "/dicom-web/studies",
             params=params,
@@ -42,6 +65,7 @@ class OrthancDicomWebClient:
     def query_series(self, study_uid: str) -> list[SeriesInfo]:
         r = self._client.get(
             f"/dicom-web/studies/{study_uid}/series",
+            params=_include_params(_SERIES_INCLUDE_FIELDS),
             headers={"Accept": "application/dicom+json"},
         )
         r.raise_for_status()
@@ -50,6 +74,7 @@ class OrthancDicomWebClient:
     def query_instances(self, study_uid: str, series_uid: str) -> list[InstanceInfo]:
         r = self._client.get(
             f"/dicom-web/studies/{study_uid}/series/{series_uid}/instances",
+            params=_include_params(_INSTANCE_INCLUDE_FIELDS),
             headers={"Accept": "application/dicom+json"},
         )
         r.raise_for_status()

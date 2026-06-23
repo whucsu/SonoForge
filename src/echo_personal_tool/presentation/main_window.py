@@ -278,18 +278,14 @@ class MainWindow(QMainWindow):
             client = OrthancDicomWebClient(
                 settings.url, settings.username, settings.password
             )
-        try:
-            dialog = OrthancStudyDialog(client, self._orthanc_cache, self)
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                result = dialog.result_data()
-                if result:
-                    session_id, study_uid = result
-                    path = self._orthanc_cache.study_path(session_id, study_uid)
-                    log_path = path / "scan_errors.log"
-                    self._controller.open_folder(path, error_log_path=log_path)
-        finally:
-            if isinstance(client, OrthancDicomWebClient):
-                client.close()
+        dialog = OrthancStudyDialog(client, self._orthanc_cache, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            result = dialog.result_data()
+            if result:
+                session_id, study_uid = result
+                path = self._orthanc_cache.study_path(session_id, study_uid)
+                log_path = path / "scan_errors.log"
+                self._controller.open_folder(path, error_log_path=log_path)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self._orthanc_cache.clear_all()
