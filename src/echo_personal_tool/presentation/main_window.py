@@ -9,8 +9,9 @@ from typing import Literal
 
 import numpy as np
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent, QKeySequence, QShortcut
+from PySide6.QtGui import QCloseEvent, QKeyEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QMainWindow,
@@ -28,7 +29,12 @@ from echo_personal_tool.domain.models.viewer_state import ViewerState
 from echo_personal_tool.domain.services.measurement_results_formatter import (
     format_results_overlay,
 )
+from echo_personal_tool.infrastructure.fake_dicom_web_client import FakeDicomWebClient
+from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
+from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClient
+from echo_personal_tool.infrastructure.server_settings import load_server_settings
 from echo_personal_tool.presentation.ase_reference_dialog import show_ase_reference_dialog
+from echo_personal_tool.presentation.orthanc_study_dialog import OrthancStudyDialog
 from echo_personal_tool.presentation.server_settings_dialog import show_server_settings_dialog
 from echo_personal_tool.presentation.echopac_theme import apply_echopac_theme
 from echo_personal_tool.presentation.measurement_action import MeasurementAction
@@ -67,6 +73,9 @@ class MainWindow(QMainWindow):
         self._instance_overlay_cache: dict[str, str] = {}
 
         self._controller = controller or AppController()
+        orthanc_root = Path.home() / ".echo-personal-tool" / "orthanc"
+        orthanc_root.parent.mkdir(parents=True, exist_ok=True)
+        self._orthanc_cache = OrthancSessionCache(orthanc_root)
         self._controller.studies_loaded.connect(self._on_studies_loaded)
         self._controller.scan_failed.connect(self._on_scan_failed)
         self._controller.frame_loaded.connect(self._on_frame_loaded)
@@ -258,6 +267,31 @@ class MainWindow(QMainWindow):
             return
         log_path = Path(directory) / "scan_errors.log"
         self._controller.open_folder(Path(directory), error_log_path=log_path)
+
+    def _open_orthanc_dialog(self) -> None:
+        settings = load_server_settings()
+        if settings.use_mock:
+            client = FakeDicomWebClient()
+        else:
+            client = OrthancDicomWebClient(
+                settings.url, settings.username, settings.password
+            )
+        try:
+            dialog = OrthancStudyDialog(client, self._orthanc_cache, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                result = dialog.result_data()
+                if result:
+                    session_id, study_uid = result
+                    path = self._orthanc_cache.study_path(session_id, study_uid)
+                    log_path = path / "scan_errors.log"
+                    self._controller.open_folder(path, error_log_path=log_path)
+        finally:
+            if isinstance(client, OrthancDicomWebClient):
+                client.close()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self._orthanc_cache.clear_all()
+        super().closeEvent(event)
 
     def _on_studies_loaded(self, studies: object) -> None:
         study_list = list(studies)  # type: ignore[arg-type]
@@ -475,6 +509,7 @@ class MainWindow(QMainWindow):
 
     def _wire_ui(self) -> None:
         self._system_bar.open_folder_requested.connect(self._open_folder)
+        self._system_bar.load_from_server_requested.connect(self._open_orthanc_dialog)
         self._system_bar.reset_session_requested.connect(self._on_reset_measurements_requested)
         self._system_bar.caliper_requested.connect(lambda: self._on_caliper_requested())
         self._system_bar.calibration_requested.connect(self._on_calibration_requested)

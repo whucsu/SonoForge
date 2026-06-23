@@ -16,6 +16,7 @@ class SystemBar(QWidget):
     """EchoPac-style header above the main splitter."""
 
     open_folder_requested = Signal()
+    load_from_server_requested = Signal()
     reset_session_requested = Signal()
     caliper_requested = Signal()
     calibration_requested = Signal()
@@ -45,6 +46,9 @@ class SystemBar(QWidget):
 
         btn_open = QPushButton("Open folder…")
         btn_open.clicked.connect(self.open_folder_requested.emit)
+
+        btn_load_server = QPushButton("Загрузить с сервера…")
+        btn_load_server.clicked.connect(self.load_from_server_requested.emit)
 
         self._btn_settings = QPushButton("Настройки")
         self._btn_settings.setToolTip("Параметры измерений и отображения")
@@ -76,6 +80,7 @@ class SystemBar(QWidget):
         left_layout.setContentsMargins(0, 0, 12, 0)
         left_layout.setSpacing(8)
         left_layout.addWidget(btn_open)
+        left_layout.addWidget(btn_load_server)
         left_layout.addWidget(self._study_label)
         left_layout.addWidget(self._status_label, 1)
 
