@@ -274,11 +274,19 @@ class MainWindow(QMainWindow):
         settings = load_server_settings()
         if settings.use_mock:
             client = FakeDicomWebClient()
+            dialog = OrthancStudyDialog(client, self._orthanc_cache, self)
         else:
             client = OrthancDicomWebClient(
                 settings.url, settings.username, settings.password
             )
-        dialog = OrthancStudyDialog(client, self._orthanc_cache, self)
+            dialog = OrthancStudyDialog(
+                client,
+                self._orthanc_cache,
+                self,
+                base_url=settings.url,
+                username=settings.username,
+                password=settings.password,
+            )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             result = dialog.result_data()
             if result:

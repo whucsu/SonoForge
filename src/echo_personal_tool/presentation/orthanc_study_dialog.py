@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -25,6 +26,7 @@ from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClie
 
 _STUDY_UID_ROLE = Qt.ItemDataRole.UserRole
 _SERIES_UID_ROLE = Qt.ItemDataRole.UserRole + 1
+_SORT_ROLE = Qt.ItemDataRole.UserRole + 2
 
 
 class OrthancStudyDialog(QDialog):
@@ -33,10 +35,17 @@ class OrthancStudyDialog(QDialog):
         client: DicomWebClient,
         cache: OrthancSessionCache,
         parent: QWidget | None = None,
+        *,
+        base_url: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ) -> None:
         super().__init__(parent)
         self._client = client
         self._cache = cache
+        self._base_url = base_url
+        self._username = username
+        self._password = password
         self._result: tuple[str, str] | None = None
         self._downloading = False
         self._worker: OrthancDownloadWorker | None = None
@@ -44,7 +53,7 @@ class OrthancStudyDialog(QDialog):
         self._client_closed = False
 
         self.setWindowTitle("Загрузка с сервера")
-        self.resize(640, 480)
+        self.resize(800, 520)
 
         self._search_edit = QLineEdit()
         self._search_edit.setPlaceholderText("Имя пациента")
@@ -56,9 +65,14 @@ class OrthancStudyDialog(QDialog):
         search_row.addWidget(self._find_btn)
 
         self._tree = QTreeWidget()
-        self._tree.setHeaderLabels(["Исследование / Серия"])
+        self._tree.setHeaderLabels(["Пациент", "Дата", "Исследование / Серия"])
+        self._tree.setColumnWidth(0, 200)
+        self._tree.setColumnWidth(1, 100)
+        self._tree.setSortingEnabled(True)
+        self._tree.sortByColumn(1, Qt.SortOrder.DescendingOrder)
         self._tree.itemExpanded.connect(self._on_item_expanded)
         self._tree.itemChanged.connect(self._on_item_changed)
+        self._tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
 
         self._status_label = QLabel()
         self._progress = QProgressBar()
@@ -93,7 +107,13 @@ class OrthancStudyDialog(QDialog):
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if self._downloading:
             event.ignore()
-            self._on_cancel()
+            if self._worker is not None:
+                self._on_cancel()
+            else:
+                self._downloading = False
+                self._release_client()
+                event.accept()
+                super().closeEvent(event)
             return
         self._release_client()
         super().closeEvent(event)
@@ -137,19 +157,27 @@ class OrthancStudyDialog(QDialog):
             QMessageBox.warning(self, "Поиск", f"Ошибка запроса исследований: {exc}")
             return
 
+        # Sort: newest study_date first, then by patient name
+        studies = sorted(
+            studies,
+            key=lambda s: (s.study_date or "", s.patient_name or ""),
+            reverse=True,
+        )
+
         self._tree.blockSignals(True)
         self._tree.clear()
         for study in studies:
-            item = QTreeWidgetItem([self._study_label(study)])
+            patient_name = study.patient_name or ""
+            study_date = study.study_date or ""
+            desc = study.study_description or ""
+            item = QTreeWidgetItem([patient_name, study_date, desc])
             item.setData(0, _STUDY_UID_ROLE, study.study_uid)
+            item.setData(0, _SORT_ROLE, patient_name)
+            item.setData(1, _SORT_ROLE, study_date)
             item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
             self._tree.addTopLevelItem(item)
         self._tree.blockSignals(False)
         self._update_load_button()
-
-    def _study_label(self, study: StudyInfo) -> str:
-        parts = [study.patient_name, study.study_date, study.study_description]
-        return " — ".join(part for part in parts if part)
 
     def _series_label(self, series: SeriesInfo) -> str:
         parts = [series.modality, series.description]
@@ -178,7 +206,7 @@ class OrthancStudyDialog(QDialog):
 
         self._tree.blockSignals(True)
         for series in series_list:
-            child = QTreeWidgetItem([self._series_label(series)])
+            child = QTreeWidgetItem(["", "", self._series_label(series)])
             child.setData(0, _SERIES_UID_ROLE, series.series_uid)
             child.setFlags(child.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             child.setCheckState(0, Qt.CheckState.Unchecked)
@@ -222,9 +250,11 @@ class OrthancStudyDialog(QDialog):
         self._downloading = True
         self._load_btn.setEnabled(False)
         self._cancel_btn.setText("Отменить загрузку")
+        self._cancel_btn.setEnabled(True)
         self._find_btn.setEnabled(False)
+        self._tree.setEnabled(False)
         self._progress.setValue(0)
-        self._progress.setMaximum(1)
+        self._progress.setMaximum(0)
         self._progress.show()
         self._status_label.setText("Загрузка…")
 
@@ -235,12 +265,16 @@ class OrthancStudyDialog(QDialog):
             study_uid,
             series_uids,
             self,
+            base_url=self._base_url,
+            username=self._username,
+            password=self._password,
         )
         self._worker = worker
         worker.signals.progress.connect(self._on_progress)
         worker.signals.done.connect(self._on_done)
         worker.signals.failed.connect(self._on_failed)
         worker.signals.cancelled.connect(self._on_cancelled)
+        worker.signals.series_done.connect(self._on_series_done)
         QThreadPool.globalInstance().start(worker)
 
     def _on_cancel(self) -> None:
@@ -258,11 +292,18 @@ class OrthancStudyDialog(QDialog):
         short_uid = series_uid[:12] + "…" if len(series_uid) > 12 else series_uid
         self._status_label.setText(f"Загрузка — {current}/{total} (серия {short_uid})")
 
+    def _on_series_done(self, series_uid: str, status: str) -> None:
+        if status == "failed":
+            short_uid = series_uid[:12] + "…" if len(series_uid) > 12 else series_uid
+            self._status_label.setText(f"Ошибка в серии {short_uid}")
+
     def _on_done(self, session_id: str, study_uid: str) -> None:
         self._downloading = False
         self._worker = None
         self._session_id = None
         self._result = (session_id, study_uid)
+        self._progress.setValue(self._progress.maximum())
+        self._status_label.setText("Загрузка завершена")
         self.accept()
 
     def _on_failed(self, _uid: str, message: str) -> None:
@@ -272,6 +313,7 @@ class OrthancStudyDialog(QDialog):
             self._cache.clear_session(self._session_id)
             self._session_id = None
         self._progress.hide()
+        self._tree.setEnabled(True)
         self._find_btn.setEnabled(True)
         self._cancel_btn.setText("Отмена")
         self._cancel_btn.setEnabled(True)
@@ -283,6 +325,7 @@ class OrthancStudyDialog(QDialog):
         self._worker = None
         self._session_id = None
         self._progress.hide()
+        self._tree.setEnabled(True)
         self._find_btn.setEnabled(True)
         self._cancel_btn.setText("Отмена")
         self._cancel_btn.setEnabled(True)

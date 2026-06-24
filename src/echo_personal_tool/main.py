@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 
@@ -10,6 +11,11 @@ import sys
 os.environ.setdefault(
     "QT_LOGGING_RULES",
     "kf.sonnet*=false;kf.sonnet.clients.hspell=false;kf.service.sycoca=false",
+)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
 from PySide6.QtWidgets import QApplication

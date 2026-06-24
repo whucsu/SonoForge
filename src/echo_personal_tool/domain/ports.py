@@ -59,3 +59,7 @@ class DicomWebClient(Protocol):
     def download_instance(
         self, study_uid: str, series_uid: str, instance_uid: str
     ) -> bytes: ...
+
+    def download_series(
+        self, study_uid: str, series_uid: str
+    ) -> list[tuple[str, bytes]]: ...

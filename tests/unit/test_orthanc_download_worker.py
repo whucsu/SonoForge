@@ -46,24 +46,10 @@ class _SignalCapture:
 
 
 class _FailingDownloadClient(FakeDicomWebClient):
-    def download_instance(
-        self, study_uid: str, series_uid: str, instance_uid: str
-    ) -> bytes:
+    def download_series(
+        self, study_uid: str, series_uid: str
+    ) -> list[tuple[str, bytes]]:
         raise TimeoutError("WADO timeout")
-
-
-class _RetryThenSuccessClient(FakeDicomWebClient):
-    def __init__(self, fixtures_dir: Path | None = None) -> None:
-        super().__init__(fixtures_dir)
-        self._attempts = 0
-
-    def download_instance(
-        self, study_uid: str, series_uid: str, instance_uid: str
-    ) -> bytes:
-        self._attempts += 1
-        if self._attempts == 1:
-            raise TimeoutError("WADO timeout")
-        return super().download_instance(study_uid, series_uid, instance_uid)
 
 
 class _QueryErrorClient(FakeDicomWebClient):
@@ -79,13 +65,13 @@ class _SlowDownloadClient(FakeDicomWebClient):
         self._worker = worker
         self._calls = 0
 
-    def download_instance(
-        self, study_uid: str, series_uid: str, instance_uid: str
-    ) -> bytes:
+    def download_series(
+        self, study_uid: str, series_uid: str
+    ) -> list[tuple[str, bytes]]:
         self._calls += 1
         if self._calls == 1:
             self._worker.cancel()
-        return super().download_instance(study_uid, series_uid, instance_uid)
+        return super().download_series(study_uid, series_uid)
 
 
 def test_download_saves_instances_and_emits_done(tmp_path: Path) -> None:
@@ -112,24 +98,7 @@ def test_download_saves_instances_and_emits_done(tmp_path: Path) -> None:
     assert capture.cancelled == []
 
 
-def test_download_retries_once_then_succeeds(tmp_path: Path) -> None:
-    client = _RetryThenSuccessClient(FIXTURES)
-    cache = OrthancSessionCache(tmp_path)
-    session_id = cache.create_session()
-    capture = _SignalCapture()
-
-    worker = OrthancDownloadWorker(
-        client, cache, session_id, STUDY_UID, [SERIES_UID]
-    )
-    capture.connect(worker)
-    worker.run()
-
-    assert client._attempts == 2
-    assert capture.series_done == [(SERIES_UID, "ok")]
-    assert capture.done == [(session_id, STUDY_UID)]
-
-
-def test_series_failed_when_download_fails_after_retry(tmp_path: Path) -> None:
+def test_series_failed_when_download_fails(tmp_path: Path) -> None:
     client = _FailingDownloadClient(FIXTURES)
     cache = OrthancSessionCache(tmp_path)
     session_id = cache.create_session()
@@ -142,9 +111,11 @@ def test_series_failed_when_download_fails_after_retry(tmp_path: Path) -> None:
     worker.run()
 
     assert capture.series_done == [(SERIES_UID, "failed")]
-    assert capture.progress == [(1, 1, SERIES_UID)]
+    assert capture.progress == []
     assert capture.done == []
-    assert capture.failed == []
+    assert len(capture.failed) == 1
+    assert capture.failed[0][0] == STUDY_UID
+    assert "WADO timeout" in capture.failed[0][1]
     assert list((tmp_path / f"session-{session_id}").rglob("*.dcm")) == []
 
 
@@ -182,6 +153,7 @@ def test_cancel_clears_session_and_emits_cancelled(tmp_path: Path) -> None:
     capture.connect(worker)
     worker.run()
 
+    assert capture.series_done == [(SERIES_UID, "cancelled")]
     assert capture.cancelled == [session_id]
     assert capture.done == []
     assert not (tmp_path / f"session-{session_id}").exists()
