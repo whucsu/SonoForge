@@ -80,6 +80,22 @@ class _FakeVideoReader:
         return None
 
 
+class _FakeVideoDecodeWorker:
+    def __init__(
+        self,
+        path: Path,
+        request_id: int,
+        parent=None,
+    ) -> None:
+        self.path = Path(path)
+        self.request_id = request_id
+        self.parent = parent
+        self.signals = SimpleNamespace(
+            finished=_FakeSignal(),
+            failed=_FakeSignal(),
+        )
+
+
 class _RecordingThreadPool:
     def __init__(self) -> None:
         self.started: list[object] = []
@@ -137,6 +153,10 @@ def test_load_instance_not_blocked_by_thumbnail_backlog(
         _FakeFrameLoaderWorker,
     )
     monkeypatch.setattr(
+        "echo_personal_tool.application.app_controller.VideoDecodeWorker",
+        _FakeVideoDecodeWorker,
+    )
+    monkeypatch.setattr(
         "echo_personal_tool.application.app_controller.VideoReader",
         _FakeVideoReader,
     )
@@ -160,15 +180,17 @@ def test_load_instance_not_blocked_by_thumbnail_backlog(
     main_instance = _thumbnail_instance("main-uid", tmp_path)
     controller.load_instance(main_instance)
 
-    running_frame_workers = [
-        worker for worker in thread_pool.running if isinstance(worker, _FakeFrameLoaderWorker)
+    running_decode_workers = [
+        worker for worker in thread_pool.running
+        if isinstance(worker, (_FakeFrameLoaderWorker, _FakeVideoDecodeWorker))
     ]
-    queued_frame_workers = [
-        worker for worker in thread_pool.queued if isinstance(worker, _FakeFrameLoaderWorker)
+    queued_decode_workers = [
+        worker for worker in thread_pool.queued
+        if isinstance(worker, (_FakeFrameLoaderWorker, _FakeVideoDecodeWorker))
     ]
-    assert len(running_frame_workers) == 1
-    assert queued_frame_workers == []
-    assert running_frame_workers[0].path == main_instance.path
+    assert len(running_decode_workers) == 1
+    assert queued_decode_workers == []
+    assert running_decode_workers[0].path == main_instance.path
 
 
 def test_p0_thumbnail_request_preempts_background(

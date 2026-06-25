@@ -32,6 +32,9 @@ class OrthancSessionCache:
     def study_path(self, session_id: str, study_uid: str) -> Path:
         return self._root / f"session-{session_id}" / study_uid
 
+    def session_path(self, session_id: str) -> Path:
+        return self._root / f"session-{session_id}"
+
     def clear_session(self, session_id: str) -> None:
         session_dir = self._root / f"session-{session_id}"
         if session_dir.exists():

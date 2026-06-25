@@ -25,6 +25,7 @@ from echo_personal_tool.application.thumbnail_scheduler import (
 )
 from echo_personal_tool.application.workers.dicom_decode_worker import DicomDecodeWorker
 from echo_personal_tool.application.workers.frame_loader_worker import FrameLoaderWorker
+from echo_personal_tool.application.workers.video_decode_worker import VideoDecodeWorker
 from echo_personal_tool.application.workers.onnx_worker import OnnxWorker
 from echo_personal_tool.application.workers.scan_worker import ScanWorker
 from echo_personal_tool.application.workers.thumbnail_loader_worker import ThumbnailLoaderWorker
@@ -235,17 +236,28 @@ class AppController(QObject):
         self._state_manager.set_contours(session_contours, emit=False)
         if instance.media_format == "dicom":
             self._state_manager.set_decode_in_progress(True, emit=False)
+        if instance.media_format == "mp4":
+            self._state_manager.set_decode_in_progress(True, emit=False)
+        if instance.media_format in ("dicom", "mp4"):
+            self._decode_request_id += 1
+            self._pending_decode_id = self._decode_request_id
         self._state_manager.emit_state()
         if frame_index != 0:
             self._state_manager.set_frame(frame_index)
         self._current_study_uid = self._resolve_study_uid(instance)
         self._recompute_measurements()
         if instance.media_format == "dicom":
-            self._decode_request_id += 1
             request_id = self._decode_request_id
-            self._pending_decode_id = request_id
             self.status_message.emit(f"Decoding {instance.path.name}… ({total_frames} frames)")
             worker = DicomDecodeWorker(instance.path, request_id, parent=self)
+            worker.signals.finished.connect(self._on_dicom_decoded)
+            worker.signals.failed.connect(self._on_dicom_decode_failed)
+            self._thread_pool.start(worker)
+            return
+        if instance.media_format == "mp4":
+            request_id = self._decode_request_id
+            self.status_message.emit(f"Decoding video {instance.path.name}… ({total_frames} frames)")
+            worker = VideoDecodeWorker(instance.path, request_id, parent=self)
             worker.signals.finished.connect(self._on_dicom_decoded)
             worker.signals.failed.connect(self._on_dicom_decode_failed)
             self._thread_pool.start(worker)
@@ -916,16 +928,26 @@ class AppController(QObject):
     def _request_frame_if_needed(self, state: ViewerState) -> None:
         if self._current_instance is None or self._current_instance.path is None:
             return
-        if self._current_instance.media_format == "dicom":
-            if self._state_manager.snapshot.decode_in_progress:
-                return
+        if self._current_instance.media_format in ("dicom", "mp4"):
             if self._frame_cache.is_ready(self._current_instance.path):
                 if self._loaded_frame_index != state.current_frame_index:
                     self._emit_cached_frame(state.current_frame_index)
                 return
+            if (
+                self._frame_cache.source_path is not None
+                and self._frame_cache.source_path == Path(self._current_instance.path).resolve()
+                and self._frame_cache.frame_count() > 0
+            ):
+                max_idx = self._frame_cache.frame_count() - 1
+                idx = min(state.current_frame_index, max_idx)
+                if self._loaded_frame_index != idx:
+                    self._emit_cached_frame(idx)
+                return
             if self._pending_decode_id != 0:
                 return
-            # Fallback after decode failure: load one frame on demand.
+        if self._current_instance.media_format in ("dicom", "mp4") and self._pending_decode_id != 0:
+            return
+        # Fallback after decode failure: load one frame on demand.
         if (
             self._loaded_source_path == self._current_instance.path
             and self._loaded_frame_index == state.current_frame_index
@@ -974,12 +996,20 @@ class AppController(QObject):
         )
 
     def _advance_playback(self) -> None:
-        if self._current_instance is not None and self._current_instance.media_format == "dicom":
+        if self._current_instance is not None and self._current_instance.media_format in ("dicom", "mp4"):
             if self._current_instance.path is not None and self._frame_cache.is_ready(
                 self._current_instance.path
             ):
                 self.step_frame(1)
-            return
+                return
+            if (
+                self._current_instance.path is not None
+                and self._frame_cache.source_path is not None
+                and self._frame_cache.source_path == Path(self._current_instance.path).resolve()
+                and self._frame_cache.frame_count() > 0
+            ):
+                self.step_frame(1)
+                return
         if self._pending_load_id != 0:
             return
         self.step_frame(1)

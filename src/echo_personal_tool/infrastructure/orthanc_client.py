@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import email
 import logging
+import re
 import threading
 from collections.abc import Callable
-from email import policy
 from io import BytesIO
 
 import httpx
@@ -73,6 +72,7 @@ class OrthancDicomWebClient:
             auth = (username, password)
         self._orthanc_client = httpx.Client(
             base_url=f"{self._orthanc_root}/",
+            auth=auth,
             timeout=self._timeout,
         )
         self._client = httpx.Client(
@@ -198,13 +198,20 @@ class OrthancDicomWebClient:
 
         self._check_cancelled()
         raw_parts = _parse_multipart(content, response.headers.get("content-type", ""))
+        logger.info(
+            "WADO-RS series %s: %d parts from %d bytes",
+            series_uid[:16],
+            len(raw_parts),
+            len(content),
+        )
         result: list[tuple[str, bytes]] = []
-        for data in raw_parts:
+        for idx, data in enumerate(raw_parts):
             try:
                 ds = pydicom.dcmread(BytesIO(data))
                 sop_uid = str(getattr(ds, "SOPInstanceUID", ""))
             except Exception:
                 sop_uid = ""
+                logger.debug("Part %d: failed to parse as DICOM (%d bytes)", idx, len(data))
             result.append((sop_uid, data))
         return result
 
@@ -218,17 +225,35 @@ class OrthancDicomWebClient:
 
 def _parse_multipart(content: bytes, content_type: str) -> list[bytes]:
     """Parse multipart MIME body into list of part payloads."""
-    msg = email.message_from_bytes(
-        f"Content-Type: {content_type}\n\n".encode() + content,
-        policy=policy.compat32,
-    )
-    if not msg.is_multipart():
-        return [content]
+    boundary_match = re.search(r'boundary="?([^";\s]+)"?', content_type, re.IGNORECASE)
+    if not boundary_match:
+        logger.warning("No boundary in content-type: %s; returning raw content", content_type)
+        return [content] if content else []
+
+    boundary = boundary_match.group(1).encode()
+    delimiter = b"--" + boundary
     parts: list[bytes] = []
-    for part in msg.walk():
-        if part.get_content_maintype() == "multipart":
+    chunks = content.split(delimiter)
+    for chunk in chunks:
+        if not chunk or chunk.startswith(b"--"):
             continue
-        data = part.get_payload(decode=True)
-        if data:
-            parts.append(data)
+        header_end = chunk.find(b"\r\n\r\n")
+        if header_end == -1:
+            header_end = chunk.find(b"\n\n")
+        if header_end == -1:
+            continue
+        payload = chunk[header_end + (4 if chunk[header_end:header_end + 4] == b"\r\n\r\n" else 2):]
+        if payload.endswith(b"\r\n"):
+            payload = payload[:-2]
+        elif payload.endswith(b"\n"):
+            payload = payload[:-1]
+        if payload:
+            parts.append(payload)
+
+    logger.debug(
+        "Parsed %d parts from %d bytes (boundary=%s)",
+        len(parts),
+        len(content),
+        boundary.decode(errors="replace"),
+    )
     return parts

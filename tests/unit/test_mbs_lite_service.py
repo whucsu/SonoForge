@@ -23,6 +23,7 @@ from echo_personal_tool.domain.services.mbs_lite_service import (
     refine_model_contour,
     refine_open_arc_contour,
 )
+from echo_personal_tool.domain.services.rv_shape_template import RV_FAC_NODE_COUNT
 
 
 def test_fit_contour_from_landmarks_basic() -> None:

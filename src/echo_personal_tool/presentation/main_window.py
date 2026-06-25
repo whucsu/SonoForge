@@ -78,6 +78,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("ECHO Personal Tool")
         self._user_preferences = user_preferences or load_user_preferences()
         self._click_to_frame_started_at: float | None = None
+        self._playback_active = False
         self._lav_bi_active = False
         self._rv_fac_awaiting_es = False
         self._instance_overlay_cache: dict[str, str] = {}
@@ -344,13 +345,13 @@ class MainWindow(QMainWindow):
                 self,
                 server_settings=settings,
             )
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            result = dialog.result_data()
-            if result:
-                session_id, study_uid = result
-                path = self._orthanc_cache.study_path(session_id, study_uid)
-                log_path = path / "scan_errors.log"
-                self._controller.open_folder(path, error_log_path=log_path)
+        dialog.exec()
+        result = dialog.result_data()
+        if result:
+            session_id, _study_uid = result
+            path = self._orthanc_cache.session_path(session_id)
+            log_path = path / "scan_errors.log"
+            self._controller.open_folder(path, error_log_path=log_path)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self._orthanc_cache.clear_all()
@@ -411,17 +412,21 @@ class MainWindow(QMainWindow):
             logger.info("click_to_frame_loaded duration_ms=%.2f", elapsed_ms)
             self._click_to_frame_started_at = None
         image = np.asarray(pixels)
-        self._viewer.show_frame(image)
-        self._viewer.reposition_overlays()
-        self._viewer.refresh_dicom_tags_overlay()
-        self._restore_doppler_for_current_instance()
-        self._restore_mmode_for_current_instance()
-        self._sync_doppler_tool_availability()
-        if self._controller.needs_manual_calibration():
-            if self._viewer.start_calibration_caliper():
-                self._show_status(
-                    "Калибровка: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
-                )
+        is_playing = self._controller.state_manager.snapshot.is_playing
+        if is_playing:
+            self._viewer.show_frame_fast(image)
+        else:
+            self._viewer.show_frame(image)
+            self._viewer.reposition_overlays()
+            self._viewer.refresh_dicom_tags_overlay()
+            self._restore_doppler_for_current_instance()
+            self._restore_mmode_for_current_instance()
+            self._sync_doppler_tool_availability()
+            if self._controller.needs_manual_calibration():
+                if self._viewer.start_calibration_caliper():
+                    self._show_status(
+                        "Калибровка: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
+                    )
 
     def _on_frame_load_failed(self, message: str) -> None:
         self._click_to_frame_started_at = None

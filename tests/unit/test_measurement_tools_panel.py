@@ -114,6 +114,7 @@ def test_reset_measurements_clears_controller_state(qtbot) -> None:
     window._viewer.show_frame(np.zeros((64, 64), dtype=np.uint8))
     controller.on_manual_calibration((0.5, 0.5))
 
+    window._user_preferences.confirm_reset = False
     window._on_reset_measurements_requested()
 
     snapshot = controller.state_manager.snapshot

@@ -180,3 +180,13 @@
 - **Тип:** feature
 - **Файлы:** `domain/models/speckle.py`, `domain/services/myocardial_zone.py`, `domain/services/speckle_tracking.py`, `domain/services/strain_computation.py`, `domain/services/cardiac_cycle_detector.py`, `presentation/speckle_overlay.py`, `presentation/strain_curve_widget.py`, `application/workers/speckle_worker.py`, `tests/unit/test_speckle_tracking.py`, `presentation/measurement_action.py`, `presentation/measures_menu.py`, `presentation/main_window.py`, `application/app_controller.py`, `presentation/viewer_widget.py`
 - **Суть:** Block-matching speckle tracking с NCC, пирамидальный подход, sub-pixel точность. Dual-contour (Philips/Samsung стиль): эндокард + эпикард с фиксированной толщиной. GLS + radial strain, авто-определение ED/ES через FFT. Offline batch режим. UI: кнопка "Speckle Tracking" в Measures → Strain, AppController.run_speckle_tracking(), SpeckleOverlay + StrainCurveWidget.
+
+## [2026-06-25] Orthanc download + play + performance fixes
+- **Тип:** fix + feature
+- **Файлы:** `orthanc_study_dialog.py`, `main_window.py`, `app_controller.py`, `orthanc_client.py`, `orthanc_cache.py`, `viewer_widget.py`, `video_decode_worker.py` (новый), `frame_cache.py`, `pixel_utils.py`, `dicom_session.py`
+- **Суть:**
+  1. Multi-study download: `_collect_all_checked_series` собирает все отмеченные серии из всех исследований, очередь загрузки с `_start_next_download`, `session_path()` для сканирования всей сессии.
+  2. `_parse_multipart` заменён email-модуль на boundary-based парсер; добавлено логирование ответа.
+  3. Play freeze: `_pending_decode_id` устанавливается до `emit_state()`; partial frame cache serving во время декодирования; `show_frame_fast` пропускает layout/doppler/panel при воспроизведении.
+  4. MP4 pre-decode: `VideoDecodeWorker` декодирует все кадры MP4 в `FrameCache` при загрузке (аналог DICOM).
+  5. Диалог загрузки: `accept()` прямой вместо `QMetaObject.invokeMethod`; `closeEvent` корректно обрабатывает завершённую загрузку; `result_data()` проверяется без привязки к `exec()` result.

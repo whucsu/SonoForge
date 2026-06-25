@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QMetaObject, Qt, QThreadPool, QTimer, Slot
+from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -54,6 +54,9 @@ class OrthancStudyDialog(QDialog):
         self._session_id: str | None = None
         self._client_closed = False
         self._close_pending = False
+        self._pending_downloads: list[tuple[str, list[str]]] = []
+        self._completed_downloads = 0
+        self._total_studies = 0
         self._force_close_timer = QTimer(self)
         self._force_close_timer.setSingleShot(True)
         self._force_close_timer.timeout.connect(self._force_close_if_still_downloading)
@@ -128,7 +131,10 @@ class OrthancStudyDialog(QDialog):
         super().reject()
 
     def accept(self) -> None:
-        self._release_client()
+        try:
+            self._release_client()
+        except Exception:  # noqa: BLE001
+            pass
         super().accept()
 
     def _release_client(self) -> None:
@@ -225,6 +231,7 @@ class OrthancStudyDialog(QDialog):
         self._load_btn.setEnabled(self._collect_checked_series() is not None)
 
     def _collect_checked_series(self) -> tuple[str, list[str]] | None:
+        """Return first study with checked series (legacy single-study path)."""
         for index in range(self._tree.topLevelItemCount()):
             study_item = self._tree.topLevelItem(index)
             study_uid = study_item.data(0, _STUDY_UID_ROLE)
@@ -240,11 +247,28 @@ class OrthancStudyDialog(QDialog):
                 return str(study_uid), checked
         return None
 
+    def _collect_all_checked_series(self) -> list[tuple[str, list[str]]]:
+        """Collect all (study_uid, series_uids) pairs across all studies."""
+        result: list[tuple[str, list[str]]] = []
+        for index in range(self._tree.topLevelItemCount()):
+            study_item = self._tree.topLevelItem(index)
+            study_uid = study_item.data(0, _STUDY_UID_ROLE)
+            checked: list[str] = []
+            for child_index in range(study_item.childCount()):
+                series_item = study_item.child(child_index)
+                if series_item.checkState(0) != Qt.CheckState.Checked:
+                    continue
+                series_uid = series_item.data(0, _SERIES_UID_ROLE)
+                if series_uid:
+                    checked.append(str(series_uid))
+            if checked:
+                result.append((str(study_uid), checked))
+        return result
+
     def _on_load(self) -> None:
-        selection = self._collect_checked_series()
-        if selection is None:
+        all_series = self._collect_all_checked_series()
+        if not all_series:
             return
-        study_uid, series_uids = selection
 
         session_id = self._cache.create_session()
         self._session_id = session_id
@@ -260,10 +284,29 @@ class OrthancStudyDialog(QDialog):
         self._progress.show()
         self._status_label.setText("Подготовка загрузки…")
 
+        self._pending_downloads = list(all_series)
+        self._completed_downloads = 0
+        self._total_studies = len(all_series)
+        self._start_next_download()
+
+    def _start_next_download(self) -> None:
+        if not self._pending_downloads:
+            all_ok = self._completed_downloads == self._total_studies
+            if all_ok and self._session_id is not None:
+                first_study = self._result[1] if self._result else ""
+                self._on_done(self._session_id, first_study)
+            elif self._session_id is not None:
+                self._on_failed("", "Часть исследований не загружена")
+            return
+
+        study_uid, series_uids = self._pending_downloads.pop(0)
+        self._status_label.setText(
+            f"Загрузка [{self._completed_downloads + 1}/{self._total_studies}]…"
+        )
         worker = OrthancDownloadWorker(
             self._client,
             self._cache,
-            session_id,
+            self._session_id,
             study_uid,
             series_uids,
             self,
@@ -275,8 +318,8 @@ class OrthancStudyDialog(QDialog):
         self._worker = worker
         worker.signals.progress.connect(self._on_progress)
         worker.signals.status.connect(self._on_status)
-        worker.signals.done.connect(self._on_done)
-        worker.signals.failed.connect(self._on_failed)
+        worker.signals.done.connect(self._on_single_study_done)
+        worker.signals.failed.connect(self._on_single_study_failed)
         worker.signals.cancelled.connect(self._on_cancelled)
         worker.signals.series_done.connect(self._on_series_done)
         QThreadPool.globalInstance().start(worker)
@@ -324,24 +367,33 @@ class OrthancStudyDialog(QDialog):
         self._worker = None
         self._force_close_timer.stop()
 
+    def _on_single_study_done(self, session_id: str, study_uid: str) -> None:
+        self._completed_downloads += 1
+        self._status_label.setText(
+            f"Загрузка [{self._completed_downloads}/{self._total_studies}] завершена"
+        )
+        self._start_next_download()
+
+    def _on_single_study_failed(self, _uid: str, message: str) -> None:
+        self._completed_downloads += 1
+        self._status_label.setText(
+            f"Ошибка [{self._completed_downloads}/{self._total_studies}]: {message}"
+        )
+        self._start_next_download()
+
     def _on_done(self, session_id: str, study_uid: str) -> None:
         self._reset_after_download()
         self._session_id = None
         self._result = (session_id, study_uid)
         self._progress.setValue(self._progress.maximum())
         self._status_label.setText("Загрузка завершена")
-        QMetaObject.invokeMethod(
-            self,
-            "_finish_accept",
-            Qt.ConnectionType.QueuedConnection,
-        )
-
-    @Slot()
-    def _finish_accept(self) -> None:
         self.accept()
 
     def _on_failed(self, _uid: str, message: str) -> None:
         self._reset_after_download()
+        if self._pending_downloads and self._session_id is not None:
+            self._start_next_download()
+            return
         if self._session_id is not None:
             self._cache.clear_session(self._session_id)
             self._session_id = None
@@ -363,12 +415,4 @@ class OrthancStudyDialog(QDialog):
         self._cancel_btn.setEnabled(True)
         self._update_load_button()
         self._release_client()
-        QMetaObject.invokeMethod(
-            self,
-            "_finish_reject",
-            Qt.ConnectionType.QueuedConnection,
-        )
-
-    @Slot()
-    def _finish_reject(self) -> None:
-        super().reject()
+        QTimer.singleShot(0, self.reject)

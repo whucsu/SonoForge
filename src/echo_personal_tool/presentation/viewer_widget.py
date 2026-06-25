@@ -1014,6 +1014,30 @@ class ViewerWidget(QWidget):
             self._configure_doppler_axis_for_frame()
             self._invalidate_edge_map_cache()
 
+    def show_frame_fast(self, pixels: np.ndarray) -> None:
+        """Fast render for playback: skip layout/doppler/panel detection."""
+        frame = np.asarray(pixels)
+        self._current_frame = to_grayscale_array(frame)
+
+        if self._is_color_frame:
+            channel_order = (
+                "rgb"
+                if self._current_state is not None
+                and self._current_state.instance is not None
+                and self._current_state.instance.media_format == "dicom"
+                else "bgr"
+            )
+            self._color_source_rgb = to_display_rgb(frame, channel_order=channel_order)
+            self._image_item.setImage(self._color_source_rgb, autoLevels=False)
+            self._update_levels()
+        else:
+            self._color_source_rgb = None
+            self._image_item.setImage(self._current_frame, autoLevels=False)
+            self._update_levels()
+        sync_enabled = getattr(self, "_sync_display_control_enabled", None)
+        if callable(sync_enabled):
+            sync_enabled()
+
     def clear(self) -> None:
         self._image_item.clear()
         self._clear_linear_caliper()
