@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -451,6 +452,7 @@ class ViewerWidget(QWidget):
         self._vertical_caliper_labels = frozenset({"TAPSE"})
         self._current_frame: np.ndarray | None = None
         self._current_state: ViewerState | None = None
+        self._current_instance_path: Path | None = None
         self._linear_caliper_active = False
         self._linear_caliper_start: tuple[float, float] | None = None
         self._linear_caliper_line_item: pg.PlotDataItem | None = None
@@ -512,6 +514,7 @@ class ViewerWidget(QWidget):
         self._is_color_frame = False
         self._color_source_rgb: np.ndarray | None = None
         self._window_level_enabled = True
+        self._cached_levels_key: tuple[int, int, int] | None = None
         self._drag_session: tuple[int, float, float, int, int] | None = None
         self._hover_contour_index: int | None = None
         self._hover_tier: int | None = None
@@ -604,7 +607,7 @@ class ViewerWidget(QWidget):
         layout.addLayout(controls)
         self._graphics.setMouseTracking(True)
         self._graphics.setViewportUpdateMode(
-            QGraphicsView.ViewportUpdateMode.FullViewportUpdate,
+            QGraphicsView.ViewportUpdateMode.SmartViewportUpdate,
         )
         self._graphics.installEventFilter(self)
         viewport = self._graphics.viewport()
@@ -1001,8 +1004,11 @@ class ViewerWidget(QWidget):
             self._color_source_rgb = None
             gray = self._current_frame
             self._image_item.setImage(gray, autoLevels=False)
-            with QSignalBlocker(self._dr_slider):
-                self._dr_slider.setValue(50)
+            new_path = Path(self._current_state.instance.path) if self._current_state and self._current_state.instance and self._current_state.instance.path else None
+            if new_path != self._current_instance_path:
+                with QSignalBlocker(self._dr_slider):
+                    self._dr_slider.setValue(50)
+                self._current_instance_path = new_path
             self._update_levels()
         self._window_slider.setEnabled(self._window_level_enabled)
         self._level_slider.setEnabled(self._window_level_enabled)
@@ -1020,23 +1026,36 @@ class ViewerWidget(QWidget):
     def show_frame_fast(self, pixels: np.ndarray) -> None:
         """Fast render for playback: skip layout/doppler/panel detection."""
         frame = np.asarray(pixels)
+        media_format = (
+            self._current_state.instance.media_format
+            if self._current_state is not None and self._current_state.instance is not None
+            else None
+        )
         self._current_frame = to_grayscale_array(frame)
+
+        levels_key = (
+            self._dr_slider.value(),
+            self._window_slider.value(),
+            self._level_slider.value(),
+        )
+        levels_changed = levels_key != self._cached_levels_key
+        self._cached_levels_key = levels_key
 
         if self._is_color_frame:
             channel_order = (
                 "rgb"
-                if self._current_state is not None
-                and self._current_state.instance is not None
-                and self._current_state.instance.media_format == "dicom"
+                if media_format == "dicom"
                 else "bgr"
             )
             self._color_source_rgb = to_display_rgb(frame, channel_order=channel_order)
             self._image_item.setImage(self._color_source_rgb, autoLevels=False)
-            self._update_levels()
+            if levels_changed:
+                self._update_levels()
         else:
             self._color_source_rgb = None
             self._image_item.setImage(self._current_frame, autoLevels=False)
-            self._update_levels()
+            if levels_changed:
+                self._update_levels()
         sync_enabled = getattr(self, "_sync_display_control_enabled", None)
         if callable(sync_enabled):
             sync_enabled()

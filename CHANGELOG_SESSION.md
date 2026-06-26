@@ -6,61 +6,6 @@
 
 ---
 
-## [2026-06-23] Оверлей между кадрами + «По умолчанию» в настройках
-- **Тип:** fix + feature
-- **Файлы:** `main_window.py`, `viewer_widget.py`, `app_controller.py`, `user_preferences.py`, `user_preferences_dialog.py`, `test_user_preferences.py`
-- **Суть:** Оверлей результатов не пересчитывается при смене кадра одного cine (только при смене инстанса или измерений); позиция сохраняется per-instance. В диалоге настроек — кнопка «По умолчанию» с подтверждением (сброс к factory defaults, last_opened_folder сохраняется).
-
-## [2026-06-23] ONNX v1.1 откат — остаёмся на v1
-- **Тип:** fix
-- **Файлы:** (код без изменений относительно HEAD; решение зафиксировано в changelog/ROADMAP)
-- **Суть:** Локальная реализация v1.1 (fixed mean/std, PCA annulus + longest-chord fallback) ухудшила auto LV контур; откат к v1 pipeline. Annulus отдельно не уточняем — v1.1 отложен.
-
-## [2026-06-23] Сессия: DICOMweb Orthanc + RV FAC + доработки (итог)
-
-- **Тип:** feature + fix
-- **Ветка:** `feat/phase2-echopac-ui` @ `7490405` (push на `origin`)
-- **Файлы (ключевые):** `orthanc_*.py`, `fake_dicom_web_client.py`, `orthanc_study_dialog.py`, `server_settings*.py`, `rv_shape_template.py`, `main_window.py`, `system_bar.py`, `domain/ports.py`, `README.md`, `ROADMAP.md`, `DICOM_parsing.md`, спеки/планы в `docs/superpowers/`
-- **Суть:**
-  - **DICOMweb v1:** QIDO/WADO (httpx), session cache, mock offline, диалог «Загрузить с сервера…», настройки сервера; merge из worktree `feat/dicomweb-orthanc`; fix shadowing `domain/ports.py`.
-  - **DICOMweb v1.1 (DICOM_parsing.md):** cancel worker + clear session; суммарный progress; lifecycle httpx в диалоге; QIDO `includefield`; парсинг `00201209` → «N инст.» в дереве серий.
-  - **RV FAC:** одна кнопка FAC, crescent open-arc (3 клика), ED→blink→ES, FAC% в overlay; S ПП закрыт (площадь через RAV 4C).
-- **Чеклист сессии:**
-  - [x] Реализация DICOMweb (10 задач плана)
-  - [x] Merge + push в `feat/phase2-echopac-ui`
-  - [x] Коммит RV FAC отдельно
-  - [x] README обновлён
-  - [x] Замечания `DICOM_parsing.md` закрыты
-  - [x] `instance_count` в `parse_series`
-  - [ ] Workplace: записать реальные JSON-фикстуры с Orthanc (`curl` в spec)
-  - [ ] Manual smoke на работе с живым сервером
-- **Следующий приоритет:** DICOMweb smoke + фикстуры; ONNX v1.1 отложен (см. ROADMAP)
-
-## [2026-06-19 45:00] ROADMAP, чеклисты, LAV/RAV овал, LV Auto
-- **Тип:** feature
-- **Файлы:** `ROADMAP.md`, `lv_shape_template.py`, `mbs_lite_service.py`, `measures_menu.py`, `main.py`, `docs/superpowers/specs/2026-06-19-measurement-workflow-design.md`, `docs/superpowers/specs/2026-06-11-display-ux-design.md`, `docs/superpowers/specs/2026-06-19-onnx-lv-auto-segment-design.md`, `docs/superpowers/plans/2026-06-19-onnx-lv-auto-segment.md`
-- **Суть:** Единый `ROADMAP.md` с галочками по коду; обновлены чеклисты superpowers (workflow ✅, display UX, ONNX v1); п. 7 measurement-workflow снят как ошибочный; LAV/RAV — овальный шаблон (85% короткая ось); убраны кнопки Simpson Biplane из LV Auto; подавлено KDE-предупреждение в `main.py`.
-
-## [2026-06-19 44:00] Результаты, PDF, overlay по ролику
-- **Тип:** feature
-- **Файлы:** `tool_panel.py`, `measurement_results_dialog.py`, `measurement_report_formatter.py`, `measurement_report_pdf.py`, `indexed_results_formatter.py`, `main_window.py`, `app_controller.py`, тесты
-- **Суть:** Кнопка «Результаты» под рост/вес — окно отчёта по исследованию (последнее значение при дублях) и экспорт PDF с автооткрытием; LAVi/RAVi в overlay всегда при BSA, остальные индексы — при отклонении; overlay привязан к текущему instance, отчёт — study-wide.
-
-## [2026-06-19 43:00] UI: настройки, overlay справа, рост/вес без суффиксов
-- **Тип:** fix
-- **Файлы:** `system_bar.py`, `main_window.py`, `viewer_widget.py`, `tool_panel.py`
-- **Суть:** Убраны «cm»/«kg» у полей рост/вес; study overlay справа с выравниванием текста слева; Auto Segment убран, добавлена кнопка «Настройки».
-
-## [2026-06-19 42:00] UI: system bar, overlay, рост/вес
-- **Тип:** fix
-- **Файлы:** `system_bar.py`, `viewer_widget.py`, `tool_panel.py`
-- **Суть:** Кнопки Caliper/Calibration/Reset закреплены справа; статус слева после имени файла; study overlay слева; рост/вес — крупнее, целые см/кг, на 10% выше на панели.
-
-## [2026-06-19 41:00] RAV 4C — Simpson как LAV 4C
-- **Тип:** fix
-- **Файлы:** `main_window.py`, `measurement_results_formatter.py`, тесты
-- **Суть:** RAV 4C: open-arc Simpson (TV septal → lateral → apex → точки → Enter); результат RAV 4C в frame и study overlay.
-
 ## [2026-06-19 40:00] LAV: результат в оверлее после контура
 - **Тип:** fix
 - **Файлы:** `measurement_results_formatter.py`, `chamber_simpson.py`, `main_window.py`, `viewer_widget.py`, тесты
@@ -224,3 +169,8 @@
 - **Тип:** config
 - **Файлы:** `thumbnail_scheduler.py`, `app_controller.py`
 - **Суть:** `max_in_flight` увеличен с 2 до 6 — теперь до 6 миниатюрок генерируются параллельно.
+
+## [2026-06-26 18:30] Cine play: статичные lead-in кадры + flicker
+- **Тип:** fix
+- **Файлы:** `app_controller.py`, `viewer_widget.py`, `main_window.py`
+- **Суть:** Исправлено «зависание» первых кадров при воспроизведении DICOM/MP4: при декодировании определяется число leading static frames (MAD от кадра 0), при старте play и при loop индекс перескакивает на первый динамический кадр; `toggle_playback` маршрутизирован через `set_playing`. В `show_frame_fast` убрана пересборка display mode на каждом кадре — устранён flicker color/grayscale. Отладочная инструментация удалена.

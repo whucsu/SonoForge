@@ -288,7 +288,7 @@ class ThumbnailGalleryWidget(QListWidget):
         if item is not None:
             item.setIcon(icon)
             self.viewport().update()
-        QTimer.singleShot(0, self.request_visible_previews)
+        self._scroll_timer.start()
 
     def thumbnail_pixmap(self, instance_uid: str) -> QPixmap | None:
         return self._thumbnail_pixmaps.get(instance_uid)

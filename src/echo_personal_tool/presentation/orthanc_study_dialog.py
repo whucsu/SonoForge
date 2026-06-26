@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from echo_personal_tool.application.workers.orthanc_download_worker import OrthancDownloadWorker
+from echo_personal_tool.domain.models import StudyMetadata
 from echo_personal_tool.domain.models.orthanc import SeriesInfo, StudyInfo
 from echo_personal_tool.domain.ports import DicomWebClient
 from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClient
@@ -58,6 +59,7 @@ class OrthancStudyDialog(QDialog):
         self._pending_downloads: list[tuple[str, list[str]]] = []
         self._completed_downloads = 0
         self._total_studies = 0
+        self._downloaded_studies: list[StudyMetadata] = []
         self._force_close_timer = QTimer(self)
         self._force_close_timer.setSingleShot(True)
         self._force_close_timer.timeout.connect(self._force_close_if_still_downloading)
@@ -113,6 +115,10 @@ class OrthancStudyDialog(QDialog):
     def result_data(self) -> tuple[str, str] | None:
         """Return (session_id, study_uid) after successful download, else None."""
         return self._result
+
+    def downloaded_studies(self) -> list[StudyMetadata]:
+        """Return pre-scanned StudyMetadata from download worker (P4)."""
+        return self._downloaded_studies
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if self._downloading:
@@ -231,23 +237,6 @@ class OrthancStudyDialog(QDialog):
             return
         self._load_btn.setEnabled(self._collect_checked_series() is not None)
 
-    def _collect_checked_series(self) -> tuple[str, list[str]] | None:
-        """Return first study with checked series (legacy single-study path)."""
-        for index in range(self._tree.topLevelItemCount()):
-            study_item = self._tree.topLevelItem(index)
-            study_uid = study_item.data(0, _STUDY_UID_ROLE)
-            checked: list[str] = []
-            for child_index in range(study_item.childCount()):
-                series_item = study_item.child(child_index)
-                if series_item.checkState(0) != Qt.CheckState.Checked:
-                    continue
-                series_uid = series_item.data(0, _SERIES_UID_ROLE)
-                if series_uid:
-                    checked.append(str(series_uid))
-            if checked:
-                return str(study_uid), checked
-        return None
-
     def _collect_all_checked_series(self) -> list[tuple[str, list[str]]]:
         """Collect all (study_uid, series_uids) pairs across all studies."""
         result: list[tuple[str, list[str]]] = []
@@ -323,6 +312,7 @@ class OrthancStudyDialog(QDialog):
         worker.signals.failed.connect(self._on_single_study_failed)
         worker.signals.cancelled.connect(self._on_cancelled)
         worker.signals.series_done.connect(self._on_series_done)
+        worker.signals.studies_ready.connect(self._on_studies_ready)
         QThreadPool.globalInstance().start(worker)
 
     def _on_cancel(self) -> None:
@@ -362,6 +352,9 @@ class OrthancStudyDialog(QDialog):
     def _on_series_done(self, series_uid: str, status: str) -> None:
         if status == "failed":
             self._status_label.setText(f"Ошибка в серии {self._short_uid(series_uid)}")
+
+    def _on_studies_ready(self, studies: list[StudyMetadata]) -> None:
+        self._downloaded_studies.extend(studies)
 
     def _reset_after_download(self) -> None:
         self._downloading = False

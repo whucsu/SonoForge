@@ -352,10 +352,14 @@ class MainWindow(QMainWindow):
         dialog.exec()
         result = dialog.result_data()
         if result:
-            session_id, _study_uid = result
-            path = self._orthanc_cache.session_path(session_id)
-            log_path = path / "scan_errors.log"
-            self._controller.open_folder(path, error_log_path=log_path)
+            downloaded = dialog.downloaded_studies()
+            if downloaded:
+                self._controller.load_pre_scanned_studies(downloaded)
+            else:
+                session_id, _study_uid = result
+                path = self._orthanc_cache.session_path(session_id)
+                log_path = path / "scan_errors.log"
+                self._controller.open_folder(path, error_log_path=log_path)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self._orthanc_cache.clear_all()
@@ -461,7 +465,8 @@ class MainWindow(QMainWindow):
         elif content_changed:
             self._sync_results_overlay(state)
         self._last_overlay_state = state
-        self._refresh_dicom_inspector()
+        if instance_changed:
+            self._refresh_dicom_inspector()
 
     def _restore_doppler_for_current_frame(self) -> None:
         instance = self._controller.state_manager.snapshot.instance

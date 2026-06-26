@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from threading import Lock
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 logger = logging.getLogger(__name__)
 
+from echo_personal_tool.domain.models import InstanceMetadata, SeriesMetadata, StudyMetadata
 from echo_personal_tool.domain.ports import DicomWebClient
+from echo_personal_tool.infrastructure.dicom_metadata_mapper import (
+    map_instance_metadata,
+    parse_study_datetime,
+)
 from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
 from echo_personal_tool.infrastructure.orthanc_client import (
     DownloadCancelled,
@@ -29,6 +36,7 @@ class OrthancDownloadSignals(QObject):
     done = Signal(str, str)  # session_id, study_uid
     failed = Signal(str, str)  # study_uid or series_uid, message
     cancelled = Signal(str)  # session_id
+    studies_ready = Signal(list)  # list[StudyMetadata]
 
 
 class OrthancDownloadWorker(QRunnable):
@@ -78,20 +86,8 @@ class OrthancDownloadWorker(QRunnable):
     @Slot()
     def run(self) -> None:
         _client: DicomWebClient = self._client
-        if self._server_settings is not None:
-            self._thread_client = OrthancDicomWebClient.from_settings(
-                self._server_settings,
-                timeout=300.0,
-            )
-            _client = self._thread_client
-        elif self._base_url:
-            self._thread_client = OrthancDicomWebClient(
-                self._base_url,
-                self._username or "",
-                self._password or "",
-                timeout=300.0,
-            )
-            _client = self._thread_client
+        if self._server_settings is not None or self._base_url:
+            _client = self._make_thread_client()
 
         logger.info(
             "[DIAG] worker run study=%s series_uids=%s client_type=%s",
@@ -102,7 +98,7 @@ class OrthancDownloadWorker(QRunnable):
 
         try:
             t_start = time.monotonic()
-            all_instances: list[tuple[str, str, str]] = []
+            all_instances: list[tuple[str, str]] = []
 
             for series_uid in self._series_uids:
                 if self._cancelled:
@@ -118,10 +114,11 @@ class OrthancDownloadWorker(QRunnable):
                     time.monotonic() - t_q,
                 )
                 for inst in instances:
-                    all_instances.append((series_uid, inst.sop_instance_uid, inst.sop_instance_uid))
+                    all_instances.append((series_uid, inst.sop_instance_uid))
 
             total = len(all_instances)
             if total == 0:
+                self.signals.studies_ready.emit([])
                 self.signals.done.emit(self._session_id, self._study_uid)
                 return
 
@@ -141,14 +138,13 @@ class OrthancDownloadWorker(QRunnable):
 
             with ThreadPoolExecutor(max_workers=_MAX_CONCURRENT_DOWNLOADS) as pool:
                 futures = {}
-                for series_uid, instance_uid, _ in all_instances:
+                for series_uid, instance_uid in all_instances:
                     if self._cancelled:
                         pool.shutdown(wait=False, cancel_futures=True)
                         self._finish_cancelled()
                         return
                     future = pool.submit(
                         self._download_one,
-                        _client,
                         self._study_uid,
                         series_uid,
                         instance_uid,
@@ -196,6 +192,7 @@ class OrthancDownloadWorker(QRunnable):
 
             if failed_count == 0:
                 self.signals.progress.emit(total, total, self._series_uids[-1])
+                self.signals.studies_ready.emit(self._build_studies_metadata())
                 self.signals.done.emit(self._session_id, self._study_uid)
             else:
                 detail = "; ".join(errors[:5]) if errors else ""
@@ -203,6 +200,7 @@ class OrthancDownloadWorker(QRunnable):
                 if detail:
                     message += f". Ошибки: {detail}"
                 if saved_count > 0:
+                    self.signals.studies_ready.emit(self._build_studies_metadata())
                     self.signals.done.emit(self._session_id, self._study_uid)
                 else:
                     self.signals.failed.emit(self._study_uid, message)
@@ -219,9 +217,20 @@ class OrthancDownloadWorker(QRunnable):
                 self._thread_client.close()
                 self._thread_client = None
 
+    def _make_thread_client(self) -> OrthancDicomWebClient:
+        if self._server_settings is not None:
+            return OrthancDicomWebClient.from_settings(
+                self._server_settings, timeout=300.0
+            )
+        return OrthancDicomWebClient(
+            self._base_url or "",
+            self._username or "",
+            self._password or "",
+            timeout=300.0,
+        )
+
     def _download_one(
         self,
-        client: DicomWebClient,
         study_uid: str,
         series_uid: str,
         instance_uid: str,
@@ -229,6 +238,10 @@ class OrthancDownloadWorker(QRunnable):
         """Download single instance. Returns bytes or None on failure."""
         if self._cancelled:
             return None
+        if self._server_settings is not None or self._base_url:
+            client = self._make_thread_client()
+        else:
+            client = self._client
         try:
             data = client.download_instance(study_uid, series_uid, instance_uid)
             if not data:
@@ -250,7 +263,67 @@ class OrthancDownloadWorker(QRunnable):
                 exc,
             )
             return None
+        finally:
+            if self._server_settings is not None or self._base_url:
+                client.close()
 
     def _finish_cancelled(self) -> None:
         self._cache.clear_session(self._session_id)
         self.signals.cancelled.emit(self._session_id)
+
+    def _build_studies_metadata(self) -> list[StudyMetadata]:
+        """Parse DICOM headers from saved files to build StudyMetadata."""
+        import pydicom
+
+        study_dir = self._cache.study_path(self._session_id, self._study_uid)
+        if not study_dir.is_dir():
+            return []
+
+        instances_by_series: dict[str, list[InstanceMetadata]] = defaultdict(list)
+        study_datetime: datetime | None = None
+
+        for series_dir in sorted(study_dir.iterdir()):
+            if not series_dir.is_dir():
+                continue
+            for dcm_path in sorted(series_dir.glob("*.dcm")):
+                try:
+                    ds = pydicom.dcmread(str(dcm_path), stop_before_pixels=True, force=True)
+                except Exception:
+                    logger.warning("Failed to parse DICOM header: %s", dcm_path)
+                    continue
+                instance = map_instance_metadata(ds, path=dcm_path)
+                instances_by_series[instance.series_uid].append(instance)
+                if study_datetime is None:
+                    try:
+                        study_datetime = parse_study_datetime(ds)
+                    except Exception:
+                        pass
+
+        if not instances_by_series:
+            return []
+
+        if study_datetime is None:
+            study_datetime = datetime.fromtimestamp(study_dir.stat().st_mtime)
+
+        series_list: list[SeriesMetadata] = []
+        for series_uid, instances in instances_by_series.items():
+            instances_sorted = tuple(sorted(instances, key=lambda i: i.sop_instance_uid))
+            first = instances_sorted[0]
+            series_list.append(
+                SeriesMetadata(
+                    series_uid=series_uid,
+                    study_uid=self._study_uid,
+                    modality=first.modality,
+                    description=first.series_description,
+                    instances=instances_sorted,
+                )
+            )
+        series_list.sort(key=lambda s: (s.modality, s.description))
+
+        return [
+            StudyMetadata(
+                study_uid=self._study_uid,
+                study_datetime=study_datetime,
+                series=tuple(series_list),
+            )
+        ]

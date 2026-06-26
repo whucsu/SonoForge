@@ -34,6 +34,7 @@ class VideoDecodeWorker(QRunnable):
 
     @Slot()
     def run(self) -> None:
+        cap = None
         try:
             import cv2
 
@@ -43,7 +44,6 @@ class VideoDecodeWorker(QRunnable):
 
             total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             if total <= 0:
-                cap.release()
                 raise OSError(f"Cannot determine frame count: {self._path}")
 
             frames: list[np.ndarray] = []
@@ -53,7 +53,6 @@ class VideoDecodeWorker(QRunnable):
                     break
                 frame = to_bgr_uint8(bgr)
                 frames.append(frame)
-                # Emit first frame immediately
                 if i == 0:
                     self.signals.first_frame_ready.emit(
                         self._request_id,
@@ -62,7 +61,6 @@ class VideoDecodeWorker(QRunnable):
                     )
                 if i % 5 == 0 or i == total - 1:
                     self.signals.progress.emit(i + 1, total)
-            cap.release()
 
             if not frames:
                 raise OSError(f"No frames decoded from: {self._path}")
@@ -75,3 +73,6 @@ class VideoDecodeWorker(QRunnable):
             )
         except Exception as exc:  # noqa: BLE001
             self.signals.failed.emit(self._request_id, str(exc))
+        finally:
+            if cap is not None:
+                cap.release()

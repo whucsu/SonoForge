@@ -132,6 +132,7 @@ class AppController(QObject):
         self._thumbnail_instances: dict[str, InstanceMetadata] = {}
         self._thumbnail_in_flight: dict[str, ThumbnailPriority] = {}
         self._current_frame_pixels: np.ndarray | None = None
+        self._leading_static_frames: dict[Path, int] = {}
         self._segment_in_progress = False
         self._auto_segment_phase: str | None = None
         self._auto_segment_view: str = "A4C"
@@ -159,6 +160,17 @@ class AppController(QObject):
         worker.signals.finished.connect(self._on_studies_scanned)
         worker.signals.failed.connect(self._on_scan_failed)
         self._thread_pool.start(worker)
+
+    def load_pre_scanned_studies(self, studies: list[StudyMetadata]) -> None:
+        """Load studies already built by the download worker (skip ScanWorker)."""
+        self._measurement_session.clear()
+        self._current_study_uid = None
+        self._first_preview_emitted = False
+        self._studies = studies
+        count = len(self._studies)
+        logger.info("pre_scanned_load studies=%d", count)
+        self.status_message.emit(f"Loaded {count} studies")
+        self.studies_loaded.emit(self._studies)
 
     def _on_studies_scanned(self, studies: object) -> None:
         self._studies = list(studies)  # type: ignore[arg-type]
@@ -354,10 +366,25 @@ class AppController(QObject):
         self.frame_load_failed.emit("Series not found in study")
 
     def set_playing(self, is_playing: bool) -> None:
+        if (
+            is_playing
+            and self._current_instance is not None
+            and self._current_instance.path is not None
+        ):
+            state = self._state_manager.snapshot
+            if state.current_frame_index == 0:
+                leading = self._leading_static_frames.get(
+                    self._current_instance.path.resolve(),
+                    0,
+                )
+                if leading > 0:
+                    target = min(leading + 1, max(0, state.total_frames - 1))
+                    if target > 0:
+                        self._state_manager.set_frame(target)
         self._state_manager.set_playing(is_playing)
 
     def toggle_playback(self) -> None:
-        self._state_manager.toggle_playback()
+        self.set_playing(not self._state_manager.snapshot.is_playing)
 
     def set_playback_speed_multiplier(self, multiplier: float) -> None:
         self._playback_speed_multiplier = max(0.25, min(4.0, float(multiplier)))
@@ -1002,10 +1029,22 @@ class AppController(QObject):
         )
 
     def _advance_playback(self) -> None:
+        state = self._state_manager.snapshot
+        if self._pending_decode_id != 0:
+            return
         if self._current_instance is not None and self._current_instance.media_format in ("dicom", "mp4"):
             if self._current_instance.path is not None and self._frame_cache.is_ready(
                 self._current_instance.path
             ):
+                leading = self._leading_static_frames.get(
+                    self._current_instance.path.resolve(),
+                    0,
+                )
+                if leading > 0 and state.current_frame_index >= state.total_frames - 1:
+                    target = min(leading + 1, max(0, state.total_frames - 1))
+                    if target > 0:
+                        self._state_manager.set_frame(target)
+                        return
                 self.step_frame(1)
                 return
             if (
@@ -1061,6 +1100,8 @@ class AppController(QObject):
         if not isinstance(first_frame, np.ndarray):
             return
         self._current_frame_pixels = first_frame
+        self._loaded_source_path = path
+        self._loaded_frame_index = 0
         self.frame_loaded.emit(first_frame)
         self.status_message.emit("First frame ready, decoding remaining…")
 
@@ -1076,7 +1117,19 @@ class AppController(QObject):
             self._on_dicom_decode_failed(request_id, "Decoded frames are invalid")
             return
 
+        leading_static = 0
+        if frames.shape[0] > 1:
+            ref = frames[0].astype(np.float32, copy=False)
+            for idx in range(1, min(frames.shape[0], 16)):
+                diff = float(np.mean(np.abs(frames[idx].astype(np.float32, copy=False) - ref)))
+                if diff > 1.0:
+                    break
+                leading_static = idx
+        self._leading_static_frames[path.resolve()] = leading_static
+
         self._frame_cache.load(path, frames)
+        from echo_personal_tool.infrastructure.dicom_session import get_thread_dicom_session
+        get_thread_dicom_session().release()
         if self._frame_cache.memory_bytes() > _FRAME_CACHE_WARN_BYTES:
             size_mb = self._frame_cache.memory_bytes() / (1024 * 1024)
             self.status_message.emit(f"Warning: DICOM cache uses {size_mb:.1f} MB")
@@ -1111,7 +1164,10 @@ class AppController(QObject):
             return
         if not self._frame_cache.is_ready(self._current_instance.path):
             return
-        pixels = self._frame_cache.get(frame_index)
+        try:
+            pixels = self._frame_cache.get(frame_index)
+        except (RuntimeError, IndexError):
+            return
         self._loaded_source_path = self._current_instance.path
         self._loaded_frame_index = frame_index
         self._current_frame_pixels = pixels
