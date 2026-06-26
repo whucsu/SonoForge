@@ -50,6 +50,7 @@ htmlcov/
 scan_errors.log
 uv.lock
 orthanc_analysis.md
+dicom_server.md
 
 # IDE config (contains MCP tokens)
 .cursor/

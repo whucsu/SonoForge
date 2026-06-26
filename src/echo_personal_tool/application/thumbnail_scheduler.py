@@ -27,7 +27,7 @@ class ThumbnailTask:
 class ThumbnailScheduler:
     """Maintains a deduplicated and bounded-dispatch task queue."""
 
-    def __init__(self, *, max_in_flight: int = 2) -> None:
+    def __init__(self, *, max_in_flight: int = 6) -> None:
         if max_in_flight < 1:
             raise ValueError("max_in_flight must be >= 1")
         self._max_in_flight = max_in_flight

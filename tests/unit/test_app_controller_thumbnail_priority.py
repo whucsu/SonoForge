@@ -91,6 +91,8 @@ class _FakeVideoDecodeWorker:
         self.request_id = request_id
         self.parent = parent
         self.signals = SimpleNamespace(
+            first_frame_ready=_FakeSignal(),
+            progress=_FakeSignal(),
             finished=_FakeSignal(),
             failed=_FakeSignal(),
         )

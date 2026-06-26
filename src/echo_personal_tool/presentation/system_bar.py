@@ -7,6 +7,7 @@ from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QPushButton,
     QSizePolicy,
     QWidget,
@@ -82,6 +83,12 @@ class SystemBar(QWidget):
 
         self._status_label = _ElidingStatusLabel()
 
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setMaximumWidth(160)
+        self._progress_bar.setMaximumHeight(16)
+        self._progress_bar.setTextVisible(True)
+        self._progress_bar.hide()
+
         btn_open = QPushButton("Open folder…")
         btn_open.clicked.connect(self.open_folder_requested.emit)
 
@@ -123,6 +130,7 @@ class SystemBar(QWidget):
         left_layout.addWidget(btn_load_server, 0)
         left_layout.addWidget(self._study_label, 0)
         left_layout.addWidget(self._status_label, 1)
+        left_layout.addWidget(self._progress_bar, 0)
 
         self._actions_widget = QWidget()
         self._actions_widget.setSizePolicy(
@@ -163,3 +171,12 @@ class SystemBar(QWidget):
 
     def set_status_message(self, message: str) -> None:
         self._status_label.set_full_text(message)
+
+    def show_decode_progress(self, current: int, total: int) -> None:
+        self._progress_bar.show()
+        self._progress_bar.setMaximum(total)
+        self._progress_bar.setValue(current)
+
+    def hide_decode_progress(self) -> None:
+        self._progress_bar.hide()
+        self._progress_bar.setValue(0)

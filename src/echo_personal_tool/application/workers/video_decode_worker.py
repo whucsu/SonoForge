@@ -1,4 +1,4 @@
-"""Background worker that decodes all frames from an MP4 video file."""
+"""Background worker that decodes MP4 frames progressively."""
 
 from __future__ import annotations
 
@@ -11,11 +11,15 @@ from echo_personal_tool.infrastructure.pixel_utils import to_bgr_uint8
 
 
 class VideoDecodeSignals(QObject):
-    finished = Signal(int, object, object)  # request_id, path, frames ndarray
+    first_frame_ready = Signal(int, object, object)  # request_id, path, first_frame
+    progress = Signal(int, int)  # current, total
+    finished = Signal(int, object, object)  # request_id, path, all_frames
     failed = Signal(int, str)
 
 
 class VideoDecodeWorker(QRunnable):
+    """Decode MP4 progressively: first frame immediately, then all frames."""
+
     def __init__(
         self,
         path: Path,
@@ -43,11 +47,21 @@ class VideoDecodeWorker(QRunnable):
                 raise OSError(f"Cannot determine frame count: {self._path}")
 
             frames: list[np.ndarray] = []
-            for _ in range(total):
+            for i in range(total):
                 ok, bgr = cap.read()
                 if not ok or bgr is None:
                     break
-                frames.append(to_bgr_uint8(bgr))
+                frame = to_bgr_uint8(bgr)
+                frames.append(frame)
+                # Emit first frame immediately
+                if i == 0:
+                    self.signals.first_frame_ready.emit(
+                        self._request_id,
+                        self._path,
+                        frame,
+                    )
+                if i % 5 == 0 or i == total - 1:
+                    self.signals.progress.emit(i + 1, total)
             cap.release()
 
             if not frames:

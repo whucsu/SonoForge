@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from echo_personal_tool.application.workers.orthanc_download_worker import OrthancDownloadWorker
 from echo_personal_tool.domain.models.orthanc import SeriesInfo, StudyInfo
 from echo_personal_tool.domain.ports import DicomWebClient
+from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClient
 from echo_personal_tool.infrastructure.server_settings import ServerSettings, load_server_settings
 
 _STUDY_UID_ROLE = Qt.ItemDataRole.UserRole

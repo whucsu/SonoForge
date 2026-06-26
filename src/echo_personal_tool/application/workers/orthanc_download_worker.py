@@ -1,9 +1,11 @@
-"""Background Orthanc series downloader."""
+"""Background Orthanc instance downloader with parallel downloads."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
@@ -17,6 +19,8 @@ from echo_personal_tool.infrastructure.orthanc_client import (
 )
 from echo_personal_tool.infrastructure.server_settings import ServerSettings
 
+_MAX_CONCURRENT_DOWNLOADS = 4
+
 
 class OrthancDownloadSignals(QObject):
     progress = Signal(int, int, str)  # overall_current, overall_total, series_uid
@@ -28,14 +32,11 @@ class OrthancDownloadSignals(QObject):
 
 
 class OrthancDownloadWorker(QRunnable):
-    """Download study series from Orthanc into session cache.
+    """Download DICOM instances from Orthanc with parallel per-instance WADO-RS.
 
-    Uses WADO-RS series-level retrieval (one request per series)
-    instead of per-instance download to avoid Orthanc DICOMweb
-    plugin limitation (no instance-level WADO-RS).
-
-    Creates its own httpx.Client in the worker thread to avoid
-    thread-safety issues with the shared client from the main thread.
+    Downloads each instance individually (not series-level multipart),
+    using a thread pool for parallelism. This is more reliable than
+    series-level multipart which can lose data on large responses.
     """
 
     def __init__(
@@ -64,6 +65,7 @@ class OrthancDownloadWorker(QRunnable):
         self._password = password
         self._cancelled = False
         self._thread_client: OrthancDicomWebClient | None = None
+        self._lock = Lock()
         self.signals = OrthancDownloadSignals(parent)
         self.setAutoDelete(True)
 
@@ -79,7 +81,7 @@ class OrthancDownloadWorker(QRunnable):
         if self._server_settings is not None:
             self._thread_client = OrthancDicomWebClient.from_settings(
                 self._server_settings,
-                timeout=120.0,
+                timeout=300.0,
             )
             _client = self._thread_client
         elif self._base_url:
@@ -87,64 +89,124 @@ class OrthancDownloadWorker(QRunnable):
                 self._base_url,
                 self._username or "",
                 self._password or "",
-                timeout=120.0,
+                timeout=300.0,
             )
             _client = self._thread_client
+
+        logger.info(
+            "[DIAG] worker run study=%s series_uids=%s client_type=%s",
+            self._study_uid[:16],
+            [s[:16] for s in self._series_uids],
+            type(_client).__name__,
+        )
+
         try:
-            series_instances: list[tuple[str, list]] = []
+            t_start = time.monotonic()
+            all_instances: list[tuple[str, str, str]] = []
+
             for series_uid in self._series_uids:
                 if self._cancelled:
                     self._finish_cancelled()
                     return
                 self.signals.status.emit(f"Запрос списка инстансов ({series_uid[:12]}…)")
+                t_q = time.monotonic()
                 instances = _client.query_instances(self._study_uid, series_uid)
-                series_instances.append((series_uid, instances))
+                logger.info(
+                    "[DIAG] worker query series=%s found=%d elapsed_s=%.2f",
+                    series_uid[:16],
+                    len(instances),
+                    time.monotonic() - t_q,
+                )
+                for inst in instances:
+                    all_instances.append((series_uid, inst.sop_instance_uid, inst.sop_instance_uid))
 
-            total = max(1, sum(len(instances) for _, instances in series_instances))
-            overall_current = 0
-            all_ok = True
-            all_errors: list[str] = []
+            total = len(all_instances)
+            if total == 0:
+                self.signals.done.emit(self._session_id, self._study_uid)
+                return
+
+            logger.info(
+                "[DIAG] worker start download study=%s total_instances=%d concurrency=%d",
+                self._study_uid[:16],
+                total,
+                _MAX_CONCURRENT_DOWNLOADS,
+            )
 
             self.signals.progress.emit(0, total, self._series_uids[0])
-            self.signals.status.emit("Загрузка серий…")
+            self.signals.status.emit(f"Загрузка {total} инстансов…")
 
-            for series_uid, instances in series_instances:
-                if self._cancelled:
-                    self._finish_cancelled()
-                    return
-                self.signals.progress.emit(overall_current, total, series_uid)
-                self.signals.status.emit(f"Получение серии {series_uid[:12]}…")
-                try:
-                    series_ok, errors, saved_count = self._download_series(
+            saved_count = 0
+            failed_count = 0
+            errors: list[str] = []
+
+            with ThreadPoolExecutor(max_workers=_MAX_CONCURRENT_DOWNLOADS) as pool:
+                futures = {}
+                for series_uid, instance_uid, _ in all_instances:
+                    if self._cancelled:
+                        pool.shutdown(wait=False, cancel_futures=True)
+                        self._finish_cancelled()
+                        return
+                    future = pool.submit(
+                        self._download_one,
                         _client,
+                        self._study_uid,
                         series_uid,
-                        total,
-                        overall_current,
+                        instance_uid,
                     )
-                except DownloadCancelled:
-                    self._finish_cancelled()
-                    return
-                if saved_count != len(instances):
-                    total = max(1, total + saved_count - len(instances))
-                overall_current += saved_count
-                self.signals.progress.emit(overall_current, total, series_uid)
-                if not series_ok:
-                    all_ok = False
-                    if errors:
-                        all_errors.append(errors)
+                    futures[future] = (series_uid, instance_uid)
 
-            if self._cancelled:
-                self._finish_cancelled()
-                return
-            if all_ok:
+                for future in as_completed(futures):
+                    if self._cancelled:
+                        pool.shutdown(wait=False, cancel_futures=True)
+                        self._finish_cancelled()
+                        return
+
+                    series_uid, instance_uid = futures[future]
+                    try:
+                        result = future.result()
+                        if result is not None:
+                            with self._lock:
+                                saved_count += 1
+                        else:
+                            with self._lock:
+                                failed_count += 1
+                                errors.append(f"instance {instance_uid[:16]}: empty data")
+                    except DownloadCancelled:
+                        pool.shutdown(wait=False, cancel_futures=True)
+                        self._finish_cancelled()
+                        return
+                    except Exception as exc:
+                        with self._lock:
+                            failed_count += 1
+                            errors.append(f"instance {instance_uid[:16]}: {exc}")
+
+                    with self._lock:
+                        done = saved_count + failed_count
+                    self.signals.progress.emit(done, total, series_uid)
+                    self.signals.status.emit(f"Загружено {done}/{total}")
+
+            elapsed_total = time.monotonic() - t_start
+            logger.info(
+                "[DIAG] worker finished study=%s saved=%d failed=%d elapsed_s=%.1f",
+                self._study_uid[:16],
+                saved_count,
+                failed_count,
+                elapsed_total,
+            )
+
+            if failed_count == 0:
                 self.signals.progress.emit(total, total, self._series_uids[-1])
                 self.signals.done.emit(self._session_id, self._study_uid)
             else:
-                detail = "; ".join(all_errors) if all_errors else ""
-                message = "Одна или несколько серий не загружены"
+                detail = "; ".join(errors[:5]) if errors else ""
+                message = f"Загружено {saved_count}/{total}"
                 if detail:
-                    message += f": {detail}"
-                self.signals.failed.emit(self._study_uid, message)
+                    message += f". Ошибки: {detail}"
+                if saved_count > 0:
+                    self.signals.done.emit(self._session_id, self._study_uid)
+                else:
+                    self.signals.failed.emit(self._study_uid, message)
+
         except DownloadCancelled:
             self._finish_cancelled()
         except Exception as exc:  # noqa: BLE001
@@ -157,73 +219,38 @@ class OrthancDownloadWorker(QRunnable):
                 self._thread_client.close()
                 self._thread_client = None
 
+    def _download_one(
+        self,
+        client: DicomWebClient,
+        study_uid: str,
+        series_uid: str,
+        instance_uid: str,
+    ) -> bytes | None:
+        """Download single instance. Returns bytes or None on failure."""
+        if self._cancelled:
+            return None
+        try:
+            data = client.download_instance(study_uid, series_uid, instance_uid)
+            if not data:
+                return None
+            self._cache.save_instance(
+                self._session_id,
+                study_uid,
+                series_uid,
+                instance_uid,
+                data,
+            )
+            return data
+        except DownloadCancelled:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "[DIAG] download failed instance=%s error=%s",
+                instance_uid[:16],
+                exc,
+            )
+            return None
+
     def _finish_cancelled(self) -> None:
         self._cache.clear_session(self._session_id)
         self.signals.cancelled.emit(self._session_id)
-
-    def _download_series(
-        self,
-        client: DicomWebClient,
-        series_uid: str,
-        total: int,
-        prior_count: int,
-    ) -> tuple[bool, str, int]:
-        on_download_progress: Callable[[int, int | None], None] | None = None
-        if isinstance(client, OrthancDicomWebClient):
-
-            def on_download_progress(received: int, content_length: int | None) -> None:
-                if content_length:
-                    self.signals.status.emit(
-                        f"Получение серии {series_uid[:12]}… "
-                        f"{received // 1024} / {content_length // 1024} КБ"
-                    )
-                else:
-                    self.signals.status.emit(
-                        f"Получение серии {series_uid[:12]}… {received // 1024} КБ"
-                    )
-
-        try:
-            download_kwargs: dict[str, object] = {}
-            if on_download_progress is not None:
-                download_kwargs["on_download_progress"] = on_download_progress
-            series_data = client.download_series(
-                self._study_uid,
-                series_uid,
-                **download_kwargs,
-            )
-        except DownloadCancelled:
-            self.signals.series_done.emit(series_uid, "cancelled")
-            raise
-        except Exception as exc:
-            logger.exception("Download series %s failed: %s", series_uid, exc)
-            self.signals.series_done.emit(series_uid, "failed")
-            return False, str(exc), 0
-
-        if self._cancelled:
-            self.signals.series_done.emit(series_uid, "cancelled")
-            raise DownloadCancelled("download cancelled")
-
-        errors: list[str] = []
-        saved_count = 0
-        for idx, (sop_uid, data) in enumerate(series_data):
-            if self._cancelled:
-                self.signals.series_done.emit(series_uid, "cancelled")
-                raise DownloadCancelled("download cancelled")
-            if data:
-                self._cache.save_instance(
-                    self._session_id,
-                    self._study_uid,
-                    series_uid,
-                    sop_uid or f"unknown_{idx}",
-                    data,
-                )
-                saved_count += 1
-            else:
-                errors.append(f"instance {sop_uid or idx}: empty data")
-            overall = prior_count + idx + 1
-            self.signals.progress.emit(min(overall, total), total, series_uid)
-
-        status = "failed" if errors else "ok"
-        error_summary = "; ".join(errors) if errors else ""
-        self.signals.series_done.emit(series_uid, status)
-        return not errors, error_summary, saved_count

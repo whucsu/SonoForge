@@ -91,6 +91,8 @@ class AppController(QObject):
     frame_load_failed = Signal(str)
     thumbnail_loaded = Signal(str, QImage)
     status_message = Signal(str)
+    decode_progress = Signal(int, int)  # current, total
+    decode_finished = Signal()
     speckle_result_ready = Signal(object)
 
     def __init__(
@@ -98,7 +100,7 @@ class AppController(QObject):
         thread_pool: QThreadPool | None = None,
         segmenter: IOnnxSegmenter | None = None,
         thumbnail_scheduler: ThumbnailScheduler | None = None,
-        thumbnail_max_in_flight: int = 2,
+        thumbnail_max_in_flight: int = 6,
     ) -> None:
         super().__init__()
         self._thread_pool = thread_pool or QThreadPool.globalInstance()
@@ -250,6 +252,8 @@ class AppController(QObject):
             request_id = self._decode_request_id
             self.status_message.emit(f"Decoding {instance.path.name}… ({total_frames} frames)")
             worker = DicomDecodeWorker(instance.path, request_id, parent=self)
+            worker.signals.first_frame_ready.connect(self._on_first_frame_ready)
+            worker.signals.progress.connect(self.decode_progress.emit)
             worker.signals.finished.connect(self._on_dicom_decoded)
             worker.signals.failed.connect(self._on_dicom_decode_failed)
             self._thread_pool.start(worker)
@@ -258,6 +262,8 @@ class AppController(QObject):
             request_id = self._decode_request_id
             self.status_message.emit(f"Decoding video {instance.path.name}… ({total_frames} frames)")
             worker = VideoDecodeWorker(instance.path, request_id, parent=self)
+            worker.signals.first_frame_ready.connect(self._on_first_frame_ready)
+            worker.signals.progress.connect(self.decode_progress.emit)
             worker.signals.finished.connect(self._on_dicom_decoded)
             worker.signals.failed.connect(self._on_dicom_decode_failed)
             self._thread_pool.start(worker)
@@ -1044,6 +1050,20 @@ class AppController(QObject):
         self.status_message.emit(f"Load failed: {message}")
         self.frame_load_failed.emit(message)
 
+    def _on_first_frame_ready(self, request_id: int, path: Path, first_frame: object) -> None:
+        """Show first frame immediately while rest decodes in background."""
+        if request_id != self._pending_decode_id:
+            return
+        if self._current_instance is None:
+            return
+        if Path(path).resolve() != self._current_instance.path.resolve():
+            return
+        if not isinstance(first_frame, np.ndarray):
+            return
+        self._current_frame_pixels = first_frame
+        self.frame_loaded.emit(first_frame)
+        self.status_message.emit("First frame ready, decoding remaining…")
+
     def _on_dicom_decoded(self, request_id: int, path: Path, frames: object) -> None:
         if request_id != self._pending_decode_id:
             return
@@ -1071,6 +1091,7 @@ class AppController(QObject):
         self._pending_decode_id = 0
         self._state_manager.set_decode_in_progress(False)
         self._emit_cached_frame(current_index)
+        self.decode_finished.emit()
         self.status_message.emit("Ready")
 
     def _on_dicom_decode_failed(self, request_id: int, message: str) -> None:

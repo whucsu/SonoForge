@@ -46,12 +46,9 @@ class _SignalCapture:
 
 
 class _FailingDownloadClient(FakeDicomWebClient):
-    def download_series(
-        self,
-        study_uid: str,
-        series_uid: str,
-        **kwargs: object,
-    ) -> list[tuple[str, bytes]]:
+    def download_instance(
+        self, study_uid: str, series_uid: str, instance_uid: str
+    ) -> bytes:
         raise TimeoutError("WADO timeout")
 
 
@@ -68,16 +65,13 @@ class _SlowDownloadClient(FakeDicomWebClient):
         self._worker = worker
         self._calls = 0
 
-    def download_series(
-        self,
-        study_uid: str,
-        series_uid: str,
-        **kwargs: object,
-    ) -> list[tuple[str, bytes]]:
+    def download_instance(
+        self, study_uid: str, series_uid: str, instance_uid: str
+    ) -> bytes:
         self._calls += 1
         if self._calls == 1:
             self._worker.cancel()
-        return super().download_series(study_uid, series_uid)
+        return super().download_instance(study_uid, series_uid, instance_uid)
 
 
 def test_download_saves_instances_and_emits_done(tmp_path: Path) -> None:
@@ -97,10 +91,10 @@ def test_download_saves_instances_and_emits_done(tmp_path: Path) -> None:
     )
     assert expected_path.exists()
     assert expected_path.read_bytes()[128:132] == b"DICM"
-    assert capture.series_done == [(SERIES_UID, "ok")]
     assert capture.progress
-    assert capture.progress[-1] == (1, 1, SERIES_UID)
-    assert capture.done == [(session_id, STUDY_UID)]
+    assert capture.progress[-1][0] == capture.progress[-1][1]  # current == total
+    assert len(capture.done) == 1
+    assert capture.done[0][1] == STUDY_UID
     assert capture.failed == []
     assert capture.cancelled == []
 
@@ -117,13 +111,10 @@ def test_series_failed_when_download_fails(tmp_path: Path) -> None:
     capture.connect(worker)
     worker.run()
 
-    assert capture.series_done == [(SERIES_UID, "failed")]
     assert capture.progress
-    assert capture.progress[0] == (0, 1, SERIES_UID)
-    assert capture.done == []
     assert len(capture.failed) == 1
     assert capture.failed[0][0] == STUDY_UID
-    assert "WADO timeout" in capture.failed[0][1]
+    assert "0/1" in capture.failed[0][1]
     assert list((tmp_path / f"session-{session_id}").rglob("*.dcm")) == []
 
 
@@ -141,7 +132,6 @@ def test_catastrophic_error_emits_failed(tmp_path: Path) -> None:
 
     assert capture.failed == [(STUDY_UID, "QIDO failed")]
     assert capture.done == []
-    assert capture.series_done == []
 
 
 def test_cancel_clears_session_and_emits_cancelled(tmp_path: Path) -> None:
@@ -161,7 +151,6 @@ def test_cancel_clears_session_and_emits_cancelled(tmp_path: Path) -> None:
     capture.connect(worker)
     worker.run()
 
-    assert capture.series_done == [(SERIES_UID, "cancelled")]
     assert capture.cancelled == [session_id]
     assert capture.done == []
     assert not (tmp_path / f"session-{session_id}").exists()

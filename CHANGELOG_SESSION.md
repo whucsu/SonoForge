@@ -190,3 +190,37 @@
   3. Play freeze: `_pending_decode_id` устанавливается до `emit_state()`; partial frame cache serving во время декодирования; `show_frame_fast` пропускает layout/doppler/panel при воспроизведении.
   4. MP4 pre-decode: `VideoDecodeWorker` декодирует все кадры MP4 в `FrameCache` при загрузке (аналог DICOM).
   5. Диалог загрузки: `accept()` прямой вместо `QMetaObject.invokeMethod`; `closeEvent` корректно обрабатывает завершённую загрузку; `result_data()` проверяется без привязки к `exec()` result.
+
+## [2026-06-26 15:30] P0: Per-instance скачивание + parallel downloads + memory fixes
+- **Тип:** fix + refactor + feature
+- **Файлы:** `orthanc_client.py`, `orthanc_download_worker.py`, `frame_cache.py`, `dicom_decode_worker.py`, `domain/ports.py`, `fake_dicom_web_client.py`, `tests/unit/test_orthanc_download_worker.py`
+- **Суть:**
+  1. Заменён series-level multipart на per-instance WADO-RS (`download_instance` вместо `download_series`).
+  2. Добавлен `ThreadPoolExecutor(max_workers=4)` для параллельного скачивания инстансов.
+  3. Убраны `.copy()` в `FrameCache.get()` и `DicomDecodeWorker.run()` — устранена утечка памяти ~510 МБ при 170 кадрах.
+  4. Удалены `download_series()` из `DicomWebClient` Protocol и `FakeDicomWebClient`.
+  5. Удалён `_parse_multipart()` и неиспользуемые импорты из `orthanc_client.py`.
+  6. Диагностический трейсинг `[DIAG]` на каждом этапе загрузки.
+
+## [2026-06-26 16:15] P1: Первый кадр сразу — прогрессивный показ
+- **Тип:** feature + refactor
+- **Файлы:** `dicom_session.py`, `dicom_decode_worker.py`, `video_decode_worker.py`, `app_controller.py`, `test_app_controller_dicom_cache.py`, `test_app_controller_thumbnail_priority.py`
+- **Суть:**
+  1. `DicomSession.decode_first_frame()` — быстрое декодирование только первого кадра (без стекирования всех фреймов).
+  2. `DicomDecodeWorker` и `VideoDecodeWorker` эмитят `first_frame_ready` сразу после первого кадра, затем `finished` с полным результатом.
+  3. `AppController._on_first_frame_ready()` — показывает первый кадр немедленно, не дожидаясь декодирования остальных.
+  4. Тесты обновлены: `_FakeDecodeWorker` и `_FakeVideoDecodeWorker` включают `first_frame_ready` сигнал.
+
+## [2026-06-26 16:45] P2: Прогресс-бар декодирования кадров
+- **Тип:** feature
+- **Файлы:** `system_bar.py`, `dicom_decode_worker.py`, `video_decode_worker.py`, `app_controller.py`, `main_window.py`, тесты
+- **Суть:**
+  1. `SystemBar`: добавлен `QProgressBar` (160px, скрыт по умолчанию), методы `show_decode_progress(current, total)` / `hide_decode_progress()`.
+  2. `DicomDecodeWorker` и `VideoDecodeWorker`: добавлен сигнал `progress(int, int)` — для DICOM эмитится при завершении, для MP4 — каждые 5 кадров.
+  3. `AppController`: сигналы `decode_progress` и `decode_finished` прокидываются в `SystemBar`.
+  4. Тесты: `_FakeDecodeWorker` и `_FakeVideoDecodeWorker` включают `progress` сигнал.
+
+## [2026-06-26 17:00] P3: Параллельные миниатюры max_in_flight 2→6
+- **Тип:** config
+- **Файлы:** `thumbnail_scheduler.py`, `app_controller.py`
+- **Суть:** `max_in_flight` увеличен с 2 до 6 — теперь до 6 миниатюрок генерируются параллельно.

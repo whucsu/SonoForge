@@ -37,13 +37,25 @@ class DicomSession:
         self.release()
         self._open_path = resolved
 
-    def decode_all_frames(self) -> np.ndarray:
+    def decode_first_frame(self) -> np.ndarray:
+        """Decode only the first frame for fast initial display."""
         if self._open_path is None:
             raise RuntimeError("DICOM is not open; call open() first")
         dataset = pydicom.dcmread(self._open_path, force=True)
         pixel_array = dataset.pixel_array
+        frames = stack_pixel_array(pixel_array)
+        self._frames = frames
+        return np.ascontiguousarray(frames[0])
+
+    def decode_all_frames(self) -> np.ndarray:
+        if self._open_path is None:
+            raise RuntimeError("DICOM is not open; call open() first")
+        if self._frames is not None:
+            return self._frames
+        dataset = pydicom.dcmread(self._open_path, force=True)
+        pixel_array = dataset.pixel_array
         self._frames = stack_pixel_array(pixel_array)
-        return self._frames.copy()
+        return self._frames
 
     def read_frame(self, frame_index: int) -> np.ndarray:
         if self._frames is None:

@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import logging
-import re
 import threading
-from collections.abc import Callable
-from io import BytesIO
 
 import httpx
-import pydicom
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +64,13 @@ class OrthancDicomWebClient:
         self._orthanc_root, self._dicom_web_root = split_orthanc_urls(base_url)
         headers = dict(http_headers or {})
         auth: tuple[str, str] | None = None
-        if auth_mode == "basic" and (username or password):
+        has_auth_header = any(k.lower() == "authorization" for k in headers)
+        if auth_mode == "basic" and (username or password) and not has_auth_header:
             auth = (username, password)
         self._orthanc_client = httpx.Client(
             base_url=f"{self._orthanc_root}/",
             auth=auth,
+            headers=headers,
             timeout=self._timeout,
         )
         self._client = httpx.Client(
@@ -144,76 +142,31 @@ class OrthancDicomWebClient:
             headers={"Accept": "application/dicom+json"},
         )
         r.raise_for_status()
-        return parse_instances(r.json(), study_uid, series_uid)
+        raw = r.json()
+        instances = parse_instances(raw, study_uid, series_uid)
+        logger.info(
+            "[DIAG] query_instances series=%s server_returned=%d parsed=%d status=%d",
+            series_uid[:16],
+            len(raw) if isinstance(raw, list) else "?",
+            len(instances),
+            r.status_code,
+        )
+        return instances
 
     def download_instance(self, study_uid: str, series_uid: str, instance_uid: str) -> bytes:
-        r = self._client.get(
-            f"studies/{study_uid}/series/{series_uid}/instances/{instance_uid}",
-            headers={"Accept": "multipart/related; type=application/dicom"},
-        )
-        if r.status_code != 200:
-            logger.error(
-                "WADO-RS retrieve failed: status=%d body=%s", r.status_code, r.text[:2000]
-            )
-        r.raise_for_status()
-        return r.content
-
-    def download_series(
-        self,
-        study_uid: str,
-        series_uid: str,
-        *,
-        on_download_progress: Callable[[int, int | None], None] | None = None,
-    ) -> list[tuple[str, bytes]]:
+        """Download single DICOM instance via WADO-RS per-instance retrieval."""
         self._check_cancelled()
         try:
-            with self._client.stream(
-                "GET",
-                f"studies/{study_uid}/series/{series_uid}",
-                headers={"Accept": "multipart/related; type=application/dicom"},
-            ) as response:
-                if response.status_code != 200:
-                    body_preview = response.read()[:2000]
-                    logger.error(
-                        "WADO-RS series retrieve failed: status=%d body=%s",
-                        response.status_code,
-                        body_preview,
-                    )
-                response.raise_for_status()
-                content_length = response.headers.get("content-length")
-                total_bytes = int(content_length) if content_length else None
-                chunks: list[bytes] = []
-                received = 0
-                for chunk in response.iter_bytes(chunk_size=65536):
-                    self._check_cancelled()
-                    chunks.append(chunk)
-                    received += len(chunk)
-                    if on_download_progress is not None:
-                        on_download_progress(received, total_bytes)
-                content = b"".join(chunks)
+            r = self._client.get(
+                f"studies/{study_uid}/series/{series_uid}/instances/{instance_uid}",
+                headers={"Accept": "application/dicom"},
+            )
+            r.raise_for_status()
+            return r.content
         except httpx.HTTPError as exc:
             if self._cancel_event.is_set():
                 raise DownloadCancelled("download cancelled") from exc
             raise
-
-        self._check_cancelled()
-        raw_parts = _parse_multipart(content, response.headers.get("content-type", ""))
-        logger.info(
-            "WADO-RS series %s: %d parts from %d bytes",
-            series_uid[:16],
-            len(raw_parts),
-            len(content),
-        )
-        result: list[tuple[str, bytes]] = []
-        for idx, data in enumerate(raw_parts):
-            try:
-                ds = pydicom.dcmread(BytesIO(data))
-                sop_uid = str(getattr(ds, "SOPInstanceUID", ""))
-            except Exception:
-                sop_uid = ""
-                logger.debug("Part %d: failed to parse as DICOM (%d bytes)", idx, len(data))
-            result.append((sop_uid, data))
-        return result
 
     def close(self) -> None:
         try:
@@ -221,39 +174,3 @@ class OrthancDicomWebClient:
             self._orthanc_client.close()
         except Exception:  # noqa: BLE001
             logger.debug("Orthanc client close", exc_info=True)
-
-
-def _parse_multipart(content: bytes, content_type: str) -> list[bytes]:
-    """Parse multipart MIME body into list of part payloads."""
-    boundary_match = re.search(r'boundary="?([^";\s]+)"?', content_type, re.IGNORECASE)
-    if not boundary_match:
-        logger.warning("No boundary in content-type: %s; returning raw content", content_type)
-        return [content] if content else []
-
-    boundary = boundary_match.group(1).encode()
-    delimiter = b"--" + boundary
-    parts: list[bytes] = []
-    chunks = content.split(delimiter)
-    for chunk in chunks:
-        if not chunk or chunk.startswith(b"--"):
-            continue
-        header_end = chunk.find(b"\r\n\r\n")
-        if header_end == -1:
-            header_end = chunk.find(b"\n\n")
-        if header_end == -1:
-            continue
-        payload = chunk[header_end + (4 if chunk[header_end:header_end + 4] == b"\r\n\r\n" else 2):]
-        if payload.endswith(b"\r\n"):
-            payload = payload[:-2]
-        elif payload.endswith(b"\n"):
-            payload = payload[:-1]
-        if payload:
-            parts.append(payload)
-
-    logger.debug(
-        "Parsed %d parts from %d bytes (boundary=%s)",
-        len(parts),
-        len(content),
-        boundary.decode(errors="replace"),
-    )
-    return parts

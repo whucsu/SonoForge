@@ -107,6 +107,8 @@ class MainWindow(QMainWindow):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self._system_bar = SystemBar()
+        self._controller.decode_progress.connect(self._system_bar.show_decode_progress)
+        self._controller.decode_finished.connect(self._system_bar.hide_decode_progress)
         root_layout.addWidget(self._system_bar)
 
         content = QWidget()
