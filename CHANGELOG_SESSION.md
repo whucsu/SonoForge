@@ -6,6 +6,27 @@
 
 ---
 
+## [2026-06-27 23:30] STE: progressive zone deformation, preprocessing, quality improvements
+- **Тип:** feature + fix
+- **Файлы:** `speckle_tracking.py`, `speckle_worker.py`, `tracking_smoothing.py`, `speckle.py`, `myocardial_zone.py`, `speckle_overlay.py`, `viewer_widget.py`, `speckle_settings_dialog.py`, `aha_segments.py`, `contour_utils.py`
+- **Суть:**
+  1. Progressive zone deformation: двухпроходный трекинг с интерполяцией зоны от ED к ES на каждом кадре
+  2. Preprocessing: CLAHE + log compression + median denoise (одинаковый для всех кадров)
+  3. Outlier interpolation: невалидные kernel'ы заменяются линейной интерполяцией от соседей
+  4. Iterative refinement: повторный трекинг с уточнёнными ED позициями (n_iterations=2)
+  5. Quality-weighted smoothing: per-kernel NCC weights в UnivariateSpline
+  6. Motion model: эндокард → внутрь, эпикард → наружу при систоле
+  7. LV cavity center normals: правильное направление эпиокарда
+  8. Kernel radius из config (hardcoded 10 → config.kernel_size // 2)
+  9. ED/ES диалог с auto-detect checkboxes и ручным вводом
+  10. Dynamic zone overlay: зона обновляется по кадрам из tracked positions
+  11. Debug dump: positions/NCC/contours в ~/ECHO2026_ste_debug/
+  12. AHA segment assignment + per-segment strain/quality computation
+  - SpeckleConfig: 16 полей + 3 пресета (echo_pac: kernel=12, sr=8, incremental)
+  - TrackingKernel: aha_segment, arc_length_param
+  - StrainResult: tracked_positions_all, ncc_all_frames, segment_strain, segment_quality
+  - 26 unit tests passing, quality ~62% на auto-contour кадрах 88/100
+
 ## [2026-06-27 18:30] STE: окно ED–ES, оверлей, QC-таблица
 - **Тип:** fix
 - **Файлы:** `speckle_worker.py`, `viewer_widget.py`, `strain_curve_widget.py`, `segment_quality_panel.py`, `speckle.py`, `main_window.py`
