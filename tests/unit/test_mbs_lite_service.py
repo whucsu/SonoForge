@@ -10,14 +10,12 @@ import pytest
 from echo_personal_tool.domain.calculations.lvef_simpson import calculate
 from echo_personal_tool.domain.models import Contour
 from echo_personal_tool.domain.services.contour_geometry import DEFAULT_NODE_COUNT
-from echo_personal_tool.domain.services.lv_shape_template import (
-    ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
-    lame_profile_for_view_phase,
-    warp_elliptical_open_arc,
-    warp_lame_open_arc,
+from echo_personal_tool.domain.services.lv_bezier_contour import (
+    build_lv_bezier_template_for_contour,
 )
 from echo_personal_tool.domain.services.mbs_lite_service import (
-    build_lame_template_for_contour,
+    _ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+    _warp_elliptical_open_arc,
     fit_contour_from_landmarks,
     infer_apex_from_open_arc,
     refine_model_contour,
@@ -46,24 +44,18 @@ def test_fit_contour_from_landmarks_basic() -> None:
     assert contour.points[-1] == pytest.approx(lateral, abs=1e-3)
 
 
-def test_dome_arc_is_not_septal_apex_lateral_triangle() -> None:
+def test_fit_contour_dome_is_not_triangle() -> None:
     septal = (0.0, 0.0)
     lateral = (100.0, 0.0)
     apex = (50.0, 60.0)
-    warped = warp_lame_open_arc(septal, lateral, apex, view="A4C", phase="ED", num_points=81)
-    quarter = warped[len(warped) // 4]
+    contour = fit_contour_from_landmarks(
+        septal=septal, lateral=lateral, apex=apex, phase="ED",
+    )
+    quarter = contour.points[len(contour.points) // 4]
     triangle_x = 0.25 * apex[0]
     triangle_y = 0.25 * apex[1]
-    assert quarter[0] > triangle_x + 10.0
-    assert quarter[1] > triangle_y + 5.0
-
-
-def test_fit_contour_dome_includes_lateral_blend_before_apex() -> None:
-    septal = (0.0, 0.0)
-    lateral = (100.0, 0.0)
-    apex = (50.0, 60.0)
-    warped = warp_lame_open_arc(septal, lateral, apex, view="A4C", phase="ED", num_points=81)
-    quarter = warped[len(warped) // 4]
+    assert quarter[0] > triangle_x + 3.0
+    assert quarter[1] > triangle_y + 2.0
     assert 0.0 < quarter[0] < 100.0
     assert quarter[1] > 0.0
 
@@ -137,12 +129,12 @@ def test_fit_contour_la_matches_elliptical_template() -> None:
         view="A4C",
         chamber="LA",
     )
-    elliptical = warp_elliptical_open_arc(
+    elliptical = _warp_elliptical_open_arc(
         septal,
         lateral,
         apex,
         num_points=81,
-        short_axis_ratio=ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+        short_axis_ratio=_ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
     )
     expected = resample_open_arc_landmarks(
         elliptical,
@@ -181,26 +173,6 @@ def test_fit_contour_rv_matches_crescent_template() -> None:
     assert len(contour.points) == RV_FAC_NODE_COUNT
     mid_index = len(contour.points) // 2
     assert contour.points[mid_index] == pytest.approx(expected[mid_index], abs=0.5)
-
-
-def test_a2c_lame_profile_differs_from_a4c() -> None:
-    a4c = lame_profile_for_view_phase("A4C", "ED")
-    a2c = lame_profile_for_view_phase("A2C", "ED")
-    assert a2c.n_lat != pytest.approx(a4c.n_lat)
-
-
-def test_fit_contour_uses_a2c_profile_for_a2c_view() -> None:
-    septal = (10.0, 40.0)
-    lateral = (50.0, 40.0)
-    apex = (22.0, 10.0)
-    a4c_warp = warp_lame_open_arc(
-        septal, lateral, apex, view="A4C", phase="ED", num_points=81
-    )
-    a2c_warp = warp_lame_open_arc(
-        septal, lateral, apex, view="A2C", phase="ED", num_points=81
-    )
-    body_index = 75
-    assert a4c_warp[body_index] != pytest.approx(a2c_warp[body_index], abs=0.5)
 
 
 def test_infer_apex_from_open_arc_uses_max_ma_distance() -> None:
@@ -332,7 +304,7 @@ def test_refine_ai_stepped_refine_locks_on_ring() -> None:
         assert next_pass.points[index] == position
 
 
-def test_refine_ai_contour_does_not_collapse_to_lame_template() -> None:
+def test_refine_ai_contour_does_not_collapse_to_bezier_template() -> None:
     from echo_personal_tool.domain.services.active_contour_refine import ActiveContourConfig, refine_open_arc
     from echo_personal_tool.domain.services.mbs_lite_service import _refine_internal_template
 
@@ -351,7 +323,7 @@ def test_refine_ai_contour_does_not_collapse_to_lame_template() -> None:
         apex=apex,
         phase="ED",
     )
-    lame_template = build_lame_template_for_contour(model)
+    bezier_template = build_lv_bezier_template_for_contour(model)
     ai_points = list(model.points)
     for index in range(4, len(ai_points) - 4, 3):
         x, y = ai_points[index]
@@ -373,7 +345,7 @@ def test_refine_ai_contour_does_not_collapse_to_lame_template() -> None:
         frame,
         ai_points,
         (septal, lateral),
-        template_points=lame_template,
+        template_points=bezier_template,
         config=ActiveContourConfig(),
     )
     refined, mode = refine_open_arc_contour(frame, ai_contour)
@@ -388,9 +360,9 @@ def test_refine_ai_contour_does_not_collapse_to_lame_template() -> None:
             total += math.hypot(left[0] - right[0], left[1] - right[1])
         return total / len(target)
 
-    legacy_lame_dist = mean_distance(legacy, lame_template)
-    refined_lame_dist = mean_distance(refined.points, lame_template)
-    assert refined_lame_dist > legacy_lame_dist * 1.5
+    legacy_dist = mean_distance(legacy, bezier_template)
+    refined_dist = mean_distance(refined.points, bezier_template)
+    assert refined_dist > legacy_dist * 1.5
 
 
 def test_fit_contour_balances_nodes_for_off_center_apex() -> None:

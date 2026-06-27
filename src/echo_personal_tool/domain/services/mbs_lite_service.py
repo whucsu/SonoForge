@@ -24,10 +24,10 @@ from echo_personal_tool.domain.services.contour_geometry import (
     resample_open_arc_landmarks,
     smooth_open_arc,
 )
-from echo_personal_tool.domain.services.lv_shape_template import (
-    ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
-    warp_elliptical_open_arc,
-    warp_lame_open_arc,
+from echo_personal_tool.domain.services.lv_bezier_contour import (
+    LvBezierParams,
+    build_lv_bezier_template_for_contour,
+    fit_lv_bezier_contour,
 )
 from echo_personal_tool.domain.services.rv_shape_template import (
     RV_FAC_NODE_COUNT,
@@ -37,6 +37,65 @@ from echo_personal_tool.domain.services.rv_shape_template import (
 _MIN_ANNULUS_LENGTH_PX = 10.0
 _MIN_APEX_DISTANCE_PX = 3.0
 _TEMPLATE_POINT_COUNT = 81
+
+# LA / RA open-arc template: short diameter = long diameter × ratio (default 85%).
+# Long diameter = MA midpoint → apex; short axis is perpendicular to that line.
+_ATRIAL_ELLIPSE_SHORT_AXIS_RATIO = 0.85
+
+
+def _warp_elliptical_open_arc(
+    septal: tuple[float, float],
+    lateral: tuple[float, float],
+    apex: tuple[float, float],
+    *,
+    num_points: int = 81,
+    short_axis_ratio: float = _ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+) -> list[tuple[float, float]]:
+    """Sample open arc as a half-ellipse for LA/RA Simpson (atrial length axis)."""
+    if num_points < 3:
+        msg = "num_points must be at least 3"
+        raise ValueError(msg)
+    if not 0.0 < short_axis_ratio <= 1.0:
+        msg = "short_axis_ratio must be in (0, 1]"
+        raise ValueError(msg)
+
+    ma_dx = lateral[0] - septal[0]
+    ma_dy = lateral[1] - septal[1]
+    ma_length = math.hypot(ma_dx, ma_dy)
+    if ma_length <= 0.0:
+        msg = "mitral annulus length must be positive"
+        raise ValueError(msg)
+
+    mid_x = (septal[0] + lateral[0]) / 2.0
+    mid_y = (septal[1] + lateral[1]) / 2.0
+    long_dx = apex[0] - mid_x
+    long_dy = apex[1] - mid_y
+    long_length = math.hypot(long_dx, long_dy)
+    if long_length <= 0.0:
+        msg = "apex must be off the mitral annulus line"
+        raise ValueError(msg)
+
+    long_x = long_dx / long_length
+    long_y = long_dy / long_length
+    short_u_x = ma_dx / ma_length
+    short_u_y = ma_dy / ma_length
+    short_half = (long_length * short_axis_ratio) / 2.0
+
+    warped: list[tuple[float, float]] = []
+    for index in range(num_points):
+        t = index / (num_points - 1)
+        theta = math.pi * (1.0 - t)
+        offset_short = short_half * math.cos(theta)
+        offset_long = long_length * math.sin(theta)
+        warped.append(
+            (
+                mid_x + offset_short * short_u_x + offset_long * long_x,
+                mid_y + offset_short * short_u_y + offset_long * long_y,
+            )
+        )
+    warped[0] = septal
+    warped[-1] = lateral
+    return warped
 
 
 def fit_contour_from_landmarks(
@@ -60,14 +119,15 @@ def fit_contour_from_landmarks(
     node_count = RV_FAC_NODE_COUNT if chamber_key == "RV" else num_nodes
 
     if chamber_key == "LV":
-        warped = warp_lame_open_arc(
+        warped = fit_lv_bezier_contour(
             septal,
             lateral,
             apex,
             view=view,
             phase=phase,
-            num_points=_TEMPLATE_POINT_COUNT,
-        )
+            chamber=chamber,
+            num_nodes=_TEMPLATE_POINT_COUNT,
+        ).points
     elif chamber_key == "RV":
         warped = warp_rv_crescent_open_arc(
             septal,
@@ -76,12 +136,12 @@ def fit_contour_from_landmarks(
             num_points=_TEMPLATE_POINT_COUNT,
         )
     else:
-        warped = warp_elliptical_open_arc(
+        warped = _warp_elliptical_open_arc(
             septal,
             lateral,
             apex,
             num_points=_TEMPLATE_POINT_COUNT,
-            short_axis_ratio=ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+            short_axis_ratio=_ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
         )
     resampled = resample_open_arc_landmarks(
         warped,
@@ -119,12 +179,12 @@ def build_atrial_ellipse_template_for_contour(contour: Contour) -> list[tuple[fl
     apex = contour.apex_landmark or infer_apex_from_open_arc(
         contour.points, septal, lateral
     )
-    warped = warp_elliptical_open_arc(
+    warped = _warp_elliptical_open_arc(
         septal,
         lateral,
         apex,
         num_points=_TEMPLATE_POINT_COUNT,
-        short_axis_ratio=ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
+        short_axis_ratio=_ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
     )
     return resample_open_arc_landmarks(
         warped,
@@ -157,30 +217,6 @@ def build_rv_quarter_sine_template_for_contour(contour: Contour) -> list[tuple[f
         num_nodes=len(contour.points),
     )
 
-
-def build_lame_template_for_contour(contour: Contour) -> list[tuple[float, float]]:
-    """Regenerate Lamé template resampled to contour node count."""
-    if contour.mitral_annulus is None:
-        return list(contour.points)
-    septal, lateral = contour.mitral_annulus
-    apex = contour.apex_landmark or infer_apex_from_open_arc(
-        contour.points, septal, lateral
-    )
-    warped = warp_lame_open_arc(
-        septal,
-        lateral,
-        apex,
-        view=contour.view,
-        phase=contour.phase,
-        num_points=_TEMPLATE_POINT_COUNT,
-    )
-    return resample_open_arc_landmarks(
-        warped,
-        septal=septal,
-        lateral=lateral,
-        apex=apex,
-        num_nodes=len(contour.points),
-    )
 
 
 def refine_open_arc_contour(
@@ -274,7 +310,7 @@ def _refine_internal_template(contour: Contour) -> list[tuple[float, float]]:
         return list(contour.points)
     chamber = contour.chamber.upper()
     if chamber == "LV":
-        return build_lame_template_for_contour(contour)
+        return build_lv_bezier_template_for_contour(contour)
     if chamber in {"LA", "RA"}:
         return build_atrial_ellipse_template_for_contour(contour)
     if chamber == "RV":
