@@ -15,6 +15,8 @@ class TrackingKernel:
     radius: int = 10
     node_index: int = 0
     layer: str = "endo"
+    aha_segment: int = 0
+    arc_length_param: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,7 @@ class TrackingResult:
     ncc_scores: np.ndarray
     valid_mask: np.ndarray
     kernel_positions: np.ndarray
+    reference_frame: int = 0
 
 
 @dataclass(frozen=True)
@@ -47,12 +50,53 @@ class SpeckleConfig:
     """Configuration for speckle tracking."""
 
     kernel_size: int = 12
-    search_radius: int = 15
+    search_radius: int = 8
     pyramid_levels: int = 2
-    ncc_threshold: float = 0.5
-    outlier_sigma: float = 3.0
+    ncc_threshold: float = 0.3
+    outlier_sigma: float = 0
     subpixel: bool = True
     wall_thickness_mm: float = 8.0
+    bidirectional: bool = True
+    ed_anchored: bool = True
+    tracking_mode: str = "incremental"
+    spatial_smoothing: float = 1.0
+    temporal_smoothing: float = 1.0
+    quality_weighted_smoothing: bool = True
+    drift_compensation: bool = True
+    min_segment_quality: float = 0.4
+    multi_cycle_average: bool = True
+    contour_resample_points: int = 128
+    closure_error_threshold: float = 0.5
+
+    @classmethod
+    def preset_echo_pac(cls) -> SpeckleConfig:
+        return cls(
+            kernel_size=12,
+            search_radius=8,
+            bidirectional=True,
+            drift_compensation=True,
+            tracking_mode="incremental",
+            ncc_threshold=0.3,
+            outlier_sigma=0,
+        )
+
+    @classmethod
+    def preset_tomtec(cls) -> SpeckleConfig:
+        return cls(
+            kernel_size=18,
+            search_radius=18,
+            spatial_smoothing=1.2,
+            temporal_smoothing=1.1,
+        )
+
+    @classmethod
+    def preset_debug(cls) -> SpeckleConfig:
+        return cls(
+            bidirectional=False,
+            spatial_smoothing=0.0,
+            temporal_smoothing=0.0,
+            drift_compensation=False,
+        )
 
 
 @dataclass(frozen=True)
@@ -76,3 +120,18 @@ class StrainResult:
     per_kernel_longitudinal: np.ndarray | None = None
     ed_contour: np.ndarray | None = None
     es_contour: np.ndarray | None = None
+    tracked_es_positions: np.ndarray | None = None
+    tracked_ed_positions: np.ndarray | None = None
+    tracked_positions_all: np.ndarray | None = None
+    ncc_all_frames: np.ndarray | None = None
+    es_ncc_scores: np.ndarray | None = None
+    es_valid_mask: np.ndarray | None = None
+    segment_strain: dict[int, float] = field(default_factory=dict)
+    segment_quality: dict[int, float] = field(default_factory=dict)
+    drift_compensation_applied: bool = False
+    tracking_quality_mean: float = 0.0
+    cycle_count: int = 1
+    config_preset: str = "echo_pac"
+    tracking_window_start: int = 0
+    tracking_window_end: int = 0
+    ncc_threshold: float = 0.3

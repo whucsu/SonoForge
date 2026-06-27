@@ -429,6 +429,7 @@ class ViewerWidget(QWidget):
         from echo_personal_tool.presentation.speckle_overlay import SpeckleOverlay
         self._speckle_overlay = SpeckleOverlay(self._view, self)
         self._speckle_overlay.hide()
+        self._speckle_result = None
         self._calibration_kind: Literal[
             "depth", "spectral", "doppler_velocity", "mmode_time", "mmode_depth"
         ] | None = None
@@ -1130,6 +1131,7 @@ class ViewerWidget(QWidget):
             self._update_linear_caliper_label_preview_from_state()
             if frame_changed or contours_updated:
                 self._refresh_frame_overlays()
+            self._refresh_speckle_overlay_for_current_frame()
             self._refresh_frame_panel_layout()
             self._refresh_panel_frame_graphics()
             self._refresh_dicom_tags_overlay()
@@ -2130,21 +2132,106 @@ class ViewerWidget(QWidget):
         from echo_personal_tool.domain.models.speckle import StrainResult
         if not isinstance(result, StrainResult):
             return
-        if result.zone is not None:
-            self._speckle_overlay.show_myocardial_zone(result.zone)
-        if result.kernels:
-            self._speckle_overlay.show_kernels(
-                result.kernels, result.last_valid_mask, result.last_ncc_scores
-            )
-        displacements = result.cumulative_displacements if result.cumulative_displacements is not None else result.last_displacements
-        if result.kernels and displacements is not None:
-            self._speckle_overlay.show_displacements(result.kernels, displacements, scale=1.5)
-        if result.kernels and result.per_kernel_longitudinal is not None:
-            self._speckle_overlay.show_strain_color_map(result.kernels, result.per_kernel_longitudinal)
-        self._speckle_overlay.show_phase_contours(result.ed_contour, result.es_contour)
+        self._speckle_result = result
+        self._refresh_speckle_overlay_for_current_frame()
         self._speckle_overlay.show()
 
+    def _refresh_speckle_overlay_for_current_frame(self) -> None:
+        """Update kernel markers for the currently displayed frame."""
+        from echo_personal_tool.domain.models.speckle import StrainResult
+
+        result = self._speckle_result
+        if not isinstance(result, StrainResult):
+            return
+
+        frame = self._current_frame_index()
+        if frame is None:
+            return
+
+        ed_index = result.ed_index
+        es_index = result.es_index
+        phase_lo = result.tracking_window_start
+        phase_hi = result.tracking_window_end
+        if phase_hi < phase_lo:
+            phase_lo = min(ed_index, es_index)
+            phase_hi = max(ed_index, es_index)
+        ncc_threshold = result.ncc_threshold
+
+        if result.tracked_positions_all is None or result.ncc_all_frames is None:
+            es_positions = result.tracked_es_positions
+            ed_positions = result.tracked_ed_positions
+            ncc = result.es_ncc_scores or result.last_ncc_scores
+            valid = result.es_valid_mask or result.last_valid_mask
+            if result.kernels and es_positions is not None:
+                self._speckle_overlay.show_kernels(
+                    result.kernels, valid, ncc, positions=es_positions
+                )
+            if ed_positions is not None and es_positions is not None:
+                endo_mask = [i for i, k in enumerate(result.kernels) if k.layer == "endo"]
+                if endo_mask:
+                    self._speckle_overlay.show_ed_es_displacements(
+                        ed_positions[endo_mask], es_positions[endo_mask]
+                    )
+            if result.kernels and result.per_kernel_longitudinal is not None and es_positions is not None:
+                self._speckle_overlay.show_strain_color_map(
+                    result.kernels, result.per_kernel_longitudinal, positions=es_positions
+                )
+            self._speckle_overlay.show_phase_contours(result.ed_contour, result.es_contour)
+            return
+
+        has_tracked = (
+            0 <= frame < result.tracked_positions_all.shape[0]
+            and np.any(np.isfinite(result.tracked_positions_all[frame, :, 0]))
+        )
+        if not (phase_lo <= frame <= phase_hi) or not has_tracked:
+            self._speckle_overlay.show_kernels([], None, None)
+            self._speckle_overlay.show_ed_es_displacements(None, None)
+            self._speckle_overlay.show_strain_color_map([], np.array([]))
+            self._speckle_overlay.show_phase_contours(result.ed_contour, result.es_contour)
+            return
+
+        positions = result.tracked_positions_all[frame]
+        ncc = result.ncc_all_frames[frame]
+        valid = np.isfinite(ncc) & (ncc >= ncc_threshold)
+
+        if result.kernels:
+            self._speckle_overlay.show_kernels(
+                result.kernels, valid, ncc, positions=positions
+            )
+
+        endo_indices = [i for i, k in enumerate(result.kernels) if k.layer == "endo"]
+        if endo_indices and frame != ed_index:
+            ed_positions = result.tracked_positions_all[ed_index]
+            self._speckle_overlay.show_ed_es_displacements(
+                ed_positions[endo_indices],
+                positions[endo_indices],
+            )
+        else:
+            self._speckle_overlay.show_ed_es_displacements(None, None)
+
+        if endo_indices:
+            endo_pts = positions[endo_indices, :]
+            sorted_endo = sorted(
+                endo_indices, key=lambda i: result.kernels[i].node_index
+            )
+            sorted_pts = positions[sorted_endo, :]
+            self._speckle_overlay.show_myocardial_zone_dynamic(sorted_pts)
+
+            ed_positions = result.tracked_positions_all[ed_index]
+            ed_sorted = ed_positions[sorted_endo, :]
+            self._speckle_overlay.show_phase_contours(ed_sorted, sorted_pts)
+
+        if result.kernels and result.per_kernel_longitudinal is not None:
+            self._speckle_overlay.show_strain_color_map(
+                result.kernels,
+                result.per_kernel_longitudinal,
+                positions=positions,
+            )
+        else:
+            self._speckle_overlay.show_strain_color_map([], np.array([]))
+
     def clear_speckle_overlay(self) -> None:
+        self._speckle_result = None
         self._speckle_overlay.clear()
         self._speckle_overlay.hide()
 

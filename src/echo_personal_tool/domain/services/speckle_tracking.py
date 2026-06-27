@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 import cv2
@@ -9,22 +10,16 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 
 from echo_personal_tool.domain.models.speckle import (
+    MyocardialZone,
     SpeckleConfig,
     TrackingKernel,
     TrackingResult,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def build_gaussian_pyramid(frame: np.ndarray, levels: int) -> list[np.ndarray]:
-    """Build Gaussian pyramid with anti-aliasing blur before downsampling.
-
-    Args:
-        frame: (H, W) grayscale image (uint8 or float).
-        levels: number of pyramid levels including original.
-
-    Returns:
-        List of downsampled frames: [original, 1/2, 1/4, ...].
-    """
     pyramid: list[np.ndarray] = [frame]
     current = frame.astype(np.float32)
     for _ in range(1, levels):
@@ -38,52 +33,27 @@ def build_gaussian_pyramid(frame: np.ndarray, levels: int) -> list[np.ndarray]:
     return pyramid
 
 
-def _extract_patch(frame: np.ndarray, cx: float, cy: float, half: int) -> np.ndarray | None:
-    """Extract a patch centered at (cx, cy) with given half-size."""
-    h, w = frame.shape[:2]
-    x0 = int(round(cx)) - half
-    y0 = int(round(cy)) - half
-    x1 = x0 + 2 * half
-    y1 = y0 + 2 * half
-    if x0 < 0 or y0 < 0 or x1 > w or y1 > h:
-        return None
-    return frame[y0:y1, x0:x1]
-
-
 def refine_subpixel(
     correlation_map: np.ndarray,
     peak: tuple[int, int],
 ) -> tuple[float, float]:
-    """Parabolic interpolation on 3x3 neighborhood around correlation peak.
-
-    Args:
-        correlation_map: 2D correlation values.
-        peak: (row, col) integer peak position.
-
-    Returns:
-        (row_offset, col_offset) sub-pixel displacement.
-    """
     py, px = peak
     h, w = correlation_map.shape
     if py < 1 or py >= h - 1 or px < 1 or px >= w - 1:
         return (0.0, 0.0)
-
     c_center = correlation_map[py, px]
     col_offset = 0.0
     row_offset = 0.0
-
     c_left = correlation_map[py, px - 1]
     c_right = correlation_map[py, px + 1]
     denom_x = c_left - 2 * c_center + c_right
     if abs(denom_x) > 1e-10:
         col_offset = 0.5 * (c_left - c_right) / denom_x
-
     c_up = correlation_map[py - 1, px]
     c_down = correlation_map[py + 1, px]
     denom_y = c_up - 2 * c_center + c_down
     if abs(denom_y) > 1e-10:
         row_offset = 0.5 * (c_up - c_down) / denom_y
-
     return (float(np.clip(row_offset, -0.5, 0.5)), float(np.clip(col_offset, -0.5, 0.5)))
 
 
@@ -93,21 +63,6 @@ def block_match_single(
     center: tuple[float, float],
     config: SpeckleConfig,
 ) -> tuple[float, float, float]:
-    """Track one kernel from reference frame to target frame.
-
-    Uses pyramidal coarse-to-fine approach with OpenCV matchTemplate.
-    Reference kernel is always extracted from the original center position
-    (not drifting with search updates) for consistent matching.
-
-    Args:
-        reference_pyramid: pre-built Gaussian pyramid of reference frame.
-        target_pyramid: pre-built Gaussian pyramid of target frame.
-        center: (x, y) kernel center in reference frame (level 0 coords).
-        config: tracking configuration.
-
-    Returns:
-        (dx, dy, ncc_score) displacement and confidence.
-    """
     half = config.kernel_size // 2
     orig_cx, orig_cy = center
     cx, cy = center
@@ -121,7 +76,6 @@ def block_match_single(
         cx_l = cx / scale
         cy_l = cy / scale
         half_l = half // scale
-
         if half_l < 1:
             half_l = 1
         search_r = config.search_radius // scale
@@ -150,7 +104,7 @@ def block_match_single(
         if search_region.shape[0] < k_h or search_region.shape[1] < k_w:
             continue
 
-        result = cv2.matchTemplate(search_region, k_level.astype(np.float32), cv2.TM_CCOEFF_NORMED)
+        result = cv2.matchTemplate(search_region, k_level, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
         best_ncc = float(max_val)
@@ -178,20 +132,8 @@ def track_frame_pair(
     target: np.ndarray,
     kernels: list[TrackingKernel],
     config: SpeckleConfig,
+    zone_mask: np.ndarray | None = None,
 ) -> TrackingResult:
-    """Track all kernels from one frame to the next.
-
-    Builds Gaussian pyramids once per frame pair, then tracks all kernels.
-
-    Args:
-        reference: source frame (H, W).
-        target: destination frame (H, W).
-        kernels: list of TrackingKernel to track.
-        config: tracking configuration.
-
-    Returns:
-        TrackingResult with displacements, NCC scores, and valid mask.
-    """
     pyramids_ref = build_gaussian_pyramid(reference.astype(np.float32), config.pyramid_levels)
     pyramids_tgt = build_gaussian_pyramid(target.astype(np.float32), config.pyramid_levels)
 
@@ -212,12 +154,22 @@ def track_frame_pair(
         ]
 
     valid_mask = ncc_scores >= config.ncc_threshold
+
+    if zone_mask is not None:
+        h, w = zone_mask.shape
+        for i in range(n):
+            px = int(round(positions[i, 0]))
+            py = int(round(positions[i, 1]))
+            if px < 0 or px >= w or py < 0 or py >= h:
+                valid_mask[i] = False
+            elif not zone_mask[py, px]:
+                valid_mask[i] = False
+
     if config.outlier_sigma > 0 and valid_mask.sum() > 3:
-        median_disp = np.median(displacements[valid_mask], axis=0)
-        mad = np.median(np.abs(displacements[valid_mask] - median_disp), axis=0)
-        mad[mad < 0.1] = 0.1
-        outlier = np.any(np.abs(displacements - median_disp) > config.outlier_sigma * mad, axis=1)
-        valid_mask &= ~outlier
+        disp_magnitudes = np.linalg.norm(displacements, axis=1)
+        max_displacement = config.search_radius * 0.8
+        too_far = disp_magnitudes > max_displacement
+        valid_mask &= ~too_far
 
     return TrackingResult(
         frame_index=0,
@@ -228,34 +180,323 @@ def track_frame_pair(
     )
 
 
+def track_frame_from_reference(
+    reference: np.ndarray,
+    target: np.ndarray,
+    reference_kernels: list[TrackingKernel],
+    config: SpeckleConfig,
+    zone_mask: np.ndarray | None = None,
+) -> TrackingResult:
+    kernels = [
+        TrackingKernel(
+            center=k.center,
+            node_index=k.node_index,
+            layer=k.layer,
+            radius=k.radius,
+            aha_segment=k.aha_segment,
+            arc_length_param=k.arc_length_param,
+        )
+        for k in reference_kernels
+    ]
+    return track_frame_pair(reference, target, kernels, config, zone_mask)
+
+
+def build_zone_mask(
+    zone: MyocardialZone,
+    frame_shape: tuple[int, int],
+) -> np.ndarray:
+    h, w = frame_shape
+    mask = np.zeros((h, w), dtype=np.uint8)
+    epi = np.round(zone.epi_points).astype(np.int32)
+    endo = np.round(zone.endo_points).astype(np.int32)
+    if len(epi) >= 3:
+        cv2.fillPoly(mask, [epi], 1)
+    if len(endo) >= 3:
+        hole = np.zeros((h, w), dtype=np.uint8)
+        cv2.fillPoly(hole, [endo], 1)
+        mask = mask & ~hole
+    return mask.astype(bool)
+
+
+def build_zone_mask_from_kernels(
+    kernel_positions: np.ndarray,
+    layer_mask: np.ndarray,
+    frame_shape: tuple[int, int],
+    wall_thickness_px: int = 20,
+) -> np.ndarray:
+    h, w = frame_shape
+    mask = np.zeros((h, w), dtype=np.uint8)
+    endo_pts = kernel_positions[layer_mask].astype(np.int32)
+    if len(endo_pts) < 3:
+        return np.zeros((h, w), dtype=bool)
+    hull = cv2.convexHull(endo_pts)
+    cv2.fillPoly(mask, [hull], 1)
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (wall_thickness_px, wall_thickness_px)
+    )
+    dilated = cv2.dilate(mask, kernel, iterations=1)
+    return dilated.astype(bool)
+
+
+def preprocess_echo_frame(
+    frame: np.ndarray,
+    clahe_clip: float = 2.0,
+    clahe_grid: int = 8,
+    log_compress: bool = True,
+    median_ksize: int = 3,
+) -> np.ndarray:
+    f = frame.copy()
+    if f.ndim == 3 and f.shape[2] >= 3:
+        f = np.mean(f[:, :, :3].astype(np.float64), axis=2).astype(np.float32)
+    if log_compress and f.max() > 0:
+        f = np.log1p(f.astype(np.float64)) / np.log1p(f.max())
+    f_uint8 = np.clip(f * 255, 0, 255).astype(np.uint8)
+    clahe = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(clahe_grid, clahe_grid))
+    f_uint8 = clahe.apply(f_uint8)
+    if median_ksize > 1:
+        f_uint8 = cv2.medianBlur(f_uint8, median_ksize)
+    return f_uint8.astype(np.float32) / 255.0
+
+
+def track_cine_bidirectional(
+    frames: np.ndarray,
+    initial_kernels: list[TrackingKernel],
+    ed_index: int,
+    config: SpeckleConfig,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> list[TrackingResult]:
+    n_frames = frames.shape[0]
+    ed_index = int(np.clip(ed_index, 0, n_frames - 1))
+    ed_centers = np.array([k.center for k in initial_kernels], dtype=np.float64)
+    ed_frame = frames[ed_index]
+    n_kernels = len(initial_kernels)
+
+    positions = np.zeros((n_frames, n_kernels, 2), dtype=np.float64)
+    ncc_all = np.zeros((n_frames, n_kernels), dtype=np.float64)
+    valid_all = np.zeros((n_frames, n_kernels), dtype=bool)
+    positions[ed_index] = ed_centers
+    ncc_all[ed_index] = 1.0
+    valid_all[ed_index] = True
+
+    for t in range(n_frames):
+        if t == ed_index:
+            if progress_callback:
+                progress_callback(t + 1, n_frames)
+            continue
+
+        fwd = track_frame_from_reference(ed_frame, frames[t], initial_kernels, config)
+        p_fwd = fwd.kernel_positions
+        w_fwd = fwd.ncc_scores
+        v_fwd = fwd.valid_mask
+
+        positions[t] = p_fwd
+        ncc_all[t] = w_fwd
+        valid_all[t] = v_fwd
+
+        if config.bidirectional:
+            bwd_kernels = [
+                TrackingKernel(
+                    center=(float(p_fwd[i, 0]), float(p_fwd[i, 1])),
+                    node_index=initial_kernels[i].node_index,
+                    layer=initial_kernels[i].layer,
+                    radius=initial_kernels[i].radius,
+                    aha_segment=initial_kernels[i].aha_segment,
+                    arc_length_param=initial_kernels[i].arc_length_param,
+                )
+                for i in range(n_kernels)
+            ]
+            bwd = track_frame_pair(frames[t], ed_frame, bwd_kernels, config)
+            for i in range(n_kernels):
+                if v_fwd[i] and bwd.valid_mask[i]:
+                    closure_err = float(np.linalg.norm(
+                        bwd.kernel_positions[i] - ed_centers[i]
+                    ))
+                    if closure_err > config.search_radius * 0.8:
+                        valid_all[t, i] = False
+                    else:
+                        ncc_all[t, i] = (w_fwd[i] + bwd.ncc_scores[i]) / 2.0
+
+        if progress_callback:
+            progress_callback(t + 1, n_frames)
+
+    results: list[TrackingResult] = []
+    for t in range(n_frames):
+        if t == ed_index:
+            continue
+        disp = positions[t] - positions[ed_index]
+        results.append(
+            TrackingResult(
+                frame_index=t,
+                displacements=disp,
+                ncc_scores=ncc_all[t],
+                valid_mask=valid_all[t],
+                kernel_positions=positions[t],
+                reference_frame=ed_index,
+            )
+        )
+    return results
+
+
+def track_cine_incremental(
+    frames: np.ndarray,
+    initial_kernels: list[TrackingKernel],
+    ed_index: int,
+    config: SpeckleConfig,
+    progress_callback: Callable[[int, int], None] | None = None,
+    zone_mask: np.ndarray | None = None,
+    wall_thickness_px: int = 20,
+) -> list[TrackingResult]:
+    n_frames = frames.shape[0]
+    ed_index = int(np.clip(ed_index, 0, n_frames - 1))
+    n_kernels = len(initial_kernels)
+    ed_centers = np.array([k.center for k in initial_kernels], dtype=np.float64)
+    ed_frame = frames[ed_index]
+    frame_shape = frames.shape[1:3]
+    endo_mask = np.array([k.layer == "endo" for k in initial_kernels], dtype=bool)
+
+    coarse_positions = np.zeros((n_frames, n_kernels, 2), dtype=np.float64)
+    coarse_ncc = np.zeros((n_frames, n_kernels), dtype=np.float64)
+    coarse_valid = np.zeros((n_frames, n_kernels), dtype=bool)
+    coarse_positions[ed_index] = ed_centers
+    coarse_ncc[ed_index] = 1.0
+    coarse_valid[ed_index] = True
+
+    for t in range(n_frames):
+        if t == ed_index:
+            continue
+        match = track_frame_from_reference(ed_frame, frames[t], initial_kernels, config)
+        coarse_positions[t] = match.kernel_positions
+        coarse_ncc[t] = match.ncc_scores
+        coarse_valid[t] = match.valid_mask
+
+    es_index = ed_index
+    best_area = 0.0
+    for t in range(n_frames):
+        endo_pts = coarse_positions[t, endo_mask, :]
+        if len(endo_pts) >= 3:
+            hull = cv2.convexHull(endo_pts.astype(np.float32))
+            area = cv2.contourArea(hull)
+            if area < best_area or best_area == 0:
+                best_area = area
+                es_index = t
+
+    if es_index == ed_index:
+        es_index = min(ed_index + n_frames // 3, n_frames - 1)
+
+    logger.info(
+        "STE progressive zone: ed=%d, es=%d, n_frames=%d",
+        ed_index, es_index, n_frames,
+    )
+
+    final_positions = np.zeros((n_frames, n_kernels, 2), dtype=np.float64)
+    final_ncc = np.zeros((n_frames, n_kernels), dtype=np.float64)
+    final_valid = np.zeros((n_frames, n_kernels), dtype=bool)
+    final_positions[ed_index] = ed_centers
+    final_ncc[ed_index] = 1.0
+    final_valid[ed_index] = True
+
+    es_positions = coarse_positions[es_index]
+    total_span = max(abs(es_index - ed_index), 1)
+
+    for t in range(n_frames):
+        if t == ed_index:
+            if progress_callback:
+                progress_callback(t + 1, n_frames)
+            continue
+
+        span = abs(t - ed_index)
+        alpha = min(span / total_span, 1.0)
+        interp_centers = ed_centers * (1.0 - alpha) + es_positions * alpha
+
+        interp_kernels = [
+            TrackingKernel(
+                center=(float(interp_centers[i, 0]), float(interp_centers[i, 1])),
+                node_index=initial_kernels[i].node_index,
+                layer=initial_kernels[i].layer,
+                radius=initial_kernels[i].radius,
+                aha_segment=initial_kernels[i].aha_segment,
+                arc_length_param=initial_kernels[i].arc_length_param,
+            )
+            for i in range(n_kernels)
+        ]
+
+        progressive_mask = build_zone_mask_from_kernels(
+            interp_centers, endo_mask, frame_shape, wall_thickness_px,
+        )
+
+        match = track_frame_from_reference(
+            ed_frame, frames[t], interp_kernels, config, progressive_mask,
+        )
+
+        final_positions[t] = match.kernel_positions
+        final_ncc[t] = match.ncc_scores
+        final_valid[t] = match.valid_mask
+
+        if config.bidirectional:
+            bwd_kernels = [
+                TrackingKernel(
+                    center=(float(match.kernel_positions[i, 0]),
+                            float(match.kernel_positions[i, 1])),
+                    node_index=initial_kernels[i].node_index,
+                    layer=initial_kernels[i].layer,
+                    radius=initial_kernels[i].radius,
+                    aha_segment=initial_kernels[i].aha_segment,
+                    arc_length_param=initial_kernels[i].arc_length_param,
+                )
+                for i in range(n_kernels)
+            ]
+            bwd = track_frame_pair(frames[t], ed_frame, bwd_kernels, config)
+            for i in range(n_kernels):
+                if match.valid_mask[i] and bwd.valid_mask[i]:
+                    closure_err = float(np.linalg.norm(
+                        bwd.kernel_positions[i] - ed_centers[i]
+                    ))
+                    if closure_err > config.search_radius * 0.8:
+                        final_valid[t, i] = False
+                    else:
+                        final_ncc[t, i] = (
+                            match.ncc_scores[i] + bwd.ncc_scores[i]
+                        ) / 2.0
+
+        if progress_callback:
+            progress_callback(t + 1, n_frames)
+
+    results: list[TrackingResult] = []
+    for t in range(n_frames):
+        if t == ed_index:
+            continue
+        disp = final_positions[t] - final_positions[ed_index]
+        results.append(
+            TrackingResult(
+                frame_index=t,
+                displacements=disp,
+                ncc_scores=final_ncc[t],
+                valid_mask=final_valid[t],
+                kernel_positions=final_positions[t],
+                reference_frame=ed_index,
+            )
+        )
+    return results
+
+
 def track_cine(
     frames: np.ndarray,
     initial_kernels: list[TrackingKernel],
     config: SpeckleConfig,
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> list[TrackingResult]:
-    """Track kernels across entire CINE loop.
-
-    Forward tracking from frame 0 to N-1.
-
-    Args:
-        frames: (N, H, W) uint8 or float array.
-        initial_kernels: kernels at frame 0.
-        config: tracking configuration.
-        progress_callback: optional (current, total) progress reporter.
-
-    Returns:
-        List of TrackingResult for each frame transition (N-1 results).
-    """
+    if config.bidirectional and config.ed_anchored:
+        return track_cine_bidirectional(
+            frames, initial_kernels, ed_index=0, config=config,
+            progress_callback=progress_callback,
+        )
     n_frames = frames.shape[0]
     results: list[TrackingResult] = []
     current_kernels = list(initial_kernels)
-
     for i in range(n_frames - 1):
         result = track_frame_pair(frames[i], frames[i + 1], current_kernels, config)
         result.frame_index = i + 1
         results.append(result)
-
         for j, kernel in enumerate(current_kernels):
             if result.valid_mask[j]:
                 new_x = float(result.kernel_positions[j, 0])
@@ -265,9 +506,9 @@ def track_cine(
                     radius=kernel.radius,
                     node_index=kernel.node_index,
                     layer=kernel.layer,
+                    aha_segment=kernel.aha_segment,
+                    arc_length_param=kernel.arc_length_param,
                 )
-
         if progress_callback:
             progress_callback(i + 1, n_frames - 1)
-
     return results

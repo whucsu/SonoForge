@@ -42,6 +42,9 @@ from echo_personal_tool.presentation.echopac_theme import apply_echopac_theme
 from echo_personal_tool.presentation.measurement_action import MeasurementAction
 from echo_personal_tool.presentation.measurement_results_dialog import MeasurementResultsDialog
 from echo_personal_tool.presentation.orthanc_study_dialog import OrthancStudyDialog
+from echo_personal_tool.presentation.segment_quality_panel import SegmentQualityPanel
+from echo_personal_tool.presentation.speckle_settings_dialog import SpeckleSettingsDialog
+from echo_personal_tool.presentation.strain_curve_widget import StrainCurveWidget
 from echo_personal_tool.presentation.system_bar import SystemBar
 from echo_personal_tool.presentation.thumbnail_gallery import ThumbnailGalleryWidget
 from echo_personal_tool.presentation.tool_panel import ToolPanel
@@ -157,6 +160,17 @@ class MainWindow(QMainWindow):
         self._controller.state_manager.state_changed.connect(self._viewer.set_state)
         self._doppler_frame_context: tuple[str | None, int | None] = (None, None)
         center_layout.addWidget(self._viewer, stretch=1)
+
+        self._strain_curve_widget = StrainCurveWidget()
+        self._segment_quality_panel = SegmentQualityPanel()
+        self._segment_quality_panel.setMinimumHeight(180)
+        self._speckle_metrics_panel = QWidget()
+        speckle_layout = QHBoxLayout(self._speckle_metrics_panel)
+        speckle_layout.setContentsMargins(0, 0, 0, 0)
+        speckle_layout.setSpacing(8)
+        speckle_layout.addWidget(self._strain_curve_widget, stretch=2)
+        speckle_layout.addWidget(self._segment_quality_panel, stretch=1)
+        center_layout.addWidget(self._speckle_metrics_panel, stretch=0)
         content_layout.addWidget(center, stretch=1)
 
         self._tool_panel = ToolPanel()
@@ -789,6 +803,8 @@ class MainWindow(QMainWindow):
         self._viewer.clear_doppler_calibration_display()
         self._viewer.clear_doppler_measurements()
         self._viewer.clear_speckle_overlay()
+        self._strain_curve_widget.clear()
+        self._segment_quality_panel.update_results({}, {})
         self._viewer.reset_dist_caliper_serial()
         self._controller.reset_measurements_and_calibration()
         if self._viewer._current_frame is None:
@@ -846,10 +862,33 @@ class MainWindow(QMainWindow):
         if contour is None:
             self._show_status("Сначала нарисуйте контур LV")
             return
+        current_idx = self._get_current_frame_index() or 0
+        cache = self._controller._frame_cache
+        n_frames = cache._total_frames if cache else 0
+        settings = SpeckleSettingsDialog(
+            self,
+            current_frame=current_idx,
+            manual_ed=self._manual_ed_frame,
+            manual_es=self._manual_es_frame,
+            n_frames=n_frames,
+        )
+        if settings.exec() != QDialog.DialogCode.Accepted:
+            self._show_status("speckle tracking: отменено")
+            return
+        config = settings.get_config()
+        config_preset = settings.selected_preset_name()
+        self._manual_ed_frame = settings.manual_ed
+        self._manual_es_frame = settings.manual_es
         self._viewer.clear_speckle_overlay()
-        self._show_status("speckle tracking: вычисление...")
+        if self._manual_ed_frame is not None and self._manual_es_frame is not None:
+            phase_hint = f"ED={self._manual_ed_frame}, ES={self._manual_es_frame}"
+        else:
+            phase_hint = "ED/ES: авто"
+        self._show_status(f"speckle tracking: вычисление… ({phase_hint})")
         self._controller.run_speckle_tracking(
             contour,
+            config=config,
+            config_preset=config_preset,
             manual_ed=self._manual_ed_frame,
             manual_es=self._manual_es_frame,
         )
@@ -860,8 +899,35 @@ class MainWindow(QMainWindow):
         if not isinstance(result, StrainResult):
             return
         gls = result.gls
-        self._show_status(f"GLS: {gls:.1f}%  |  HR: {result.heart_rate_bpm:.0f} bpm")
+        self._segment_quality_panel.update_results(
+            result.segment_strain,
+            result.segment_quality,
+        )
+        self._strain_curve_widget.set_strain_data(
+            result.longitudinal,
+            result.radial,
+            ed_index=result.ed_index,
+            es_index=result.es_index,
+            window_start=result.tracking_window_start,
+            window_end=result.tracking_window_end,
+        )
+        self._strain_curve_widget.set_gls_value(gls)
+        quality_pct = result.tracking_quality_mean * 100.0
+        drift = "ON" if result.drift_compensation_applied else "OFF"
+        preset_name = self._format_speckle_preset_name(result.config_preset)
+        self._show_status(
+            f"GLS: {gls:.1f}% | Quality: {quality_pct:.0f}% | Drift comp: {drift} | Preset: {preset_name}"
+        )
         self._viewer.show_speckle_result(result)
+
+    @staticmethod
+    def _format_speckle_preset_name(preset_name: str) -> str:
+        mapping = {
+            "echo_pac": "EchoPAC",
+            "tomtec": "TomTec",
+            "debug": "Debug",
+        }
+        return mapping.get(preset_name, preset_name)
 
     def _on_doppler_calibration_requested(self) -> None:
         if self._viewer._current_frame is None:
@@ -1223,14 +1289,6 @@ class MainWindow(QMainWindow):
             return True
         if event.key() == Qt.Key.Key_Tab:
             self._viewer.cycle_caliper_label()
-            event.accept()
-            return True
-        if event.key() == Qt.Key.Key_E and event.modifiers() == Qt.KeyboardModifier.NoModifier:
-            self._mark_current_frame_as_ed()
-            event.accept()
-            return True
-        if event.key() == Qt.Key.Key_D and event.modifiers() == Qt.KeyboardModifier.NoModifier:
-            self._mark_current_frame_as_es()
             event.accept()
             return True
         if event.key() == Qt.Key.Key_C and event.modifiers() == Qt.KeyboardModifier.NoModifier:

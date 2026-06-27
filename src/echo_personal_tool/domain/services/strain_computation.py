@@ -4,123 +4,76 @@ from __future__ import annotations
 
 import numpy as np
 
-from echo_personal_tool.domain.models.speckle import (
-    TrackingKernel,
-    TrackingResult,
-)
+
+def contour_arc_length(points: np.ndarray, pixel_spacing: tuple[float, float]) -> float:
+    """Total arc length of a contour in physical units (mm)."""
+    avg = np.mean(pixel_spacing)
+    diffs = np.diff(points, axis=0)
+    return float(np.sum(np.linalg.norm(diffs, axis=1)) * avg)
 
 
-def compute_longitudinal_strain(
-    tracking_results: list[TrackingResult],
-    kernels: list[TrackingKernel],
+def compute_longitudinal_strain_gl(
+    positions: np.ndarray,
+    ed_index: int,
     pixel_spacing: tuple[float, float],
+    endo_indices: list[int],
 ) -> np.ndarray:
-    """Compute longitudinal strain curve over time.
+    """Green-Lagrange longitudinal strain from smoothed kernel positions.
 
-    Measures deformation along the endocardial contour using inter-node distances.
-
-    Args:
-        tracking_results: per-frame tracking results (N-1 items).
-        kernels: initial kernel positions.
-        pixel_spacing: (row_spacing, column_spacing) in mm/pixel.
-
-    Returns:
-        (num_frames,) array of cumulative longitudinal strain in percent.
-        Frame 0 is reference (0%), subsequent frames show deformation.
+    E = 0.5 * ((L/L0)^2 - 1) * 100
     """
-    n_frames = len(tracking_results) + 1
-    endo_kernels = [k for k in kernels if k.layer == "endo"]
-    if len(endo_kernels) < 2:
-        return np.zeros(n_frames)
-
-    n_kernels = len(endo_kernels)
-    avg_spacing = np.mean(pixel_spacing)
-
-    initial_positions = np.array([k.center for k in endo_kernels])
-    all_positions = np.zeros((n_frames, n_kernels, 2))
-    all_positions[0] = initial_positions
-
-    for i, result in enumerate(tracking_results):
-        endo_mask = [j for j, k in enumerate(kernels) if k.layer == "endo"]
-        tracked = result.kernel_positions[endo_mask]
-        if len(tracked) == n_kernels:
-            all_positions[i + 1] = tracked
-        else:
-            all_positions[i + 1] = all_positions[i] + result.displacements[:n_kernels]
-
-    initial_length = 0.0
-    for i in range(n_kernels - 1):
-        seg = initial_positions[i + 1] - initial_positions[i]
-        initial_length += np.linalg.norm(seg) * avg_spacing
-
+    n_frames = positions.shape[0]
     strain = np.zeros(n_frames)
-    for t in range(1, n_frames):
-        current_length = 0.0
-        for i in range(n_kernels - 1):
-            seg = all_positions[t, i + 1] - all_positions[t, i]
-            current_length += np.linalg.norm(seg) * avg_spacing
-        if initial_length > 1e-6:
-            strain[t] = (current_length - initial_length) / initial_length * 100.0
-
+    ed_pts = positions[ed_index, endo_indices, :]
+    l0 = contour_arc_length(ed_pts, pixel_spacing)
+    if l0 < 1e-6:
+        return strain
+    for t in range(n_frames):
+        lt = contour_arc_length(positions[t, endo_indices, :], pixel_spacing)
+        ratio = lt / l0
+        strain[t] = 0.5 * (ratio**2 - 1.0) * 100.0
     return strain
 
 
-def compute_radial_strain(
-    tracking_results: list[TrackingResult],
-    kernels: list[TrackingKernel],
-    pixel_spacing: tuple[float, float],
+def apply_drift_compensation(
+    strain: np.ndarray, ed_index: int, end_index: int
 ) -> np.ndarray:
-    """Compute radial (circumferential) strain from tracking.
+    """Linear detrend so strain[ed_index]=0 and strain[end_index]=0."""
+    out = strain.copy()
+    if len(out) < 2 or ed_index == end_index:
+        return out
+    end_idx = int(np.clip(end_index, 0, len(out) - 1))
+    drift_slope = (out[end_idx] - out[ed_index]) / max(end_idx - ed_index, 1)
+    for t in range(len(out)):
+        out[t] -= drift_slope * (t - ed_index)
+    out[ed_index] = 0.0
+    return out
 
-    Measures wall thickening by comparing endo-epi distances.
 
-    Args:
-        tracking_results: per-frame tracking results.
-        kernels: initial kernel positions with endo/epi layers.
-        pixel_spacing: (row_spacing, column_spacing) in mm/pixel.
-
-    Returns:
-        (num_frames,) array of radial strain in percent.
-    """
-    n_frames = len(tracking_results) + 1
+def compute_radial_strain_gl(
+    positions: np.ndarray,
+    ed_index: int,
+    pixel_spacing: tuple[float, float],
+    endo_indices: list[int],
+    epi_indices: list[int],
+) -> np.ndarray:
+    """Green-Lagrange radial strain from mean wall thickness."""
+    n_frames = positions.shape[0]
+    strain = np.zeros(n_frames)
     avg_spacing = np.mean(pixel_spacing)
 
-    endo_kernels = [k for k in kernels if k.layer == "endo"]
-    epi_kernels = [k for k in kernels if k.layer == "epi"]
-    n_pairs = min(len(endo_kernels), len(epi_kernels))
+    endo_ed = positions[ed_index, endo_indices, :]
+    epi_ed = positions[ed_index, epi_indices, :]
+    t0 = float(np.mean(np.linalg.norm(epi_ed - endo_ed, axis=1)) * avg_spacing)
+    if t0 < 1e-6:
+        return strain
 
-    if n_pairs < 1:
-        return np.zeros(n_frames)
-
-    endo_init = np.array([k.center for k in endo_kernels[:n_pairs]])
-    epi_init = np.array([k.center for k in epi_kernels[:n_pairs]])
-
-    initial_thickness = np.mean(np.linalg.norm(epi_init - endo_init, axis=1)) * avg_spacing
-
-    endo_cumulative = np.zeros_like(endo_init)
-    epi_cumulative = np.zeros_like(epi_init)
-
-    strain = np.zeros(n_frames)
-    for t in range(1, n_frames):
-        result = tracking_results[t - 1]
-        endo_indices = [i for i, k in enumerate(kernels) if k.layer == "endo"][:n_pairs]
-        epi_indices = [i for i, k in enumerate(kernels) if k.layer == "epi"][:n_pairs]
-
-        if len(endo_indices) == n_pairs:
-            endo_pos = result.kernel_positions[endo_indices]
-        else:
-            endo_cumulative += result.displacements[:n_pairs]
-            endo_pos = endo_init + endo_cumulative
-        if len(epi_indices) == n_pairs:
-            epi_pos = result.kernel_positions[epi_indices]
-        else:
-            epi_cumulative += result.displacements[:n_pairs]
-            epi_pos = epi_init + epi_cumulative
-
-        current_thickness = np.mean(np.linalg.norm(epi_pos - endo_pos, axis=1)) * avg_spacing
-        if initial_thickness > 1e-6:
-            strain[t] = (current_thickness - initial_thickness) / initial_thickness * 100.0
-
+    for t in range(n_frames):
+        endo_t = positions[t, endo_indices, :]
+        epi_t = positions[t, epi_indices, :]
+        tt = float(np.mean(np.linalg.norm(epi_t - endo_t, axis=1)) * avg_spacing)
+        ratio = tt / t0
+        strain[t] = 0.5 * (ratio**2 - 1.0) * 100.0
     return strain
 
 
@@ -168,7 +121,7 @@ def compute_strain_rate(
         times = np.full(n, 33.3)
 
     for i in range(1, n):
-        dt_s = times[i] / 1000.0
+        dt_s = (times[i] - times[i - 1]) / 1000.0
         if dt_s > 1e-6:
             rate[i] = (strain_curve[i] - strain_curve[i - 1]) / dt_s
 
