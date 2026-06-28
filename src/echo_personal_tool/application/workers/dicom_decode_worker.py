@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 
-import numpy as np
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 from echo_personal_tool.infrastructure.dicom_session import get_thread_dicom_session
+
+logger = logging.getLogger(__name__)
 
 
 class DicomDecodeSignals(QObject):
@@ -18,7 +21,7 @@ class DicomDecodeSignals(QObject):
 
 
 class DicomDecodeWorker(QRunnable):
-    """Decode DICOM progressively: first frame immediately, then all frames."""
+    """Decode DICOM progressively: first frame immediately, then all frames in parallel."""
 
     def __init__(
         self,
@@ -34,25 +37,44 @@ class DicomDecodeWorker(QRunnable):
 
     @Slot()
     def run(self) -> None:
+        t0 = time.perf_counter()
         try:
             session = get_thread_dicom_session()
             session.open(self._path)
 
-            # Emit first frame immediately for fast display
+            t_meta = time.perf_counter()
+            logger.debug(
+                "DICOM metadata parsed in %.1f ms", (t_meta - t0) * 1000
+            )
+
             first_frame = session.decode_first_frame()
+            t_first = time.perf_counter()
+            logger.debug(
+                "First frame decoded in %.1f ms", (t_first - t_meta) * 1000
+            )
+
             self.signals.first_frame_ready.emit(
                 self._request_id,
                 self._path,
                 first_frame,
             )
-            self.signals.progress.emit(1, 1)
+            total = session.frame_count
+            self.signals.progress.emit(1, total)
 
-            # Decode remaining frames (reuses cached pixel_array)
             frames = session.decode_all_frames()
+            t_all = time.perf_counter()
+            logger.debug(
+                "All %d frames decoded in %.1f ms",
+                total,
+                (t_all - t_first) * 1000,
+            )
+
+            self.signals.progress.emit(total, total)
             self.signals.finished.emit(
                 self._request_id,
                 self._path,
                 frames,
             )
         except Exception as exc:  # noqa: BLE001
+            logger.exception("DICOM decode failed for %s", self._path)
             self.signals.failed.emit(self._request_id, str(exc))
