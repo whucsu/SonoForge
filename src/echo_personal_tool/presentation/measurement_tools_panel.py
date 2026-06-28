@@ -84,13 +84,13 @@ class MeasurementToolsPanel(QWidget):
         return col
 
     def _build_manual_group(self) -> QGroupBox:
-        group = QGroupBox("Manual")
+        group = QGroupBox("Ручной")
         row = QHBoxLayout(group)
         row.addLayout(
             self._build_view_column(
                 "4C",
-                "Diastole",
-                "Systole",
+                "КДР",
+                "КСР",
                 registry=self._manual_buttons,
                 signal=self.manual_simpson_requested,
             )
@@ -98,8 +98,8 @@ class MeasurementToolsPanel(QWidget):
         row.addLayout(
             self._build_view_column(
                 "2C",
-                "Diastole",
-                "Systole",
+                "КДР",
+                "КСР",
                 registry=self._manual_buttons,
                 signal=self.manual_simpson_requested,
             )
@@ -112,8 +112,8 @@ class MeasurementToolsPanel(QWidget):
         row.addLayout(
             self._build_view_column(
                 "4C",
-                "EDV Auto",
-                "ESV Auto",
+                "КДО авто",
+                "КСО авто",
                 registry=self._mbs_buttons,
                 signal=self.mbs_simpson_requested,
             )
@@ -121,8 +121,8 @@ class MeasurementToolsPanel(QWidget):
         row.addLayout(
             self._build_view_column(
                 "2C",
-                "EDV Auto",
-                "ESV Auto",
+                "КДО авто",
+                "КСО авто",
                 registry=self._mbs_buttons,
                 signal=self.mbs_simpson_requested,
             )
@@ -130,13 +130,13 @@ class MeasurementToolsPanel(QWidget):
         return group
 
     def _build_setup_group(self) -> QGroupBox:
-        group = QGroupBox("Setup")
+        group = QGroupBox("Настройка")
         row = QHBoxLayout(group)
         btn_cal = QPushButton("Калибровка")
         btn_cal.setToolTip("Линия по шкале глубины → Enter для подтверждения (K — горячая клавиша)")
         btn_cal.clicked.connect(self.calibration_requested.emit)
         row.addWidget(btn_cal)
-        btn_caliper = QPushButton("Caliper")
+        btn_caliper = QPushButton("Калипер")
         btn_caliper.setToolTip(
             "Линейный калипер: 1-й клик — начало, 2-й — конец (L — горячая клавиша)"
         )
@@ -172,13 +172,13 @@ class MeasurementToolsPanel(QWidget):
         )
 
     def _build_lv2d_group(self) -> QGroupBox:
-        group = QGroupBox("LV-2D")
+        group = QGroupBox("ЛЖ-2D")
         row = QHBoxLayout(group)
-        btn_all_ed = QPushButton("All Diastole")
+        btn_all_ed = QPushButton("МЖП-КДР-ЗСЛЖ (2D)")
         btn_all_ed.setToolTip("IVSd → LVEDD → LVPWd (МЖП, КДР, ЗСЛЖ)")
         btn_all_ed.clicked.connect(self.lv2d_all_diastole_requested.emit)
         row.addWidget(btn_all_ed)
-        btn_esd = QPushButton("ESD Systole")
+        btn_esd = QPushButton("КСР (2D)")
         btn_esd.setToolTip("LVESD (КСР)")
         btn_esd.clicked.connect(self.lv2d_es_requested.emit)
         row.addWidget(btn_esd)
@@ -191,11 +191,11 @@ class MeasurementToolsPanel(QWidget):
         btn_ap.setToolTip("Линейный калипер — переднезадний размер ЛП")
         btn_ap.clicked.connect(self.la_diameter_requested.emit)
         row.addWidget(btn_ap)
-        btn_lav_4c = QPushButton("LAV 4C")
+        btn_lav_4c = QPushButton("ОЛП 4C")
         btn_lav_4c.setToolTip("Объём ЛП: ручной контур Simpson 4C (3 клика)")
         btn_lav_4c.clicked.connect(self.lav_4c_requested.emit)
         row.addWidget(btn_lav_4c)
-        btn_lav_bi = QPushButton("LAV Bi")
+        btn_lav_bi = QPushButton("ОЛП 2C")
         btn_lav_bi.setToolTip("Объём ЛП: контуры Simpson 4C + 2C")
         btn_lav_bi.clicked.connect(self.lav_bi_requested.emit)
         row.addWidget(btn_lav_bi)
@@ -212,7 +212,7 @@ class MeasurementToolsPanel(QWidget):
         btn_area.setToolTip("Площадь ПП: ручной контур Simpson 4C (3 клика)")
         btn_area.clicked.connect(self.ra_area_requested.emit)
         row.addWidget(btn_area)
-        btn_rav = QPushButton("RAV")
+        btn_rav = QPushButton("ОПП")
         btn_rav.setToolTip("Объём ПП: ручной контур Simpson 4C (3 клика)")
         btn_rav.clicked.connect(self.rav_volume_requested.emit)
         row.addWidget(btn_rav)
@@ -224,7 +224,7 @@ class MeasurementToolsPanel(QWidget):
         btn_tapse = QPushButton("TAPSE")
         btn_tapse.clicked.connect(self.rv_tapse_requested.emit)
         row.addWidget(btn_tapse)
-        btn_basal = QPushButton("ПЖ Base")
+        btn_basal = QPushButton("ПЖ основание")
         btn_basal.clicked.connect(self.rv_basal_requested.emit)
         row.addWidget(btn_basal)
         btn_s_prime = QPushButton("s'")

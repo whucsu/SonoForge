@@ -50,7 +50,7 @@ def test_manual_ed_shows_panel_and_overlay_without_pixel_spacing(qtbot) -> None:
 
     panel_text = window._viewer.results_overlay_text()
     overlay = "\n".join(window._viewer._frame_overlay_lines)
-    assert "EDV 4C" in panel_text
+    assert "КДО ЛЖ 4C" in panel_text
     assert "px³" in panel_text
     assert "Длина:" in overlay
     assert "px" in overlay
@@ -83,7 +83,7 @@ def test_mbs_ed_updates_after_node_drag(qtbot) -> None:
     after = window._viewer.results_overlay_text()
     overlay = "\n".join(window._viewer._frame_overlay_lines)
 
-    assert "EDV 4C" in before
+    assert "КДО ЛЖ 4C" in before
     assert after != before
     assert "mm" in overlay
     assert "mL" in overlay

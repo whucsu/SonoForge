@@ -24,7 +24,7 @@ def test_overlay_includes_la_simpson_lav() -> None:
         ),
     )
     text = format_results_overlay(snapshot)
-    assert "LAV 4C: 42.5 mL" in text
+    assert "ОЛП 4C: 42.5 mL" in text
     assert "S ЛП: 18.20 cm²" in text
 
 
@@ -38,5 +38,5 @@ def test_overlay_includes_ra_simpson_rav() -> None:
         ),
     )
     text = format_results_overlay(snapshot)
-    assert "RAV 4C: 35.0 mL" in text
+    assert "ОПП 4C: 35.0 mL" in text
     assert "S ПП: 15.00 cm²" in text

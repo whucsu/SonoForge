@@ -171,10 +171,10 @@ class MeasurementPanel(QWidget):
             sections.append(indexed_lines)
 
         if not sections:
-            self._summary_label.setText("Measurements\n\n  No measurements yet")
+            self._summary_label.setText("Измерения\n\n  Измерения ещё не выполнены")
             return
 
-        lines = ["Measurements"]
+        lines = ["Измерения"]
         for index, section in enumerate(sections):
             if index > 0:
                 lines.append("")
@@ -204,20 +204,20 @@ class MeasurementPanel(QWidget):
             self._optional_line("VTI", doppler.vti_cm, " cm"),
             self._optional_line("Vpeak", doppler.vpeak_cm_s, " cm/s"),
             self._optional_line("Vmean", doppler.vmean_cm_s, " cm/s"),
-            self._optional_line("PGpeak", doppler.pgpeak_mmhg, " mmHg"),
-            self._optional_line("PGmean", doppler.pgmean_mmhg, " mmHg"),
+            self._optional_line("РГпик", doppler.pgpeak_mmhg, " mmHg"),
+            self._optional_line("РГср", doppler.pgmean_mmhg, " mmHg"),
         ]
         lines = [line for line in field_lines if line is not None]
         if not lines:
             return []
-        return ["Doppler", *lines]
+        return ["Допплер", *lines]
 
     def _format_lvef_section(self, snapshot: MeasurementSnapshot | None) -> list[str]:
         lvef = snapshot.lvef if snapshot is not None else None
         if lvef is None:
             return []
 
-        lines = ["Объёмы ЛЖ (Симпсон)"]
+        lines = ["Объёмы ЛЖ (Simpson)"]
         if snapshot is not None and not snapshot.spacing_calibrated:
             lines.append("  (нет PixelSpacing — длина в px, объём в px³)")
 
@@ -255,10 +255,10 @@ class MeasurementPanel(QWidget):
             return []
 
         return [
-            "LV volumes (Teichholz)",
-            self._line("EDV", teichholz.edv_ml, " mL"),
-            self._line("ESV", teichholz.esv_ml, " mL"),
-            self._line("LVEF", teichholz.lvef_percent, " %"),
+            "Объёмы ЛЖ (Teichholz)",
+            self._line("КДО ЛЖ", teichholz.edv_ml, " mL"),
+            self._line("КСО ЛЖ", teichholz.esv_ml, " mL"),
+            self._line("ФВ ЛЖ", teichholz.lvef_percent, " %"),
         ]
 
     def _format_la_section(self, snapshot: MeasurementSnapshot | None) -> list[str]:
@@ -268,17 +268,17 @@ class MeasurementPanel(QWidget):
 
         volume_suffix = " mL" if snapshot is None or snapshot.spacing_calibrated else " px³"
         area_suffix = " cm²" if snapshot is None or snapshot.spacing_calibrated else " px²"
-        lines = ["Left atrium"]
+        lines = ["Левое предсердие"]
         if snapshot is not None and not snapshot.spacing_calibrated:
             lines.append("  (нет PixelSpacing — объём/площадь в px)")
 
         lav_4c = self._view_es_volume(la.a4c)
-        lav_4c_line = self._optional_line("LAV 4C", lav_4c, volume_suffix)
+        lav_4c_line = self._optional_line("ОЛП 4C", lav_4c, volume_suffix)
         if lav_4c_line:
             lines.append(lav_4c_line)
 
         lav_bi = self._biplane_es_volume(la.a4c, la.a2c)
-        lav_bi_line = self._optional_line("LAV Bi", lav_bi, volume_suffix)
+        lav_bi_line = self._optional_line("ОЛП 2C", lav_bi, volume_suffix)
         if lav_bi_line:
             lines.append(lav_bi_line)
 
@@ -295,7 +295,7 @@ class MeasurementPanel(QWidget):
 
         volume_suffix = " mL" if snapshot is None or snapshot.spacing_calibrated else " px³"
         area_suffix = " cm²" if snapshot is None or snapshot.spacing_calibrated else " px²"
-        lines = ["Right atrium"]
+        lines = ["Правое предсердие"]
         if snapshot is not None and not snapshot.spacing_calibrated:
             lines.append("  (нет PixelSpacing — площадь/объём в px)")
 
@@ -304,7 +304,7 @@ class MeasurementPanel(QWidget):
             lines.append(area_line)
 
         rav = self._view_es_volume(ra.a4c) or ra.max_volume_ml
-        rav_line = self._optional_line("RAV", rav, volume_suffix)
+        rav_line = self._optional_line("ОПП", rav, volume_suffix)
         if rav_line:
             lines.append(rav_line)
 
@@ -313,23 +313,23 @@ class MeasurementPanel(QWidget):
     def _format_rv_section(self, snapshot: MeasurementSnapshot | None) -> list[str]:
         if snapshot is None:
             return []
-        lines = ["Right ventricle"]
+        lines = ["Правый желудочек"]
         if snapshot.rv_fac_percent is not None:
             lines.append(self._line("FAC", snapshot.rv_fac_percent, " %"))
         rv = snapshot.rv_simpson
         if rv and rv.max_volume_ml is not None:
-            lines.append(self._line("RV volume", rv.max_volume_ml, " mL"))
+            lines.append(self._line("Объём ПЖ", rv.max_volume_ml, " mL"))
         return lines if len(lines) > 1 else []
 
     def _format_lvm_section(self, snapshot: MeasurementSnapshot | None) -> list[str]:
         if snapshot is None or snapshot.lvm_g is None:
             return []
-        return ["LV mass", self._line("LVM", snapshot.lvm_g, " g")]
+        return ["Масса ЛЖ", self._line("ММЛЖ", snapshot.lvm_g, " g")]
 
     def _format_diastology_section(self, snapshot: MeasurementSnapshot | None) -> list[str]:
         if snapshot is None or not snapshot.diastology_grade:
             return []
-        return ["Diastolic function", f"  {snapshot.diastology_grade}"]
+        return ["Диастолическая функция", f"  {snapshot.diastology_grade}"]
 
     @staticmethod
     def _view_es_volume(metrics: LvViewMetrics | None) -> float | None:
@@ -361,7 +361,7 @@ class MeasurementPanel(QWidget):
             return []
 
         return [
-            "Linear geometry",
+            "Линейные размеры",
             *(f"  {measurement.display_text()}" for measurement in measurements),
         ]
 
@@ -370,17 +370,17 @@ class MeasurementPanel(QWidget):
         if indexed is None:
             return []
 
-        lines = ["Indexed (BSA)"]
-        lines.append(self._line("BSA", indexed.bsa_m2, " m²", decimals=2))
+        lines = ["Индексиров. (ППТ)"]
+        lines.append(self._line("ППТ", indexed.bsa_m2, " m²", decimals=2))
 
         volume_fields = (
-            ("КДО idx (Simpson)", indexed.simpson_edvi_ml_m2),
-            ("КСО idx (Simpson)", indexed.simpson_esvi_ml_m2),
-            ("EDVi (Teichholz)", indexed.teichholz_edvi_ml_m2),
-            ("ESVi (Teichholz)", indexed.teichholz_esvi_ml_m2),
-            ("LAV 4C idx", indexed.lav_4c_index_ml_m2),
-            ("LAV Bi idx", indexed.lav_bi_index_ml_m2),
-            ("RAV idx", indexed.rav_index_ml_m2),
+            ("иКДО (Simpson)", indexed.simpson_edvi_ml_m2),
+            ("иКСО (Simpson)", indexed.simpson_esvi_ml_m2),
+            ("иКДО (Teichholz)", indexed.teichholz_edvi_ml_m2),
+            ("иКСО (Teichholz)", indexed.teichholz_esvi_ml_m2),
+            ("иОЛП 4C", indexed.lav_4c_index_ml_m2),
+            ("иОЛП 2C", indexed.lav_bi_index_ml_m2),
+            ("иОПП", indexed.rav_index_ml_m2),
         )
         for label, value in volume_fields:
             line = self._optional_line(label, value, " mL/m²")
@@ -388,7 +388,7 @@ class MeasurementPanel(QWidget):
                 lines.append(line)
 
         for label, value in indexed.linear_index_mm_m2:
-            line = self._optional_line(f"{label} idx", value, " mm/m²")
+            line = self._optional_line(f"{label} инд.", value, " mm/m²")
             if line:
                 lines.append(line)
 

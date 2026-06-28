@@ -142,7 +142,7 @@ def test_main_window_panel_updates_after_click_click_caliper(qtbot) -> None:
     _place_caliper(window._viewer, 10.0, 50.0)
 
     text = window._viewer.results_overlay_text()
-    assert "LVEDD: 20.0 mm" in text
+    assert "КДР ЛЖ: 20.0 mm" in text
 
 
 @pytest.fixture(scope="session", autouse=True)

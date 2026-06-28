@@ -981,20 +981,20 @@ class MainWindow(QMainWindow):
         self._tool_panel.measure.clear_action_highlight()
         if self._viewer.start_linear_caliper_sequence(("IVSd", "LVEDD", "LVPWd")):
             self._viewer.clear_frame_overlay()
-            self._viewer.append_frame_overlay("LV diastole: IVSd → LVEDD → LVPWd")
-            self._show_status("All Diastole: IVSd (2 клика) → LVEDD (2 клика) → LVPWd (2 клика)")
+            self._viewer.append_frame_overlay("Диастола ЛЖ: МЖП → КДР ЛЖ → ЗСЛЖ")
+            self._show_status("МЖП (2 клика) → КДР ЛЖ (2 клика) → ЗСЛЖ (2 клика)")
         else:
-            self._show_status("Load a frame first")
+            self._show_status("Загрузите кадр")
 
     def _on_linear_caliper_sequence_completed(self) -> None:
         self._tool_panel.measure.highlight_action(MeasurementAction.LV2D_ES)
-        self._show_status("All Diastole завершён — нажмите ES Diameter (LVESD)")
+        self._show_status("Диастола ЛЖ завершена — нажмите КСР (2D)")
 
     def _on_lv2d_es(self) -> None:
         if self._viewer.start_linear_caliper_for("LVESD"):
-            self._show_status("LV systole: place LVESD caliper")
+            self._show_status("Систола ЛЖ: разместите КСР ЛЖ")
         else:
-            self._show_status("Load a frame first")
+            self._show_status("Загрузите кадр")
 
     def _has_chamber_contour(self, chamber: str, view: str, phase: str) -> bool:
         for contour in self._controller.state_manager.snapshot.contours:

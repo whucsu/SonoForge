@@ -30,7 +30,7 @@ def test_shows_lvmi_when_out_of_norm() -> None:
     )
     lines: list[str] = []
     append_indexed_when_abnormal(lines, snapshot)
-    assert any("LVMI" in line for line in lines)
+    assert any("ИММЛЖ" in line for line in lines)
 
 
 def test_shows_edvi_when_lvedd_abnormal() -> None:
@@ -51,7 +51,7 @@ def test_shows_edvi_when_lvedd_abnormal() -> None:
         indexed=indexed,
     )
     text = format_results_overlay(snapshot)
-    assert "EDVi 4C" in text
+    assert "иКДО 4C" in text
 
 
 def test_shows_aorta_index_when_annulus_large() -> None:
@@ -68,14 +68,14 @@ def test_shows_aorta_index_when_annulus_large() -> None:
     )
     lines: list[str] = []
     append_indexed_when_abnormal(lines, snapshot)
-    assert any("Annulus idx" in line for line in lines)
+    assert any("Annulus инд." in line for line in lines)
 
 
 def test_no_indexed_lines_without_height_weight() -> None:
     snapshot = MeasurementSnapshot(lvm_g=250.0, indexed=None)
     text = format_results_overlay(snapshot)
-    assert "LVMI" not in text
-    assert "BSA" not in text
+    assert "ИММЛЖ" not in text
+    assert "ППТ" not in text
 
 
 def test_overlay_shows_lavi_ravi_always_with_bsa() -> None:
@@ -102,9 +102,9 @@ def test_overlay_shows_lavi_ravi_always_with_bsa() -> None:
     )
     lines: list[str] = []
     append_indexed_for_overlay(lines, snapshot)
-    assert any("LAVi" in line for line in lines)
-    assert any("RAVi" in line for line in lines)
-    assert not any("LVMI" in line for line in lines)
+    assert any("иОЛП" in line for line in lines)
+    assert any("иОПП" in line for line in lines)
+    assert not any("ИММЛЖ" in line for line in lines)
 
 
 def test_overlay_lvmi_still_abnormal_only() -> None:
@@ -115,4 +115,4 @@ def test_overlay_lvmi_still_abnormal_only() -> None:
         indexed=IndexedMeasurements(bsa_m2=2.0, lvmi_g_m2=60.0),
     )
     text = format_results_overlay(snapshot)
-    assert "LVMI" not in text
+    assert "ИММЛЖ" not in text

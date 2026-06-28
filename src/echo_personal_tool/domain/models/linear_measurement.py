@@ -5,6 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import cos, radians, sin, sqrt
 
+_DISPLAY_LABEL_MAP: dict[str, str] = {
+    "IVSd": "МЖП",
+    "IVSD": "МЖП",
+    "LVEDD": "КДР ЛЖ",
+    "LVPWd": "ЗСЛЖ",
+    "LVPWD": "ЗСЛЖ",
+    "LVESD": "КСР ЛЖ",
+    "LA": "ЛП ПЗР",
+}
+
 
 @dataclass(frozen=True)
 class LinearMeasurement:
@@ -18,9 +28,10 @@ class LinearMeasurement:
     end: tuple[float, float] | None = None
 
     def display_text(self, *, length_unit: str = "mm") -> str:
+        display_label = _DISPLAY_LABEL_MAP.get(self.label, self.label)
         if self.millimeter_length is None:
-            return f"{self.label}: {self.pixel_length:.1f} px"
-        return f"{self.label}: {format_length_mm(self.millimeter_length, length_unit)}"
+            return f"{display_label}: {self.pixel_length:.1f} px"
+        return f"{display_label}: {format_length_mm(self.millimeter_length, length_unit)}"
 
 
 def format_length_mm(millimeters: float, unit: str) -> str:

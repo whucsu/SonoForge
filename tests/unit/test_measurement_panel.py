@@ -61,20 +61,20 @@ def test_measurement_panel_displays_computed_snapshot(qtbot) -> None:
     panel.set_measurement_snapshot(snapshot)
 
     text = panel._summary_label.text()
-    assert "Doppler" in text
+    assert "Допплер" in text
     assert "E: 85.0 cm/s" in text
     assert "E/A: 1.40" in text
-    assert "PGpeak: 25.0 mmHg" in text
-    assert "Объёмы ЛЖ (Симпсон)" in text
+    assert "РГпик: 25.0 mmHg" in text
+    assert "Объёмы ЛЖ (Simpson)" in text
     assert "КДО ЛЖ 4C" in text
     assert "КСО ЛЖ 4C" in text
     assert "ФВ ЛЖ" in text
     assert "62.5" in text
     assert "Метод: simpson_monoplan" in text
-    assert "LV volumes (Teichholz)" in text
-    assert "Linear geometry" in text
-    assert "LVEDD: 50.0 mm" in text
-    assert "100.0 px" not in text
+    assert "Объёмы ЛЖ (Teichholz)" in text
+    assert "Линейные размеры" in text
+    assert "КДР ЛЖ: 50.0 mm" in text
+    assert "КСР ЛЖ: 40.0 mm" in text
 
 
 def test_measurement_panel_hides_empty_sections(qtbot) -> None:
@@ -87,7 +87,7 @@ def test_measurement_panel_hides_empty_sections(qtbot) -> None:
     assert "—" not in text
     assert "Doppler" not in text
     assert "Объёмы ЛЖ" not in text
-    assert "No measurements yet" in text
+    assert "Измерения ещё не выполнены" in text
 
 
 def test_measurement_panel_shows_partial_doppler_fields_only(qtbot) -> None:
@@ -122,7 +122,7 @@ def test_measurement_panel_updates_from_viewer_state(qtbot) -> None:
         )
     )
 
-    assert panel._summary_label.text().startswith("Measurements")
+    assert panel._summary_label.text().startswith("Измерения")
     assert "E: 72.0 cm/s" in panel._summary_label.text()
 
 
@@ -139,7 +139,7 @@ def test_measurement_panel_shows_russian_lv_metrics_partial_ed(qtbot) -> None:
     )
 
     text = panel._summary_label.text()
-    assert "Объёмы ЛЖ (Симпсон)" in text
+    assert "Объёмы ЛЖ (Simpson)" in text
     assert "Длина ЛЖ 4C" in text
     assert "КДО ЛЖ 4C" in text
     assert "КСО ЛЖ 4C" not in text
@@ -204,8 +204,8 @@ def test_measurement_panel_shows_la_area_after_lav_lines(qtbot) -> None:
     )
 
     text = panel._summary_label.text()
-    lav_4c_pos = text.index("LAV 4C")
-    lav_bi_pos = text.index("LAV Bi")
+    lav_4c_pos = text.index("ОЛП 4C")
+    lav_bi_pos = text.index("ОЛП 2C")
     la_area_pos = text.index("S ЛП")
     assert lav_4c_pos < lav_bi_pos < la_area_pos
     assert "S ЛП: 18.5 cm²" in text
@@ -234,7 +234,7 @@ def test_measurement_panel_shows_indexed_section_when_bsa_available(qtbot) -> No
     )
 
     text = panel._summary_label.text()
-    assert "Indexed (BSA)" in text
-    assert "BSA: 1.82 m²" in text
-    assert "КДО idx (Simpson)" in text
-    assert "LVEDD idx" in text
+    assert "Индексиров. (ППТ)" in text
+    assert "ППТ: 1.82 m²" in text
+    assert "иКДО (Simpson)" in text
+    assert "LVEDD инд." in text

@@ -23,22 +23,22 @@ def test_measurement_tools_panel_has_manual_and_mbs_buttons(qtbot) -> None:
     labels = {button.text() for button in panel.findChildren(QPushButton)}
     assert labels >= {
         "Калибровка",
-        "Caliper",
+        "Калипер",
         "Сброс",
-        "Diastole",
-        "Systole",
-        "EDV Auto",
-        "ESV Auto",
-        "All Diastole",
-        "ESD Systole",
+        "КДР",
+        "КСР",
+        "КДО авто",
+        "КСО авто",
+        "МЖП-КДР-ЗСЛЖ (2D)",
+        "КСР (2D)",
         "ЛП ПЗР",
-        "LAV 4C",
-        "LAV Bi",
+        "ОЛП 4C",
+        "ОЛП 2C",
         "ПП",
         "S ПП",
-        "RAV",
+        "ОПП",
         "TAPSE",
-        "ПЖ Base",
+        "ПЖ основание",
     }
 
 

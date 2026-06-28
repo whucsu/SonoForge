@@ -29,7 +29,7 @@ def test_report_includes_deduped_linear_once() -> None:
         ),
     )
     text = format_measurement_report(snapshot)
-    assert text.count("LVEDD") == 1
+    assert text.count("КДР ЛЖ") == 1
     assert "52.0 mm" in text
 
 

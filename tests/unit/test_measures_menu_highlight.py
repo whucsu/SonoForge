@@ -23,7 +23,7 @@ def test_highlight_es_diameter_after_all_diastole_chain() -> None:
     es_button = next(
         btn
         for btn in menu.findChildren(QPushButton)
-        if btn.text() == "ES Diameter"
+        if btn.text() == "КСР (2D)"
     )
     assert menu._blink_target is es_button
     menu.clear_highlight()
@@ -34,7 +34,7 @@ def test_highlight_fac_after_ed_contour() -> None:
     menu = MeasuresMenuWidget()
     menu.highlight_action(MeasurementAction.RV_FAC)
     fac_button = next(
-        btn for btn in menu.findChildren(QPushButton) if btn.text() == "FAC"
+        btn for btn in menu.findChildren(QPushButton) if btn.text() == "FAC ПЖ"
     )
     assert menu._blink_target is fac_button
 
@@ -45,7 +45,7 @@ def test_highlight_manual_esv_after_edv() -> None:
     esv_button = next(
         btn
         for btn in menu.findChildren(QPushButton)
-        if btn.text() == "LVEF Simpson ESV"
+        if btn.text() == "ФВ ЛЖ Simpson КСО"
     )
     assert menu._blink_target is esv_button
 
@@ -53,6 +53,6 @@ def test_highlight_manual_esv_after_edv() -> None:
 def test_rv_section_has_fac_button() -> None:
     menu = MeasuresMenuWidget()
     fac_buttons = [
-        btn for btn in menu.findChildren(QPushButton) if btn.text() == "FAC"
+        btn for btn in menu.findChildren(QPushButton) if btn.text() == "FAC ПЖ"
     ]
     assert len(fac_buttons) == 1

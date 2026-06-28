@@ -14,7 +14,7 @@ def test_display_text_omits_pixels_when_calibrated() -> None:
         pixel_length=100.0,
         millimeter_length=50.0,
     )
-    assert measurement.display_text() == "LVEDD: 50.0 mm"
+    assert measurement.display_text() == "КДР ЛЖ: 50.0 mm"
 
 
 def test_display_text_shows_pixels_when_uncalibrated() -> None:
@@ -23,7 +23,7 @@ def test_display_text_shows_pixels_when_uncalibrated() -> None:
         pixel_length=100.0,
         millimeter_length=None,
     )
-    assert measurement.display_text() == "LVEDD: 100.0 px"
+    assert measurement.display_text() == "КДР ЛЖ: 100.0 px"
     assert pixel_to_mm_length(10.0, 0.0, (0.5, 0.25)) == 2.5
     assert pixel_to_mm_length(10.0, 90.0, (0.5, 0.25)) == 5.0
 

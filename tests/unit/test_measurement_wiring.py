@@ -58,9 +58,9 @@ def test_main_window_measurement_panel_updates_after_contour(qtbot) -> None:
     controller.on_contours_changed([ed, es])
 
     text = window._viewer.results_overlay_text()
-    assert "EDV 4C" in text
-    assert "ESV 4C" in text
-    assert "LVEF" in text
+    assert "КДО ЛЖ 4C" in text
+    assert "КСО ЛЖ 4C" in text
+    assert "ФВ ЛЖ" in text
 
 
 def test_main_window_measurement_panel_updates_after_linear_caliper(qtbot) -> None:
@@ -84,7 +84,7 @@ def test_main_window_measurement_panel_updates_after_linear_caliper(qtbot) -> No
     )
 
     text = window._viewer.results_overlay_text()
-    assert "LVEDD: 50.0 mm" in text
+    assert "КДР ЛЖ: 50.0 mm" in text
 
 
 @pytest.fixture(scope="session", autouse=True)
