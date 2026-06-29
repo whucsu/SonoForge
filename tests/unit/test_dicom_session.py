@@ -83,13 +83,14 @@ def test_decode_all_frames_without_open_raises() -> None:
         session.decode_all_frames()
 
 
-def test_read_frame_without_decode_raises(tmp_path: Path) -> None:
+def test_read_frame_without_decode_decodes_on_demand(tmp_path: Path) -> None:
     path = tmp_path / "single.dcm"
     write_synthetic_dicom(path)
     session = DicomSession()
     session.open(path)
-    with pytest.raises(RuntimeError, match="Frames not decoded"):
-        session.read_frame(0)
+    frame = session.read_frame(0)
+    assert frame.shape == (64, 64)
+    assert session._frames is None
     session.release()
 
 
@@ -111,3 +112,38 @@ def test_dicom_reader_read_pixels_multiframe_delegation(tmp_path: Path) -> None:
     frame = reader.read_pixels(path, frame_index=2)
     assert frame.shape == (32, 32)
     assert frame[0, 0] == 2
+
+
+def test_decode_single_frame_on_demand(tmp_path: Path) -> None:
+    """decode_single_frame() returns one frame without decoding all frames."""
+    path = tmp_path / "multi.dcm"
+    write_synthetic_multiframe_dicom(path, frame_count=10, rows=16, cols=16)
+    session = DicomSession()
+    session.open(path)
+    frame = session.decode_single_frame(3)
+    assert frame.shape == (16, 16)
+    assert frame[0, 0] == 3
+    assert session._frames is None
+    session.release()
+
+
+def test_read_frame_decodes_on_demand(tmp_path: Path) -> None:
+    """read_frame() decodes a single frame when full decode hasn't run."""
+    path = tmp_path / "multi.dcm"
+    write_synthetic_multiframe_dicom(path, frame_count=5, rows=16, cols=16)
+    session = DicomSession()
+    session.open(path)
+    frame = session.read_frame(2)
+    assert frame.shape == (16, 16)
+    assert frame[0, 0] == 2
+    session.release()
+
+
+def test_dicom_reader_read_pixels_single_frame(tmp_path: Path) -> None:
+    """DicomReaderImpl.read_pixels() decodes only the requested frame."""
+    path = tmp_path / "multi.dcm"
+    write_synthetic_multiframe_dicom(path, frame_count=5, rows=32, cols=32)
+    reader = DicomReaderImpl()
+    frame = reader.read_pixels(path, frame_index=3)
+    assert frame.shape == (32, 32)
+    assert frame[0, 0] == 3

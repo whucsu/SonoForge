@@ -25,10 +25,12 @@ class VideoDecodeWorker(QRunnable):
         path: Path,
         request_id: int,
         parent: QObject | None = None,
+        first_frame_only: bool = False,
     ) -> None:
         super().__init__()
         self._path = Path(path)
         self._request_id = request_id
+        self._first_frame_only = first_frame_only
         self.signals = VideoDecodeSignals(parent)
         self.setAutoDelete(True)
 
@@ -46,19 +48,28 @@ class VideoDecodeWorker(QRunnable):
             if total <= 0:
                 raise OSError(f"Cannot determine frame count: {self._path}")
 
-            frames: list[np.ndarray] = []
-            for i in range(total):
+            ok, bgr = cap.read()
+            if not ok or bgr is None:
+                raise OSError(f"Cannot read first frame: {self._path}")
+
+            first_frame = to_bgr_uint8(bgr)
+            self.signals.first_frame_ready.emit(
+                self._request_id,
+                self._path,
+                first_frame,
+            )
+
+            if self._first_frame_only:
+                self.signals.progress.emit(total, total)
+                return
+
+            frames: list[np.ndarray] = [first_frame]
+            for i in range(1, total):
                 ok, bgr = cap.read()
                 if not ok or bgr is None:
                     break
                 frame = to_bgr_uint8(bgr)
                 frames.append(frame)
-                if i == 0:
-                    self.signals.first_frame_ready.emit(
-                        self._request_id,
-                        self._path,
-                        frame,
-                    )
                 if i % 5 == 0 or i == total - 1:
                     self.signals.progress.emit(i + 1, total)
 

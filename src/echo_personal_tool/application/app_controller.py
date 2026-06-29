@@ -80,6 +80,7 @@ from echo_personal_tool.infrastructure.onnx_engine import (
 from echo_personal_tool.infrastructure.video_reader import VideoReader
 
 _FRAME_CACHE_WARN_BYTES = 512 * 1024 * 1024
+_BATCH_LOAD_SIZE = 10
 logger = logging.getLogger(__name__)
 
 
@@ -134,6 +135,8 @@ class AppController(QObject):
         self._thumbnail_in_flight: dict[str, ThumbnailPriority] = {}
         self._current_frame_pixels: np.ndarray | None = None
         self._leading_static_frames: dict[Path, int] = {}
+        self._batch_load_id: int = 0
+        self._batch_target_frame: int = 0
         self._segment_in_progress = False
         self._auto_segment_phase: str | None = None
         self._auto_segment_view: str = "A4C"
@@ -268,7 +271,8 @@ class AppController(QObject):
         if instance.media_format == "dicom":
             request_id = self._decode_request_id
             self.status_message.emit(f"Decoding {instance.path.name}… ({total_frames} frames)")
-            worker = DicomDecodeWorker(instance.path, request_id, parent=self)
+            self._frame_cache.set_total_frames(instance.path, total_frames)
+            worker = DicomDecodeWorker(instance.path, request_id, parent=self, first_frame_only=True)
             worker.signals.first_frame_ready.connect(self._on_first_frame_ready)
             worker.signals.progress.connect(self.decode_progress.emit)
             worker.signals.finished.connect(self._on_dicom_decoded)
@@ -278,7 +282,8 @@ class AppController(QObject):
         if instance.media_format == "mp4":
             request_id = self._decode_request_id
             self.status_message.emit(f"Decoding video {instance.path.name}… ({total_frames} frames)")
-            worker = VideoDecodeWorker(instance.path, request_id, parent=self)
+            self._frame_cache.set_total_frames(instance.path, total_frames)
+            worker = VideoDecodeWorker(instance.path, request_id, parent=self, first_frame_only=True)
             worker.signals.first_frame_ready.connect(self._on_first_frame_ready)
             worker.signals.progress.connect(self.decode_progress.emit)
             worker.signals.finished.connect(self._on_dicom_decoded)
@@ -789,15 +794,21 @@ class AppController(QObject):
     def _on_state_changed(self, state: object) -> None:
         if not isinstance(state, ViewerState):
             return
-        interval = max(
-            1,
-            int(round((state.frame_time_ms or 33.3) / self._playback_speed_multiplier)),
-        )
-        self._timer.setInterval(interval)
-        if state.is_playing and not self._timer.isActive():
-            self._timer.start()
-        elif not state.is_playing and self._timer.isActive():
-            self._timer.stop()
+        if state.is_playing and self._current_instance is not None and self._current_instance.media_format in ("dicom", "mp4"):
+            if self._timer.isActive():
+                self._timer.stop()
+            if not self._pending_decode_id:
+                QTimer.singleShot(1, self._advance_playback)
+        else:
+            interval = max(
+                1,
+                int(round((state.frame_time_ms or 33.3) / self._playback_speed_multiplier)),
+            )
+            self._timer.setInterval(interval)
+            if state.is_playing and not self._timer.isActive():
+                self._timer.start()
+            elif not state.is_playing and self._timer.isActive():
+                self._timer.stop()
         self._request_frame_if_needed(state)
 
     def _resolve_pixel_spacing(
@@ -973,8 +984,10 @@ class AppController(QObject):
         if self._current_instance.media_format in ("dicom", "mp4"):
             if self._frame_cache.is_ready(self._current_instance.path):
                 if self._loaded_frame_index != state.current_frame_index:
-                    self._emit_cached_frame(state.current_frame_index)
-                return
+                    if self._emit_cached_frame(state.current_frame_index):
+                        return
+                else:
+                    return
             if (
                 self._frame_cache.source_path is not None
                 and self._frame_cache.source_path == Path(self._current_instance.path).resolve()
@@ -983,8 +996,10 @@ class AppController(QObject):
                 max_idx = self._frame_cache.frame_count() - 1
                 idx = min(state.current_frame_index, max_idx)
                 if self._loaded_frame_index != idx:
-                    self._emit_cached_frame(idx)
-                return
+                    if self._emit_cached_frame(idx):
+                        return
+                else:
+                    return
             if self._pending_decode_id != 0:
                 return
         if self._current_instance.media_format in ("dicom", "mp4") and self._pending_decode_id != 0:
@@ -1014,15 +1029,23 @@ class AppController(QObject):
             frame_index=state.current_frame_index,
             media_format=self._current_instance.media_format,
             parent=self,
+            total_frames=self._frame_cache.frame_count(),
+            batch_size=_BATCH_LOAD_SIZE if self._current_instance.media_format in ("dicom", "mp4") else 0,
         )
-        worker.signals.finished.connect(
-            partial(
-                self._on_frame_loaded,
-                request_id,
-                self._current_instance.path,
-                state.current_frame_index,
+        if self._current_instance.media_format in ("dicom", "mp4"):
+            self._batch_load_id = request_id
+            worker.signals.batch_finished.connect(
+                partial(self._on_batch_frame_loaded, request_id, self._current_instance.path)
             )
-        )
+        else:
+            worker.signals.finished.connect(
+                partial(
+                    self._on_frame_loaded,
+                    request_id,
+                    self._current_instance.path,
+                    state.current_frame_index,
+                )
+            )
         worker.signals.failed.connect(partial(self._on_frame_load_failed, request_id))
         self._thread_pool.start(worker)
 
@@ -1054,7 +1077,13 @@ class AppController(QObject):
                     if target > 0:
                         self._state_manager.set_frame(target)
                         return
-                self.step_frame(1)
+                next_idx = state.current_frame_index + 1
+                if next_idx >= state.total_frames:
+                    next_idx = 0
+                if self._frame_cache.is_loaded(next_idx):
+                    self.step_frame(1)
+                elif self._pending_load_id == 0:
+                    self._load_playback_frame(next_idx)
                 return
             if (
                 self._current_instance.path is not None
@@ -1067,6 +1096,47 @@ class AppController(QObject):
         if self._pending_load_id != 0:
             return
         self.step_frame(1)
+
+    def _load_playback_frame(self, frame_index: int) -> None:
+        if self._current_instance is None or self._current_instance.path is None:
+            return
+        self._load_request_id += 1
+        request_id = self._load_request_id
+        self._pending_load_id = request_id
+        self._pending_source_path = self._current_instance.path
+        self._pending_frame_index = frame_index
+
+        worker = FrameLoaderWorker(
+            self._current_instance.path,
+            frame_index=frame_index,
+            media_format=self._current_instance.media_format,
+            parent=self,
+        )
+        worker.signals.finished.connect(
+            partial(self._on_playback_frame_loaded, request_id, self._current_instance.path, frame_index)
+        )
+        worker.signals.failed.connect(partial(self._on_frame_load_failed, request_id))
+        self._thread_pool.start(worker)
+
+    def _on_playback_frame_loaded(
+        self, request_id: int, path: Path, frame_index: int, pixels: np.ndarray
+    ) -> None:
+        if request_id != self._pending_load_id:
+            return
+        self._pending_load_id = 0
+        self._pending_source_path = None
+        self._pending_frame_index = None
+        self._frame_cache.put(frame_index, pixels)
+        self._loaded_source_path = path
+        self._loaded_frame_index = frame_index
+        self._current_frame_pixels = pixels
+        self.frame_loaded.emit(pixels)
+        if self._state_manager.snapshot.is_playing:
+            interval = max(
+                1,
+                int(round((self._state_manager.snapshot.frame_time_ms or 33.3) / self._playback_speed_multiplier)),
+            )
+            QTimer.singleShot(interval, self._advance_playback)
 
     def _on_frame_loaded(
         self,
@@ -1085,20 +1155,45 @@ class AppController(QObject):
         self._loaded_source_path = path
         self._loaded_frame_index = frame_index
         self._current_frame_pixels = pixels
+        self._frame_cache.put(frame_index, pixels)
         self.frame_loaded.emit(pixels)
 
-    def _on_frame_load_failed(self, request_id: int, message: str) -> None:
-        if request_id != self._pending_load_id:
+    def _on_batch_frame_loaded(
+        self,
+        request_id: int,
+        path: Path,
+        frames: list,
+    ) -> None:
+        if request_id != self._batch_load_id:
             return
+        if self._current_instance is None or self._current_instance.path != path:
+            return
+        self._batch_load_id = 0
         self._pending_load_id = 0
         self._pending_source_path = None
         self._pending_frame_index = None
+        target = self._batch_target_frame
+        for idx, pixels in frames:
+            self._frame_cache.put(idx, pixels)
+            if idx == target:
+                self._loaded_source_path = path
+                self._loaded_frame_index = idx
+                self._current_frame_pixels = pixels
+                self.frame_loaded.emit(pixels)
+
+    def _on_frame_load_failed(self, request_id: int, message: str) -> None:
+        if request_id == self._pending_load_id:
+            self._pending_load_id = 0
+            self._pending_source_path = None
+            self._pending_frame_index = None
+        if request_id == self._batch_load_id:
+            self._batch_load_id = 0
         self._current_frame_pixels = None
         self.status_message.emit(f"Load failed: {message}")
         self.frame_load_failed.emit(message)
 
     def _on_first_frame_ready(self, request_id: int, path: Path, first_frame: object) -> None:
-        """Show first frame immediately while rest decodes in background."""
+        """Show first frame immediately; store in cache for lazy scroll loading."""
         if request_id != self._pending_decode_id:
             return
         if self._current_instance is None:
@@ -1107,11 +1202,14 @@ class AppController(QObject):
             return
         if not isinstance(first_frame, np.ndarray):
             return
+        self._frame_cache.put(0, first_frame)
         self._current_frame_pixels = first_frame
         self._loaded_source_path = path
         self._loaded_frame_index = 0
+        self._pending_decode_id = 0
+        self._state_manager.set_decode_in_progress(False)
         self.frame_loaded.emit(first_frame)
-        self.status_message.emit("First frame ready, decoding remaining…")
+        self.status_message.emit("First frame ready")
 
     def _on_dicom_decoded(self, request_id: int, path: Path, frames: object) -> None:
         if request_id != self._pending_decode_id:
@@ -1167,21 +1265,22 @@ class AppController(QObject):
         self.status_message.emit(f"Load failed: {message}")
         self.frame_load_failed.emit(message)
 
-    def _emit_cached_frame(self, frame_index: int) -> None:
+    def _emit_cached_frame(self, frame_index: int) -> bool:
         if self._current_instance is None or self._current_instance.path is None:
-            return
+            return False
         if not self._frame_cache.is_ready(self._current_instance.path):
-            return
+            return False
         try:
             pixels = self._frame_cache.get(frame_index)
         except (RuntimeError, IndexError):
-            return
+            return False
         self._loaded_source_path = self._current_instance.path
         self._loaded_frame_index = frame_index
         self._current_frame_pixels = pixels
         if pixels is not None:
             self._maybe_cache_cine_roi_from_frame(pixels, frame_index)
         self.frame_loaded.emit(pixels)
+        return True
 
     def _frozen_cine_segment_roi(self) -> tuple[float, float, float, float] | None:
         instance = self._current_instance

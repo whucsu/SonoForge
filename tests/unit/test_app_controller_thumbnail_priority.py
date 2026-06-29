@@ -86,10 +86,12 @@ class _FakeVideoDecodeWorker:
         path: Path,
         request_id: int,
         parent=None,
+        first_frame_only: bool = False,
     ) -> None:
         self.path = Path(path)
         self.request_id = request_id
         self.parent = parent
+        self.first_frame_only = first_frame_only
         self.signals = SimpleNamespace(
             first_frame_ready=_FakeSignal(),
             progress=_FakeSignal(),

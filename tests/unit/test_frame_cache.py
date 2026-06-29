@@ -176,3 +176,37 @@ def test_require_full_cine_returns_stack():
     cache.load(Path("fake.dcm"), frames)
     out = cache.require_full_cine()
     assert out.shape == (5, 2, 5)
+
+
+def test_frame_cache_put_individual_frame(tmp_path: Path) -> None:
+    """put() stores a single frame; is_ready() requires total_frames set."""
+    path = tmp_path / "clip.dcm"
+    cache = FrameCache()
+    cache.set_total_frames(path, 5)
+    frame = np.zeros((4, 4), dtype=np.uint8)
+    cache.put(0, frame)
+    assert cache.is_ready(path)
+    assert cache.is_loaded(0)
+    assert np.array_equal(cache.get(0), frame)
+    assert not cache.is_loaded(1)
+
+
+def test_frame_cache_set_total_frames(tmp_path: Path) -> None:
+    path = tmp_path / "clip.dcm"
+    cache = FrameCache()
+    assert not cache.is_ready(path)
+    cache.set_total_frames(path, 10)
+    assert cache.is_ready(path)
+    assert cache.frame_count() == 10
+
+
+def test_frame_cache_put_then_get(tmp_path: Path) -> None:
+    """Multiple put() calls store frames; get() retrieves them."""
+    path = tmp_path / "clip.dcm"
+    cache = FrameCache()
+    cache.set_total_frames(path, 3)
+    for i in range(3):
+        frame = np.full((2, 2), i, dtype=np.uint8)
+        cache.put(i, frame)
+    for i in range(3):
+        assert np.array_equal(cache.get(i), np.full((2, 2), i, dtype=np.uint8))

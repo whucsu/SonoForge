@@ -63,8 +63,6 @@ class DicomReaderImpl:
             return cached
         session = get_thread_dicom_session()
         session.open(path)
-        if not session.is_decoded:
-            session.decode_all_frames()
         pixels = session.read_frame(frame_index)
         _pixel_cache.put(path, frame_index, pixels)
         return pixels

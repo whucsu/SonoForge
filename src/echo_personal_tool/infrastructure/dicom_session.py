@@ -300,14 +300,25 @@ class DicomSession:
         frames = stack_pixel_array(pixel_array)
         return np.ascontiguousarray(frames[index])
 
+    def decode_single_frame(self, index: int) -> np.ndarray:
+        """Decode a single frame on demand without decoding all frames."""
+        if self._open_path is None:
+            raise RuntimeError("DICOM is not open; call open() first")
+        self._ensure_pixel_data()
+        return self._decode_single_frame(index)
+
     def read_frame(self, frame_index: int) -> np.ndarray:
-        if self._frames is None:
-            raise RuntimeError("Frames not decoded; call decode_all_frames() first")
-        if frame_index < 0 or frame_index >= self._frames.shape[0]:
+        if self._frames is not None:
+            if frame_index < 0 or frame_index >= self._frames.shape[0]:
+                raise IndexError(
+                    f"Frame index {frame_index} out of range [0, {self._frames.shape[0]})"
+                )
+            return np.ascontiguousarray(self._frames[frame_index]).copy()
+        if frame_index < 0 or frame_index >= self._frame_count:
             raise IndexError(
-                f"Frame index {frame_index} out of range [0, {self._frames.shape[0]})"
+                f"Frame index {frame_index} out of range [0, {self._frame_count})"
             )
-        return np.ascontiguousarray(self._frames[frame_index]).copy()
+        return np.ascontiguousarray(self.decode_single_frame(frame_index)).copy()
 
     def release(self) -> None:
         self._open_path = None

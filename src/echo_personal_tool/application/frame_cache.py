@@ -65,6 +65,13 @@ class FrameCache:
             )
         return frame
 
+    def set_total_frames(self, path: Path, total: int) -> None:
+        self.source_path = Path(path).resolve()
+        self._total_frames = total
+
+    def put(self, index: int, frame: np.ndarray) -> None:
+        self._frame_store[index] = frame
+
     def clear(self) -> None:
         self.source_path = None
         self._frame_store.clear()

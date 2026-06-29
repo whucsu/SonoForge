@@ -28,10 +28,12 @@ class DicomDecodeWorker(QRunnable):
         path: Path,
         request_id: int,
         parent: QObject | None = None,
+        first_frame_only: bool = False,
     ) -> None:
         super().__init__()
         self._path = Path(path)
         self._request_id = request_id
+        self._first_frame_only = first_frame_only
         self.signals = DicomDecodeSignals(parent)
         self.setAutoDelete(True)
 
@@ -59,7 +61,10 @@ class DicomDecodeWorker(QRunnable):
                 first_frame,
             )
             total = session.frame_count
-            self.signals.progress.emit(1, total)
+
+            if self._first_frame_only:
+                self.signals.progress.emit(total, total)
+                return
 
             frames = session.decode_all_frames()
             t_all = time.perf_counter()
