@@ -1,29 +1,111 @@
 # ECHO Personal Tool
 
-Персональный десктопный инструмент для анализа эхокардиографических исследований (DICOM, MP4, JPEG/PNG).
+Персональный десктопный инструмент для просмотра и количественного анализа эхокардиографических исследований: **DICOM**, **MP4**, **JPEG/PNG**. Интерфейс и workflow ориентированы на EchoPAC / ASE — без облака, локально на вашей машине.
 
-**Стек:** PySide6, PyQtGraph, pydicom, NumPy, httpx — Clean Architecture.
+**Стек:** PySide6, PyQtGraph, pydicom, OpenCV, NumPy, SciPy, httpx, ONNX Runtime (optional) — **Clean Architecture** (`domain` / `infrastructure` / `application` / `presentation`).
 
-**Ветка разработки:** `feat/phase2-echopac-ui` (EchoPac-style UI, измерения, ONNX, DICOMweb).
+**Статус разработки:** активная ветка `fix/orthanc-wado-rs-series-level` (lazy loading, STE, playback, калибровка). Дорожная карта: **[ROADMAP.md](ROADMAP.md)**.
 
-## Возможности
+---
 
-| Область | Что есть |
+## Возможности (обзор)
+
+| Область | Что реализовано |
+|---------|-----------------|
+| **Источники данных** | Локальная папка; **Orthanc DICOMweb** (QIDO-RS / WADO-RS); mock offline |
+| **Просмотр** | Gallery, 2D viewer, таймлайн, cine play/pause, W/L + DR |
+| **Производительность** | Lazy decode DICOM/MP4 (первый кадр мгновенно); prefetch при playback; LRU frame cache |
+| **Калибровка** | DICOM tags; ручная B-mode (см); **авто** по шкале глубины (MP4/JPEG); snap к тикам |
+| **Линейные измерения** | Калиперы ASE (LVEDD, IVSd, TAPSE…); подписи **вдоль линейки** в реальном времени |
+| **Объёмы / площади** | LV/LA/RA Simpson (open-arc), planimeter, generic area/volume |
+| **Doppler / M-mode** | Пики, интервалы, VTI, mitral inflow; калибровка ROI/baseline/шкалы |
+| **Контуры** | Ручной / MBS-lite / ONNX LV Auto; R-refine, magnetic snap, Bézier spline |
+| **Speckle tracking (STE)** | NCC block-matching, GLS, AHA 17 segments, strain curves, QC |
+| **ONNX** | EchoNet LV A4C (hotkey `I`), review + gradient refine (`R`) |
+| **Отчёты** | Study overlay, индексы BSA, нормативы ASE, PDF export |
+| **UX** | EchoPAC theme (dark/light), blink «следующей кнопки», настраиваемые preferences |
+
+---
+
+## Фишки и отличия
+
+### Быстрый просмотр cine (lazy loading)
+
+- При открытии DICOM/MP4 декодируется **только первый кадр** — UI отзывается сразу, без ожидания полной cine.
+- Скролл и playback подгружают кадры **по запросу** через фоновые workers.
+- **Prefetch-буфер** при воспроизведении: адаптивный размер под CPU/RAM (`PlaybackConfig`).
+- **Leading static skip** — автоматический пропуск статичного lead-in в начале клипа.
+- Полная cine загружается только для speckle tracking (`require_full_cine`).
+
+### Калибровка без лишних кликов
+
+- **Автокалибровка B-mode** для MP4/JPEG/PNG: детекция сантиметровых меток справа → mm/px без QInputDialog (вкл. по умолчанию, настройки).
+- При ручной калибровке — **magnetic snap** к тикам шкалы глубины.
+- DICOM: spacing из тегов (`PixelSpacing`, ultrasound regions, functional groups).
+
+### Линейные калиперы EchoPAC-style
+
+- Формат подписи на линейке: `LVEDD 52.3 mm`, `Dist1 12.0 mm` — обновление **в реальном времени** при перетаскивании.
+- Текст **вдоль линейки**, без переворота; для TAPSE — сбоку от вертикали.
+- Цепочки измерений (МЖП → КДР → ЗСЛЖ) с **blink** следующей кнопки в меню Measures.
+- После All Diastole → подсветка ES Diameter; после ED Simpson → ESV.
+
+### Speckle Tracking (STE)
+
+- Двухконтурная зона миокарда, NCC block-matching, **bidirectional ED-anchored** трекинг.
+- **GLS**, segment strain по AHA, график strain ED…ES, таблица QC (NCC / quality).
+- Преprocessing (CLAHE + log), drift compensation, пресеты (`echo_pac`, incremental).
+- Диалог ED/ES (auto-detect + ручной ввод), overlay спеклов по кадрам в окне цикла.
+
+### Контуры и AI
+
+- **Open-arc Simpson** — mitral annulus + apex, без папиллярных впадин в дуге.
+- **ONNX LV Auto** (EchoNet Segmentation Lite): `I` → маска → open-arc → review (`Enter`/`Esc`).
+- **R** — stepped border refine (±N px вдоль нормали) + directed edge snap.
+- **Magnetic snap** контуров к границам миокарда (настраиваемая сила).
+- Bézier cubic spline для LV (ED S-shape / ES smooth).
+
+### DICOMweb / Orthanc
+
+- Поиск исследований (QIDO), скачивание серий **per-instance WADO-RS** (parallel, progress bar).
+- Сессионный кэш, cancel загрузки, pre-scan метаданных.
+- После загрузки — тот же pipeline, что для локальной папки.
+
+### Отчёты и нормативы
+
+- **Результаты** — сводка по study (LVEF, объёмы, Doppler, linear, RWT…).
+- Индексы **LVMI, LAVi, RAVi, EDVi/ESVi** при росте/весе и отклонении от ASE.
+- Встроенный справочник **ASE** (`References ASE+.md`).
+- Экспорт **PDF** (optional `reportlab`).
+
+---
+
+## Горячие клавиши
+
+| Клавиша | Действие |
 |---------|----------|
-| **Загрузка** | Локальная папка (DICOM / MP4 / JPEG) или **Orthanc DICOMweb** (QIDO/WADO) |
-| **Просмотр** | Gallery, 2D viewer, таймлайн, play/pause, W/L |
-| **Измерения** | Калиперы, Simpson LV/LA/RA, planimeter, RWT, Doppler, M-mode |
-| **Workflow** | Blink следующей кнопки, study overlay, рост/вес, индексы BSA |
-| **RV FAC** | Одна кнопка FAC: ED → blink → ES, crescent open-arc |
-| **ONNX** | LV Auto A4C (EchoNet), hotkey `I`, refine `R` |
-| **Отчёты** | Окно «Результаты», экспорт PDF, справочник ASE |
+| `Space` | Play / Pause cine |
+| `L` | Линейный калипер |
+| `Tab` | Сменить метку калипера (LVEDD → IVSd → …) |
+| `K` | Ручная калибровка B-mode |
+| `Shift+K` | Сброс ручной калибровки |
+| `C` | Ручной контур (open-arc) |
+| `M` | MBS-lite контур / Doppler peak (в контексте спектра) |
+| `I` | LV Auto Segment (ONNX, в сессии LV Auto EDV/ESV) |
+| `R` | Refine активного open-arc контура |
+| `T` | Doppler interval |
+| `V` | Doppler VTI trace |
+| `Enter` | Завершить контур / trace |
+| `Esc` | Отмена активного инструмента |
+| `Del` / `Backspace` | Удалить контур текущей фазы |
 
-Актуальный статус по коду: **[ROADMAP.md](ROADMAP.md)**.
+---
 
 ## Требования
 
-- Python 3.10–3.11
+- **Python 3.10–3.11**
 - [uv](https://docs.astral.sh/uv/) (рекомендуется) или `pip` + virtualenv
+- Linux / Windows (протестировано на Debian 12, Win 10)
 
 ## Установка
 
@@ -37,46 +119,62 @@ pip install -e ".[dev,phase2]"
 python -m echo_personal_tool
 ```
 
-`phase2` — ONNX (`onnxruntime`) и PDF (`reportlab`). Базовые зависимости включают `httpx` для DICOMweb.
+| Extra | Содержимое |
+|-------|------------|
+| `phase2` | `onnxruntime` (LV Auto), `reportlab` (PDF) |
+| `dev` | pytest, ruff, black |
+
+Базовые зависимости включают `httpx` (DICOMweb), `opencv-python-headless`, `psutil` (adaptive playback).
+
+---
 
 ## Быстрый старт
 
-1. **Open folder…** — выбрать папку с DICOM/MP4, или  
-   **Загрузить с сервера…** — Orthanc (см. ниже).
-2. Выбрать серию в gallery → измерения в панели **Measures**.
-3. **Результаты** — сводка по исследованию и PDF.
+1. **Open folder…** — папка с DICOM/MP4/JPEG, или **Загрузить с сервера…** — Orthanc.
+2. Выбрать серию в **Gallery** → кадр откроется в viewer.
+3. Для MP4/JPEG без DICOM-тегов: автокалибровка по шкале (или `K` вручную).
+4. **Measures** (справа) — линейные, Simpson, Doppler, STE, RV FAC…
+5. **Результаты** — сводка и PDF.
 
-## Orthanc DICOMweb
+### Orthanc DICOMweb
 
-Загрузка исследований с PACS/Orthanc без STOW (только чтение).
+1. **Настройки → Сервер…** — URL, логин, пароль (или **Mock** offline).
+2. **Загрузить с сервера…** — QIDO-поиск, выбор серий, WADO-RS download.
+3. Прогресс по сериям; после загрузки — локальный pipeline.
 
-1. **Настройки → Сервер…** — URL, логин, пароль.  
-   Дома без сервера: включить **Mock (без сервера)**.
-2. **Загрузить с сервера…** — поиск, выбор серий, скачивание во временный кэш.
-3. После загрузки открывается тот же pipeline, что и для локальной папки.
+Спека: [`docs/superpowers/specs/2026-06-23-dicomweb-orthanc-design.md`](docs/superpowers/specs/2026-06-23-dicomweb-orthanc-design.md)
 
-Спека: [`docs/superpowers/specs/2026-06-23-dicomweb-orthanc-design.md`](docs/superpowers/specs/2026-06-23-dicomweb-orthanc-design.md)  
-Обзор: [`DICOM_parsing.md`](DICOM_parsing.md)
-
-## ONNX (LV Auto)
-
-Автосегментация эндокарда (EchoNet Segmentation Lite) и сплайн-редактор контуров.
-
-### Экспорт модели
+### ONNX (LV Auto)
 
 ```bash
 python scripts/export_echonet_seg_to_onnx.py --verify
 ```
 
-Создаёт `models/echonet_seg_resnet50.onnx` и обновляет `models/model_manifest.json`.
-
-### В приложении
-
-1. Worksheet: **A4C ED** / **A4C ES** (контекст фазы).
-2. Кадр → **`I`** (Auto Segment) — open-arc контур (`source="ai"`).
-3. **`R`** — gradient refine; drag узлов для коррекции.
+1. Measures → **LV Auto** → EDV / ESV (A4C).
+2. Кадр → **`I`** — ONNX сегментация → open-arc контур.
+3. **`R`** — refine; drag узлов; **`Enter`** — принять.
 
 Спека: [`docs/superpowers/specs/2026-06-19-onnx-lv-auto-segment-design.md`](docs/superpowers/specs/2026-06-19-onnx-lv-auto-segment-design.md)
+
+### Speckle Tracking
+
+1. Нарисовать контур LV (ED) на cine B-mode.
+2. Measures → **Speckle Tracking** (или соответствующий пункт меню).
+3. Диалог ED/ES → расчёт GLS, overlay, strain curve, QC.
+
+Спека: [`docs/superpowers/specs/2026-06-25-nelafo-speckle-tracking-design.md`](docs/superpowers/specs/2026-06-25-nelafo-speckle-tracking-design.md)
+
+---
+
+## Настройки (Настройки → Preferences)
+
+- **Интерфейс:** шрифт UI, theme dark/light, скорость playback.
+- **Просмотр:** W/L presets, crosshair, подписи калиперов, DR sliders.
+- **Измерения:** единицы (mm/cm), magnetic snap, **автокалибровка**, snap к тикам шкалы.
+- **Doppler:** auto-calibration из DICOM tags.
+- **Отчёты:** шрифт PDF, overlay результатов (позиция, opacity).
+
+---
 
 ## Разработка
 
@@ -87,17 +185,21 @@ uv run ruff check src tests
 
 Отладка: `.vscode/launch.json` → `echo_personal_tool`.
 
-Изолированные ветки: `git worktree add .worktrees/<name> -b feat/<name>` (каталог `.worktrees/` в `.gitignore`).
+Изолированные ветки: `git worktree add .worktrees/<name> -b feat/<name>`.
 
-## Структура
+---
+
+## Структура проекта
 
 ```text
 src/echo_personal_tool/
-├── domain/           # Модели, расчёты, порты (без pydicom/Qt)
-├── infrastructure/   # DICOM, сканер, ONNX, Orthanc DICOMweb
-├── application/      # AppController, workers
-└── presentation/     # MainWindow, Viewer, Measures, диалоги
+├── domain/           # Модели, расчёты (Simpson, Doppler, STE, spacing) — без Qt/pydicom UI
+├── infrastructure/   # DICOM, Orthanc, ONNX, scanners, user preferences
+├── application/      # AppController, workers (decode, speckle, thumbnails)
+└── presentation/     # MainWindow, ViewerWidget, Measures, диалоги, overlay
 ```
+
+---
 
 ## Документация
 
@@ -105,9 +207,12 @@ src/echo_personal_tool/
 |----------|------------|
 | [ROADMAP.md](ROADMAP.md) | Статус фич по коду |
 | [CHANGELOG_SESSION.md](CHANGELOG_SESSION.md) | Контекст для новых чатов Cursor |
-| [docs/superpowers/specs/](docs/superpowers/specs/) | Утверждённые спеки |
+| [docs/superpowers/specs/](docs/superpowers/specs/) | Утверждённые спеки (STE, DICOMweb, lazy loading…) |
 | [docs/superpowers/plans/](docs/superpowers/plans/) | Планы реализации |
-| [Общий план.md](Общий%20план.md), [Этап2.md](Этап2.md), [Этап3.md](Этап3.md) | Исходная архитектура |
+| [DICOM_parsing.md](DICOM_parsing.md) | DICOMweb / Orthanc замечания |
+| [Measures-block.md](Measures-block.md) | Карта кнопок Measures |
+
+---
 
 ## Лицензия
 
