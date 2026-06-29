@@ -210,3 +210,37 @@ def test_frame_cache_put_then_get(tmp_path: Path) -> None:
         cache.put(i, frame)
     for i in range(3):
         assert np.array_equal(cache.get(i), np.full((2, 2), i, dtype=np.uint8))
+
+
+def test_loaded_ahead_counts_forward_frames():
+    cache = FrameCache(evict_window=100)
+    cache.set_total_frames(Path("cine.mp4"), total=10)
+    cache.put(3, np.zeros((4, 4), dtype=np.uint8))
+    cache.put(4, np.ones((4, 4), dtype=np.uint8))
+    cache.put(5, np.full((4, 4), 2, dtype=np.uint8))
+    assert cache.loaded_ahead(2) == 3
+    assert cache.loaded_ahead(4) == 1
+
+
+def test_nearest_loaded_ahead_skips_gaps():
+    cache = FrameCache(evict_window=100)
+    cache.set_total_frames(Path("cine.mp4"), total=10)
+    cache.put(5, np.zeros((4, 4), dtype=np.uint8))
+    cache.put(7, np.ones((4, 4), dtype=np.uint8))
+    assert cache.nearest_loaded_ahead(3) == 5
+    assert cache.nearest_loaded_ahead(6) == 7
+    assert cache.nearest_loaded_ahead(8) == 5
+
+
+def test_nearest_loaded_ahead_wraps_to_beginning():
+    cache = FrameCache(evict_window=100)
+    cache.set_total_frames(Path("cine.mp4"), total=10)
+    cache.put(8, np.zeros((4, 4), dtype=np.uint8))
+    assert cache.nearest_loaded_ahead(9) == 8
+
+
+def test_nearest_loaded_ahead_none_when_empty_ahead():
+    cache = FrameCache(evict_window=100)
+    cache.set_total_frames(Path("cine.mp4"), total=10)
+    cache.put(3, np.zeros((4, 4), dtype=np.uint8))
+    assert cache.nearest_loaded_ahead(3) is None

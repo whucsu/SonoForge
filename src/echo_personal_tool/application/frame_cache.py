@@ -105,6 +105,27 @@ class FrameCache:
             )
         return np.stack([self._frame_store[i] for i in range(self._total_frames)])
 
+    def loaded_ahead(self, center: int) -> int:
+        """Count loaded frames after center, wrapping to frame 0 at end."""
+        if self._total_frames == 0:
+            return 0
+        count = sum(1 for i in range(center + 1, self._total_frames) if i in self._frame_store)
+        if count == 0 and self._total_frames > 1:
+            count = sum(1 for i in range(0, center) if i in self._frame_store)
+        return count
+
+    def nearest_loaded_ahead(self, center: int) -> int | None:
+        """Return the smallest loaded index > center, wrapping to 0 at end; None if none."""
+        if self._total_frames == 0:
+            return None
+        for idx in range(center + 1, self._total_frames):
+            if idx in self._frame_store:
+                return idx
+        for idx in range(0, center):
+            if idx in self._frame_store:
+                return idx
+        return None
+
     def _evict(self) -> None:
         lo = self._current_index - self._evict_window
         hi = self._current_index + self._evict_window

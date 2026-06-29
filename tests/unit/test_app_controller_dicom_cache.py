@@ -269,3 +269,41 @@ def test_lazy_frame_load_falls_back_to_frame_loader(
     assert len(thread_pool.started) == 2
     assert len(frame_loader_calls) == 1
 
+
+def test_scroll_batch_sets_target_frame(
+    qapp, monkeypatch, tmp_path,
+) -> None:
+    started: list[object] = []
+
+    class _SpyLoader:
+        def __init__(self, path, frame_index=0, media_format="dicom", parent=None,
+                     total_frames=0, batch_size=0):
+            self._frame_index = frame_index
+            self._batch_size = batch_size
+            self.signals = SimpleNamespace(
+                batch_finished=_FakeSignal(),
+                failed=_FakeSignal(),
+            )
+            started.append(self)
+
+        def __getattr__(self, name):
+            return lambda *a, **k: None
+
+    monkeypatch.setattr(
+        "echo_personal_tool.application.app_controller.FrameLoaderWorker",
+        _SpyLoader,
+    )
+    thread_pool = _RecordingThreadPool()
+    controller = AppController(thread_pool=thread_pool)
+    inst = _sample_dicom_instance(tmp_path / "x.dcm", frame_count=20)
+    controller._current_instance = inst
+    controller._frame_cache.set_total_frames(inst.path, 20)
+    controller._frame_cache.put(0, np.zeros((8, 8), dtype=np.uint8))
+    controller._pending_decode_id = 0
+    controller._state_manager.set_instance(inst, total_frames=20, frame_time_ms=40.0)
+
+    controller._batch_target_frame = 0
+    controller._state_manager.set_frame(15)
+
+    assert controller._batch_target_frame == 15
+

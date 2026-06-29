@@ -77,6 +77,10 @@ from echo_personal_tool.infrastructure.onnx_engine import (
     _default_models_dir,
     _load_manifest,
 )
+from echo_personal_tool.infrastructure.system_profiler import (
+    PlaybackConfig,
+    detect_playback_config,
+)
 from echo_personal_tool.infrastructure.video_reader import VideoReader
 
 _FRAME_CACHE_WARN_BYTES = 512 * 1024 * 1024
@@ -110,7 +114,8 @@ class AppController(QObject):
         self._measurement_session = StudyMeasurementSessionStore()
         self._current_study_uid: str | None = None
         self._segmenter = segmenter or OnnxInferenceEngine()
-        self._frame_cache = FrameCache()
+        self._playback_config: PlaybackConfig = detect_playback_config()
+        self._frame_cache = FrameCache(evict_window=self._playback_config.evict_window)
         self._timer = QTimer(self)
         self._timer.setSingleShot(False)
         self._timer.timeout.connect(self._advance_playback)
@@ -137,6 +142,9 @@ class AppController(QObject):
         self._leading_static_frames: dict[Path, int] = {}
         self._batch_load_id: int = 0
         self._batch_target_frame: int = 0
+        self._prefetch_request_id: int = 0
+        self._prefetch_load_id: int = 0
+        self._last_frame_shown_at: float = 0.0
         self._segment_in_progress = False
         self._auto_segment_phase: str | None = None
         self._auto_segment_view: str = "A4C"
@@ -375,23 +383,97 @@ class AppController(QObject):
             return
         self.frame_load_failed.emit("Series not found in study")
 
+    def _detect_leading_static_from_cache(self, path: Path, total: int) -> int:
+        if not self._frame_cache.is_loaded(0):
+            return 0
+        ref = self._frame_cache.get(0).astype(np.float32, copy=False)
+        leading = 0
+        for idx in range(1, min(total, 16)):
+            if not self._frame_cache.is_loaded(idx):
+                break
+            diff = float(np.mean(np.abs(self._frame_cache.get(idx).astype(np.float32, copy=False) - ref)))
+            if diff > 1.0:
+                break
+            leading = idx
+        return leading
+
+    def _ensure_leading_static_scanned(self) -> None:
+        if self._current_instance is None or self._current_instance.path is None:
+            return
+        path = self._current_instance.path.resolve()
+        if path in self._leading_static_frames:
+            return
+        total = self._frame_cache.frame_count()
+        if total <= 1:
+            self._leading_static_frames[path] = 0
+            return
+        if not self._frame_cache.is_loaded(0):
+            self._prefetch_leading_scan_frames(path, total)
+            return
+        leading = self._detect_leading_static_from_cache(path, total)
+        self._leading_static_frames[path] = leading
+
+    def _prefetch_leading_scan_frames(self, path: Path, total: int) -> None:
+        scan_count = min(8, total)
+        batch = [i for i in range(scan_count) if not self._frame_cache.is_loaded(i)]
+        if not batch:
+            leading = self._detect_leading_static_from_cache(path, total)
+            self._leading_static_frames[path] = leading
+            return
+        self._prefetch_request_id += 1
+        request_id = self._prefetch_request_id
+        self._prefetch_load_id = request_id
+        worker = FrameLoaderWorker(
+            path,
+            frame_index=batch[0],
+            media_format=self._current_instance.media_format if self._current_instance else "dicom",
+            parent=self,
+            total_frames=total,
+            batch_size=len(batch),
+        )
+        worker.signals.batch_finished.connect(
+            partial(self._on_leading_scan_batch_loaded, request_id, path, total)
+        )
+        worker.signals.failed.connect(partial(self._on_leading_scan_failed, request_id, path, total))
+        self._thread_pool.start(worker)
+
+    def _on_leading_scan_batch_loaded(self, request_id: int, path: Path, total: int, frames: list) -> None:
+        if request_id != self._prefetch_load_id:
+            return
+        self._prefetch_load_id = 0
+        for idx, pixels in frames:
+            self._frame_cache.put(idx, pixels)
+        if path in self._leading_static_frames:
+            return
+        leading = self._detect_leading_static_from_cache(path, total)
+        self._leading_static_frames[path] = leading
+
+    def _on_leading_scan_failed(self, request_id: int, path: Path, total: int, message: str) -> None:
+        if request_id != self._prefetch_load_id:
+            return
+        self._prefetch_load_id = 0
+        self._leading_static_frames[path] = 0
+
     def set_playing(self, is_playing: bool) -> None:
-        if (
-            is_playing
-            and self._current_instance is not None
-            and self._current_instance.path is not None
-        ):
-            state = self._state_manager.snapshot
-            if state.current_frame_index == 0:
-                leading = self._leading_static_frames.get(
-                    self._current_instance.path.resolve(),
-                    0,
-                )
-                if leading > 0:
-                    target = min(leading + 1, max(0, state.total_frames - 1))
-                    if target > 0:
-                        self._state_manager.set_frame(target)
+        if is_playing:
+            self._invalidate_prefetch()
+            if self._current_instance is not None and self._current_instance.path is not None:
+                self._ensure_leading_static_scanned()
+                state = self._state_manager.snapshot
+                if state.current_frame_index == 0:
+                    leading = self._leading_static_frames.get(
+                        self._current_instance.path.resolve(), 0
+                    )
+                    if leading > 0:
+                        target = min(leading + 1, max(0, state.total_frames - 1))
+                        if target > 0:
+                            self._state_manager.set_frame(target)
+        else:
+            self._invalidate_prefetch()
         self._state_manager.set_playing(is_playing)
+        if is_playing:
+            self._prefetch_playback_buffer(self._state_manager.snapshot.current_frame_index)
+            QTimer.singleShot(1, self._advance_playback)
 
     def toggle_playback(self) -> None:
         self.set_playing(not self._state_manager.snapshot.is_playing)
@@ -1018,6 +1100,7 @@ class AppController(QObject):
         ):
             return
 
+        self._batch_target_frame = state.current_frame_index
         self._load_request_id += 1
         request_id = self._load_request_id
         self._pending_load_id = request_id
@@ -1060,63 +1143,125 @@ class AppController(QObject):
             f"{traces} trace{'s' if traces != 1 else ''}"
         )
 
+    def _invalidate_prefetch(self) -> None:
+        self._prefetch_request_id += 1
+        self._prefetch_load_id = 0
+
+    def _prefetch_playback_buffer(self, center: int) -> None:
+        if self._current_instance is None or self._current_instance.path is None:
+            return
+        if not self._state_manager.snapshot.is_playing:
+            return
+        if self._prefetch_load_id != 0:
+            return
+
+        cfg = self._playback_config
+        ahead = self._frame_cache.loaded_ahead(center)
+        if ahead >= cfg.prefetch_radius:
+            return
+
+        total = self._frame_cache.frame_count()
+        if total <= 0:
+            return
+
+        start = (center + 1 + ahead) % total
+        if start == center:
+            return
+
+        self._prefetch_request_id += 1
+        request_id = self._prefetch_request_id
+        self._prefetch_load_id = request_id
+
+        slots_remaining = cfg.prefetch_radius - ahead
+        batch = min(cfg.batch_size, slots_remaining, total)
+        if batch <= 0:
+            self._prefetch_load_id = 0
+            return
+        worker = FrameLoaderWorker(
+            self._current_instance.path,
+            frame_index=start,
+            media_format=self._current_instance.media_format,
+            parent=self,
+            total_frames=total,
+            batch_size=batch,
+        )
+        worker.signals.batch_finished.connect(
+            partial(self._on_prefetch_batch_loaded, request_id, self._current_instance.path)
+        )
+        worker.signals.failed.connect(partial(self._on_prefetch_failed, request_id))
+        self._thread_pool.start(worker)
+
+    def _on_prefetch_batch_loaded(
+        self, request_id: int, path: Path, frames: list
+    ) -> None:
+        if request_id != self._prefetch_load_id:
+            return
+        self._prefetch_load_id = 0
+        if self._current_instance is None or self._current_instance.path != path:
+            return
+        for idx, pixels in frames:
+            self._frame_cache.put(idx, pixels)
+        if self._state_manager.snapshot.is_playing:
+            current = self._state_manager.snapshot.current_frame_index
+            self._prefetch_playback_buffer(current)
+            QTimer.singleShot(0, self._advance_playback)
+
+    def _on_prefetch_failed(self, request_id: int, message: str) -> None:
+        if request_id != self._prefetch_load_id:
+            return
+        self._prefetch_load_id = 0
+        self.status_message.emit(f"Prefetch failed: {message}")
+
     def _advance_playback(self) -> None:
+        from time import perf_counter
+
         state = self._state_manager.snapshot
         if self._pending_decode_id != 0:
             return
-        if self._current_instance is not None and self._current_instance.media_format in ("dicom", "mp4"):
-            if self._current_instance.path is not None and self._frame_cache.is_ready(
-                self._current_instance.path
-            ):
-                leading = self._leading_static_frames.get(
-                    self._current_instance.path.resolve(),
-                    0,
-                )
-                if leading > 0 and state.current_frame_index >= state.total_frames - 1:
-                    target = min(leading + 1, max(0, state.total_frames - 1))
-                    if target > 0:
-                        self._state_manager.set_frame(target)
-                        return
-                next_idx = state.current_frame_index + 1
-                if next_idx >= state.total_frames:
-                    next_idx = 0
-                if self._frame_cache.is_loaded(next_idx):
-                    self.step_frame(1)
-                elif self._pending_load_id == 0:
-                    self._load_playback_frame(next_idx)
-                return
-            if (
-                self._current_instance.path is not None
-                and self._frame_cache.source_path is not None
-                and self._frame_cache.source_path == Path(self._current_instance.path).resolve()
-                and self._frame_cache.frame_count() > 0
-            ):
+        if (
+            self._current_instance is not None
+            and self._current_instance.media_format in ("dicom", "mp4")
+            and self._current_instance.path is not None
+            and self._frame_cache.is_ready(self._current_instance.path)
+        ):
+            current = state.current_frame_index
+            total = state.total_frames
+            next_idx = (current + 1) % total
+
+            if self._frame_cache.is_loaded(next_idx):
+                self._frame_cache.set_current(next_idx)
                 self.step_frame(1)
+                self._last_frame_shown_at = perf_counter()
+                self._prefetch_playback_buffer(next_idx)
+                if state.is_playing:
+                    base_interval = (state.frame_time_ms or 33.3) / self._playback_speed_multiplier
+                    elapsed = (perf_counter() - self._last_frame_shown_at) * 1000.0
+                    remaining = max(1, int(round(base_interval - elapsed)))
+                    QTimer.singleShot(remaining, self._advance_playback)
                 return
+
+            cfg = self._playback_config
+            ahead = self._frame_cache.loaded_ahead(current)
+            if ahead > cfg.max_lag_frames:
+                skip_to = self._frame_cache.nearest_loaded_ahead(current)
+                if skip_to is not None:
+                    self._frame_cache.set_current(skip_to)
+                    self._state_manager.set_frame(skip_to)
+                    self._emit_cached_frame(skip_to)
+                    self._prefetch_playback_buffer(skip_to)
+                    if state.is_playing:
+                        QTimer.singleShot(1, self._advance_playback)
+                    return
+
+            self._prefetch_playback_buffer(current)
+            return
+
         if self._pending_load_id != 0:
             return
         self.step_frame(1)
 
     def _load_playback_frame(self, frame_index: int) -> None:
-        if self._current_instance is None or self._current_instance.path is None:
-            return
-        self._load_request_id += 1
-        request_id = self._load_request_id
-        self._pending_load_id = request_id
-        self._pending_source_path = self._current_instance.path
-        self._pending_frame_index = frame_index
-
-        worker = FrameLoaderWorker(
-            self._current_instance.path,
-            frame_index=frame_index,
-            media_format=self._current_instance.media_format,
-            parent=self,
-        )
-        worker.signals.finished.connect(
-            partial(self._on_playback_frame_loaded, request_id, self._current_instance.path, frame_index)
-        )
-        worker.signals.failed.connect(partial(self._on_frame_load_failed, request_id))
-        self._thread_pool.start(worker)
+        self._prefetch_playback_buffer(frame_index - 1)
 
     def _on_playback_frame_loaded(
         self, request_id: int, path: Path, frame_index: int, pixels: np.ndarray
@@ -1126,17 +1271,14 @@ class AppController(QObject):
         self._pending_load_id = 0
         self._pending_source_path = None
         self._pending_frame_index = None
+        self._frame_cache.set_current(frame_index)
         self._frame_cache.put(frame_index, pixels)
         self._loaded_source_path = path
         self._loaded_frame_index = frame_index
         self._current_frame_pixels = pixels
         self.frame_loaded.emit(pixels)
         if self._state_manager.snapshot.is_playing:
-            interval = max(
-                1,
-                int(round((self._state_manager.snapshot.frame_time_ms or 33.3) / self._playback_speed_multiplier)),
-            )
-            QTimer.singleShot(interval, self._advance_playback)
+            QTimer.singleShot(1, self._advance_playback)
 
     def _on_frame_loaded(
         self,
@@ -1274,6 +1416,7 @@ class AppController(QObject):
             pixels = self._frame_cache.get(frame_index)
         except (RuntimeError, IndexError):
             return False
+        self._frame_cache.set_current(frame_index)
         self._loaded_source_path = self._current_instance.path
         self._loaded_frame_index = frame_index
         self._current_frame_pixels = pixels
