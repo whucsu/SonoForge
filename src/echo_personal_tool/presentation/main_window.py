@@ -361,6 +361,13 @@ class MainWindow(QMainWindow):
             )
         dialog.exec()
         result = dialog.result_data()
+        downloaded = dialog.downloaded_studies()
+        logger.info(
+            "[MW] dialog closed: result=%s downloaded_count=%d total_instances=%d",
+            result,
+            len(downloaded),
+            sum(len(s.instances) for st in downloaded for s in st.series),
+        )
         if result:
             downloaded = dialog.downloaded_studies()
             if downloaded:
@@ -369,7 +376,11 @@ class MainWindow(QMainWindow):
                 session_id, _study_uid = result
                 path = self._orthanc_cache.session_path(session_id)
                 log_path = path / "scan_errors.log"
+                logger.info("[MW] scan fallback: session=%s path=%s exists=%s",
+                            session_id[:8], path, path.exists())
                 self._controller.open_folder(path, error_log_path=log_path)
+        else:
+            logger.warning("[MW] dialog closed with no result (user cancelled or error)")
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self._orthanc_cache.clear_all()
@@ -377,6 +388,8 @@ class MainWindow(QMainWindow):
 
     def _on_studies_loaded(self, studies: object) -> None:
         study_list = list(studies)  # type: ignore[arg-type]
+        n_inst = sum(len(s.instances) for st in study_list for s in st.series)
+        logger.info("[MW] _on_studies_loaded: %d studies, %d instances", len(study_list), n_inst)
         populate_started_at = perf_counter()
         self._gallery.populate(study_list)
         populate_elapsed_ms = (perf_counter() - populate_started_at) * 1000.0

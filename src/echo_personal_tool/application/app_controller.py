@@ -164,6 +164,8 @@ class AppController(QObject):
 
     def load_pre_scanned_studies(self, studies: list[StudyMetadata]) -> None:
         """Load studies already built by the download worker (skip ScanWorker)."""
+        n_inst = sum(len(s.instances) for st in studies for s in st.series)
+        logger.info("[CTRL] load_pre_scanned_studies: %d studies, %d instances", len(studies), n_inst)
         self._measurement_session.clear()
         self._current_study_uid = None
         self._first_preview_emitted = False
@@ -176,6 +178,8 @@ class AppController(QObject):
     def _on_studies_scanned(self, studies: object) -> None:
         self._studies = list(studies)  # type: ignore[arg-type]
         count = len(self._studies)
+        n_inst = sum(len(s.instances) for st in self._studies for s in st.series)
+        logger.info("[CTRL] _on_studies_scanned: %d studies, %d instances", count, n_inst)
         elapsed_ms = (
             (perf_counter() - self._scan_started_at) * 1000.0
             if self._scan_started_at is not None

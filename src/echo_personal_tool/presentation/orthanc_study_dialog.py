@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -29,6 +31,8 @@ _STUDY_UID_ROLE = Qt.ItemDataRole.UserRole
 _SERIES_UID_ROLE = Qt.ItemDataRole.UserRole + 1
 _SORT_ROLE = Qt.ItemDataRole.UserRole + 2
 _CANCEL_FORCE_CLOSE_MS = 30_000
+
+log = logging.getLogger(__name__)
 
 
 class OrthancStudyDialog(QDialog):
@@ -109,8 +113,14 @@ class OrthancStudyDialog(QDialog):
         layout.addWidget(self._progress)
         layout.addLayout(buttons_row)
 
+        QTimer.singleShot(0, self._init_network)
+
+    def _init_network(self) -> None:
+        log.info("[DLG] _init_network called")
         self._check_ping()
+        log.info("[DLG] _check_ping done, loading studies")
         self._load_studies()
+        log.info("[DLG] _load_studies done, tree items=%d", self._tree.topLevelItemCount())
 
     def result_data(self) -> tuple[str, str] | None:
         """Return (session_id, study_uid) after successful download, else None."""
@@ -121,6 +131,7 @@ class OrthancStudyDialog(QDialog):
         return self._downloaded_studies
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        log.info("[DLG] closeEvent: downloading=%s", self._downloading)
         if self._downloading:
             self._close_pending = True
             self._on_cancel()
@@ -130,6 +141,7 @@ class OrthancStudyDialog(QDialog):
         super().closeEvent(event)
 
     def reject(self) -> None:
+        log.info("[DLG] reject: downloading=%s result=%s", self._downloading, self._result)
         if self._downloading:
             self._close_pending = True
             self._on_cancel()
@@ -138,6 +150,7 @@ class OrthancStudyDialog(QDialog):
         super().reject()
 
     def accept(self) -> None:
+        log.info("[DLG] accept: result=%s downloaded=%d", self._result, len(self._downloaded_studies))
         try:
             self._release_client()
         except Exception:  # noqa: BLE001
@@ -235,7 +248,7 @@ class OrthancStudyDialog(QDialog):
     def _update_load_button(self) -> None:
         if self._downloading:
             return
-        self._load_btn.setEnabled(self._collect_checked_series() is not None)
+        self._load_btn.setEnabled(len(self._collect_all_checked_series()) > 0)
 
     def _collect_all_checked_series(self) -> list[tuple[str, list[str]]]:
         """Collect all (study_uid, series_uids) pairs across all studies."""
@@ -257,6 +270,7 @@ class OrthancStudyDialog(QDialog):
 
     def _on_load(self) -> None:
         all_series = self._collect_all_checked_series()
+        log.info("[DLG] _on_load: checked_series=%d", len(all_series))
         if not all_series:
             return
 
@@ -280,6 +294,8 @@ class OrthancStudyDialog(QDialog):
         self._start_next_download()
 
     def _start_next_download(self) -> None:
+        log.info("[DLG] _start_next_download: pending=%d completed=%d total=%d",
+                 len(self._pending_downloads), self._completed_downloads, self._total_studies)
         if not self._pending_downloads:
             all_ok = self._completed_downloads == self._total_studies
             if all_ok and self._session_id is not None:
@@ -354,6 +370,11 @@ class OrthancStudyDialog(QDialog):
             self._status_label.setText(f"Ошибка в серии {self._short_uid(series_uid)}")
 
     def _on_studies_ready(self, studies: list[StudyMetadata]) -> None:
+        log.info("[DLG] _on_studies_ready: %d studies", len(studies))
+        for s in studies:
+            total_inst = sum(len(sr.instances) for sr in s.series)
+            log.info("[DLG]   study_uid=%s series=%d instances=%d",
+                     s.study_uid[:16], len(s.series), total_inst)
         self._downloaded_studies.extend(studies)
 
     def _reset_after_download(self) -> None:
@@ -362,6 +383,7 @@ class OrthancStudyDialog(QDialog):
         self._force_close_timer.stop()
 
     def _on_single_study_done(self, session_id: str, study_uid: str) -> None:
+        log.info("[DLG] _on_single_study_done: uid=%s", study_uid[:16])
         self._completed_downloads += 1
         self._status_label.setText(
             f"Загрузка [{self._completed_downloads}/{self._total_studies}] завершена"
@@ -369,6 +391,7 @@ class OrthancStudyDialog(QDialog):
         self._start_next_download()
 
     def _on_single_study_failed(self, _uid: str, message: str) -> None:
+        log.warning("[DLG] _on_single_study_failed: uid=%s msg=%s", _uid[:16] if _uid else "?", message)
         self._completed_downloads += 1
         self._status_label.setText(
             f"Ошибка [{self._completed_downloads}/{self._total_studies}]: {message}"
@@ -376,6 +399,8 @@ class OrthancStudyDialog(QDialog):
         self._start_next_download()
 
     def _on_done(self, session_id: str, study_uid: str) -> None:
+        log.info("[DLG] _on_done: session=%s studies_downloaded=%d",
+                 session_id[:8] if session_id else "?", len(self._downloaded_studies))
         self._reset_after_download()
         self._session_id = None
         self._result = (session_id, study_uid)
@@ -384,6 +409,7 @@ class OrthancStudyDialog(QDialog):
         self.accept()
 
     def _on_failed(self, _uid: str, message: str) -> None:
+        log.warning("[DLG] _on_failed: uid=%s msg=%s", _uid[:16] if _uid else "?", message)
         self._reset_after_download()
         if self._pending_downloads and self._session_id is not None:
             self._start_next_download()

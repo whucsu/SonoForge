@@ -154,13 +154,25 @@ class OrthancDicomWebClient:
         return instances
 
     def download_instance(self, study_uid: str, series_uid: str, instance_uid: str) -> bytes:
-        """Download single DICOM instance via WADO-RS per-instance retrieval."""
+        """Download single DICOM instance via Orthanc REST API.
+
+        Orthanc /instances/{id}/file expects its internal UUID, not DICOM UID.
+        We resolve via /tools/lookup first.
+        """
         self._check_cancelled()
         try:
-            r = self._client.get(
-                f"studies/{study_uid}/series/{series_uid}/instances/{instance_uid}",
-                headers={"Accept": "application/dicom"},
+            lookup = self._orthanc_client.post(
+                "tools/lookup",
+                content=instance_uid.encode(),
+                headers={"Content-Type": "text/plain"},
             )
+            lookup.raise_for_status()
+            results = lookup.json()
+            if isinstance(results, list) and results:
+                orthanc_id = results[0]["ID"]
+            else:
+                orthanc_id = str(results)
+            r = self._orthanc_client.get(f"instances/{orthanc_id}/file")
             r.raise_for_status()
             return r.content
         except httpx.HTTPError as exc:
