@@ -141,7 +141,7 @@ def test_scroll_phase2_after_phase1(
     controller._on_scroll_target_loaded(request_id, path, [(5, pixels)])
 
     assert len(started) == 2
-    assert started[1]._batch_size == 3
+    assert started[1]._batch_size == 2
     assert started[1]._frame_index == 6
 
 

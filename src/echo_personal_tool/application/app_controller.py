@@ -1244,7 +1244,13 @@ class AppController(QObject):
         if start >= total:
             return
 
-        batch_size = min(cfg.scroll_batch_size - ahead, total - start)
+        target_ahead = (
+            cfg.scroll_batch_size
+            if ahead >= cfg.min_buffer
+            else min(cfg.min_buffer, cfg.scroll_batch_size)
+        )
+        slots_needed = target_ahead - ahead
+        batch_size = min(slots_needed, total - start)
         if batch_size <= 0:
             return
 

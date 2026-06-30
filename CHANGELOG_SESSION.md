@@ -6,6 +6,11 @@
 
 ---
 
+## [2026-06-29 23:00] MP4 keyframe index + scroll min_buffer
+- **Тип:** feature
+- **Файлы:** `video_reader.py`, `app_controller.py`, `test_video_reader.py`, `test_scroll_min_buffer.py`
+- **Суть:** Индекс keyframe для seek назад; scroll prefetch сначала до min_buffer, затем до scroll_batch_size.
+
 ## [2026-06-29 22:00] JPEG-2000 multiframe: openjpeg + EOT index
 - **Тип:** feature
 - **Файлы:** `dicom_session.py`, `generate_synthetic_dicom.py`, `test_dicom_session.py`

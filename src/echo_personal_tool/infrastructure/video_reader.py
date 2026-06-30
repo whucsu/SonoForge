@@ -1,7 +1,8 @@
-"""OpenCV-based MP4 video reader with a fixed-size frame ring buffer."""
+"""OpenCV-based MP4 video reader with keyframe index and ring buffer."""
 
 from __future__ import annotations
 
+import bisect
 import threading
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import numpy as np
 from echo_personal_tool.infrastructure.pixel_utils import to_bgr_uint8
 
 RING_BUFFER_SIZE = 50
+_KEYFRAME_SCAN_MAX_STEP = 120
 _thread_local = threading.local()
 
 
@@ -24,7 +26,7 @@ def get_thread_video_reader() -> VideoReader:
 
 
 class VideoReader:
-    """Reads MP4 frames via OpenCV and caches the most recent frames in a ring buffer."""
+    """Reads MP4 frames via OpenCV with keyframe-aware seek and ring buffer."""
 
     def __init__(self, buffer_size: int = RING_BUFFER_SIZE) -> None:
         self._buffer_size = buffer_size
@@ -35,6 +37,7 @@ class VideoReader:
         self._frame_count = 0
         self._fps = 0.0
         self._last_read_index: int | None = None
+        self._keyframe_index: list[int] | None = None
 
     @property
     def frame_count(self) -> int:
@@ -43,6 +46,11 @@ class VideoReader:
     @property
     def fps(self) -> float:
         return self._fps
+
+    @property
+    def keyframe_index(self) -> list[int]:
+        self._ensure_keyframe_index()
+        return list(self._keyframe_index or [0])
 
     def open(self, path: Path | str) -> None:
         resolved = Path(path).resolve()
@@ -56,6 +64,7 @@ class VideoReader:
         self._open_path = resolved
         self._frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         self._fps = float(capture.get(cv2.CAP_PROP_FPS))
+        self._keyframe_index = None
 
     def read_frame(self, index: int) -> np.ndarray:
         if self._capture is None:
@@ -74,13 +83,7 @@ class VideoReader:
         if self._try_read_at_index(index):
             return self.get_buffered_frame(index)
 
-        if self._last_read_index is None or index <= self._last_read_index:
-            self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self._last_read_index = -1
-
-        while self._last_read_index < index:
-            self._read_next_sequential(self._last_read_index + 1)
-
+        self._seek_via_keyframe(index)
         return self.get_buffered_frame(index)
 
     def get_buffered_frame(self, index: int) -> np.ndarray:
@@ -97,6 +100,7 @@ class VideoReader:
         self._frame_count = 0
         self._fps = 0.0
         self._last_read_index = None
+        self._keyframe_index = None
         self._slots = [None] * self._buffer_size
         self._write_pos = 0
 
@@ -106,7 +110,61 @@ class VideoReader:
     def __exit__(self, *_args: object) -> None:
         self.release()
 
+    def _ensure_keyframe_index(self) -> None:
+        if self._keyframe_index is not None:
+            return
+        self._keyframe_index = self._build_keyframe_index()
+
+    def _build_keyframe_index(self) -> list[int]:
+        if self._capture is None or self._frame_count <= 0:
+            return [0]
+
+        total = self._frame_count
+        keyframes = [0]
+        step = 1 if total <= _KEYFRAME_SCAN_MAX_STEP else max(1, total // 60)
+
+        for candidate in range(step, total, step):
+            if self._is_seekable_keyframe(candidate):
+                keyframes.append(candidate)
+
+        if total > 1 and keyframes[-1] != total - 1 and self._is_seekable_keyframe(total - 1):
+            keyframes.append(total - 1)
+
+        return sorted(set(keyframes))
+
+    def _is_seekable_keyframe(self, index: int) -> bool:
+        if self._capture is None:
+            return False
+        if not self._capture.set(cv2.CAP_PROP_POS_FRAMES, index):
+            return False
+        reported = int(self._capture.get(cv2.CAP_PROP_POS_FRAMES))
+        if abs(reported - index) > 1:
+            return False
+        ok, _bgr = self._capture.read()
+        if not ok:
+            return False
+        after = int(self._capture.get(cv2.CAP_PROP_POS_FRAMES))
+        return after in (index + 1, index)
+
+    def _nearest_keyframe(self, index: int) -> int:
+        self._ensure_keyframe_index()
+        keyframes = self._keyframe_index or [0]
+        pos = bisect.bisect_right(keyframes, index) - 1
+        return keyframes[max(0, pos)]
+
+    def _seek_via_keyframe(self, index: int) -> None:
+        if self._capture is None:
+            raise RuntimeError("Video is not open; call open() first")
+        keyframe = self._nearest_keyframe(index)
+        if not self._capture.set(cv2.CAP_PROP_POS_FRAMES, keyframe):
+            raise OSError(f"Failed to seek to keyframe {keyframe}")
+        self._last_read_index = keyframe - 1
+        while self._last_read_index < index:
+            self._read_next_sequential(self._last_read_index + 1)
+
     def _read_next_sequential(self, index: int) -> np.ndarray:
+        if self._capture is None:
+            raise RuntimeError("Video is not open; call open() first")
         ok, bgr = self._capture.read()
         if not ok or bgr is None:
             raise OSError(f"Failed to read frame {index}")
@@ -116,6 +174,8 @@ class VideoReader:
         return frame
 
     def _try_read_at_index(self, index: int) -> bool:
+        if self._capture is None:
+            return False
         self._capture.set(cv2.CAP_PROP_POS_FRAMES, index)
         ok, bgr = self._capture.read()
         if not ok or bgr is None:
