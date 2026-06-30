@@ -6,7 +6,7 @@ import inspect
 import shutil
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QPropertyAnimation, QSize, Qt, QTimer, Signal, QEasingCurve
 from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -30,7 +30,7 @@ _SCROLL_DEBOUNCE_MS = 25
 _THUMBNAIL_SCALES: dict[str, dict[str, tuple[int, int]]] = {
     "small": {"thumb": (72, 54), "cell": (84, 66)},
     "medium": {"thumb": (96, 72), "cell": (108, 84)},
-    "large": {"thumb": (128, 96), "cell": (140, 108)},
+    "large": {"thumb": (176, 132), "cell": (192, 148)},
 }
 _COLUMN_COUNT = 2
 _CELL_SPACING = 2
@@ -91,7 +91,7 @@ class ThumbnailGalleryDelegate(QStyledItemDelegate):
             painter.setPen(QColor_from(TEXT))
             font = painter.font()
             font.setBold(True)
-            font.setPointSize(9)
+            font.setPointSize(11)
             painter.setFont(font)
             painter.drawText(
                 rect.adjusted(6, 4, 0, 0),
@@ -116,7 +116,7 @@ class ThumbnailGalleryDelegate(QStyledItemDelegate):
         if _has_dicom_tags(instance):
             painter.setPen(QColor_from("#ffd54f"))
             font.setBold(True)
-            font.setPointSize(9)
+            font.setPointSize(11)
             painter.setFont(font)
             painter.drawText(
                 rect.adjusted(0, 0, -6, -4),
@@ -152,6 +152,8 @@ class ThumbnailGalleryWidget(QListWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("thumbnailGallery")
+        self._collapsed = False
+        self._saved_width = None
         self._thumb_w, self._thumb_h = _THUMBNAIL_SCALES["medium"]["thumb"]
         self._cell_w, self._cell_h = _THUMBNAIL_SCALES["medium"]["cell"]
         self.setItemDelegate(ThumbnailGalleryDelegate(self))
@@ -343,6 +345,42 @@ class ThumbnailGalleryWidget(QListWidget):
         )
         if dest:
             shutil.copy2(str(instance.path), dest)
+
+    def toggle_collapse(self) -> None:
+        if self._collapsed:
+            self._animate_expand()
+        else:
+            self._animate_collapse()
+
+    def _animate_collapse(self) -> None:
+        self._saved_width = self.width()
+        self._anim = QPropertyAnimation(self, b"maximumWidth")
+        self._anim.setDuration(200)
+        self._anim.setStartValue(self._saved_width)
+        self._anim.setEndValue(0)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutQuint)
+        self._anim.finished.connect(lambda: (self.hide(), setattr(self, '_collapsed', True)))
+        self._anim.start()
+
+    def _animate_expand(self) -> None:
+        target = self._saved_width or _gallery_width(self._cell_w)
+        self.show()
+        self.setMaximumWidth(0)
+        self._anim = QPropertyAnimation(self, b"maximumWidth")
+        self._anim.setDuration(200)
+        self._anim.setStartValue(0)
+        self._anim.setEndValue(target)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutQuint)
+        self._anim.finished.connect(lambda: (
+            self.setMaximumWidth(16777215),
+            self.setFixedWidth(target),
+            setattr(self, '_collapsed', False),
+        ))
+        self._anim.start()
+
+    @property
+    def is_collapsed(self) -> bool:
+        return self._collapsed
 
     def _visible_instance_uids(self) -> set[str]:
         uids: set[str] = set()

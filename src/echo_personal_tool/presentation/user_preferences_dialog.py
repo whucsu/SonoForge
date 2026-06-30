@@ -87,6 +87,8 @@ class UserPreferencesDialog(QDialog):
         self._theme_combo = QComboBox()
         self._theme_combo.addItem("Тёмная", "dark")
         self._theme_combo.addItem("Светлая", "light")
+        self._theme_combo.addItem("VS Code Dark", "vscode_dark")
+        self._theme_combo.addItem("VS Code Light", "vscode_light")
         self._theme_combo.addItem("Системная", "system")
         theme_index = self._theme_combo.findData(current.theme_mode)
         self._theme_combo.setCurrentIndex(max(theme_index, 0))

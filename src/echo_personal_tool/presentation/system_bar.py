@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from importlib import resources
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QResizeEvent
+from PySide6.QtGui import QResizeEvent, QIcon, QPixmap, QPainter, QColor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -12,6 +15,17 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QWidget,
 )
+
+_ICON_DIR = Path(__file__).resolve().parent.parent / "resources" / "icons"
+
+
+def _load_icon(name: str) -> QIcon:
+    svg_path = _ICON_DIR / f"{name}.svg"
+    if svg_path.is_file():
+        pixmap = QPixmap(str(svg_path))
+        if not pixmap.isNull():
+            return QIcon(pixmap)
+    return QIcon()
 
 
 class _ElidingStatusLabel(QLabel):
@@ -90,34 +104,42 @@ class SystemBar(QWidget):
         self._progress_bar.hide()
 
         btn_open = QPushButton("Open folder…")
+        btn_open.setIcon(_load_icon("folder_open"))
         btn_open.clicked.connect(self.open_folder_requested.emit)
 
         btn_load_server = QPushButton("Загрузить с сервера…")
+        btn_load_server.setIcon(_load_icon("cloud_download"))
         btn_load_server.clicked.connect(self.load_from_server_requested.emit)
 
         self._btn_settings = QPushButton("Настройки")
+        self._btn_settings.setIcon(_load_icon("settings"))
         self._btn_settings.setToolTip("Параметры измерений и отображения")
         self._btn_settings.clicked.connect(self.settings_requested.emit)
 
         btn_caliper = QPushButton("Caliper")
+        btn_caliper.setIcon(_load_icon("straighten"))
         btn_caliper.setToolTip("Linear distance (Dist1, Dist2, …)")
         btn_caliper.clicked.connect(self.caliper_requested.emit)
 
         btn_calibration = QPushButton("Calibration B-mode")
+        btn_calibration.setIcon(_load_icon("tune"))
         btn_calibration.setToolTip("B-mode pixel spacing: depth scale line")
         btn_calibration.clicked.connect(self.calibration_requested.emit)
 
         btn_doppler_calibration = QPushButton("Calibration Doppler")
+        btn_doppler_calibration.setIcon(_load_icon("show_chart"))
         btn_doppler_calibration.setToolTip(
             "Doppler spectrogram: ROI → baseline → velocity scale"
         )
         btn_doppler_calibration.clicked.connect(self.doppler_calibration_requested.emit)
 
         self._btn_references = QPushButton("Нормативы")
+        self._btn_references.setIcon(_load_icon("description"))
         self._btn_references.setToolTip("Справочник нормативных значений ASE")
         self._btn_references.clicked.connect(self.references_requested.emit)
 
         btn_reset = QPushButton("Reset")
+        btn_reset.setIcon(_load_icon("refresh"))
         btn_reset.setObjectName("resetButton")
         btn_reset.clicked.connect(self.reset_session_requested.emit)
 

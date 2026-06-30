@@ -595,8 +595,18 @@ class ViewerWidget(QWidget):
         self._timeline_slider.setSingleStep(1)
         self._timeline_slider.valueChanged.connect(self._on_timeline_changed)
 
+        self._step_back_button = QPushButton("⏮")
+        self._step_back_button.setFixedWidth(32)
+        self._step_back_button.setToolTip("Step back (Previous frame)")
+        self._step_back_button.clicked.connect(self._step_back)
+
         self._play_button = QPushButton("Play")
         self._play_button.clicked.connect(self.play_pause_requested.emit)
+
+        self._step_forward_button = QPushButton("⏭")
+        self._step_forward_button.setFixedWidth(32)
+        self._step_forward_button.setToolTip("Step forward (Next frame)")
+        self._step_forward_button.clicked.connect(self._step_forward)
 
         self._fps_label = QLabel("FPS: —")
         self._source_label = QLabel("Frame: —")
@@ -623,7 +633,9 @@ class ViewerWidget(QWidget):
 
         controls = QVBoxLayout()
         timeline_row = QHBoxLayout()
+        timeline_row.addWidget(self._step_back_button)
         timeline_row.addWidget(self._play_button)
+        timeline_row.addWidget(self._step_forward_button)
         timeline_row.addWidget(self._timeline_slider, stretch=1)
         timeline_row.addWidget(self._source_label)
         timeline_row.addWidget(self._fps_label)
@@ -3973,6 +3985,16 @@ class ViewerWidget(QWidget):
         if label not in self._caliper_labels:
             self._caliper_labels.append(label)
         self._caliper_label_index = self._caliper_labels.index(label)
+
+    def _step_back(self) -> None:
+        current = self._timeline_slider.value()
+        if current > 0:
+            self._timeline_slider.setValue(current - 1)
+
+    def _step_forward(self) -> None:
+        current = self._timeline_slider.value()
+        if current < self._timeline_slider.maximum():
+            self._timeline_slider.setValue(current + 1)
 
     def _on_timeline_changed(self, value: int) -> None:
         if self._syncing_state:

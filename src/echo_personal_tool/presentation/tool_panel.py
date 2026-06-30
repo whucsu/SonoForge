@@ -175,6 +175,8 @@ class ToolPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("toolPanel")
+        self._collapsed = False
+        self._saved_width = 280
         self.setFixedWidth(280)
 
         self._tabs = QTabWidget()
@@ -211,3 +213,17 @@ class ToolPanel(QWidget):
 
     def set_doppler_tool_availability(self, *, time_ok: bool) -> None:
         self.measure.set_doppler_tool_availability(time_ok=time_ok)
+
+    def toggle_collapse(self) -> None:
+        if self._collapsed:
+            self.setFixedWidth(self._saved_width)
+            self._collapsed = False
+            self.show()
+        else:
+            self._saved_width = self.width()
+            self.hide()
+            self._collapsed = True
+
+    @property
+    def is_collapsed(self) -> bool:
+        return self._collapsed

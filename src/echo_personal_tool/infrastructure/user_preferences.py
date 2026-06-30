@@ -278,7 +278,7 @@ def load_user_preferences() -> UserPreferences:
         startup_mode=_read_choice(store.value("startup_mode"), "empty", {"empty", "last_folder"}),
         last_opened_folder=str(store.value("last_opened_folder", "")),
         theme_mode=_read_choice(
-            store.value("theme_mode"), "dark", {"dark", "light", "system"}
+            store.value("theme_mode"), "dark", {"dark", "light", "system", "vscode_dark", "vscode_light"}
         ),
     )
 

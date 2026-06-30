@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
     QMessageBox,
+    QSplitter,
     QStatusBar,
     QVBoxLayout,
     QWidget,
@@ -127,6 +128,10 @@ class MainWindow(QMainWindow):
         self._controller.thumbnail_loaded.connect(self._gallery.set_thumbnail)
         content_layout.addWidget(self._gallery)
 
+        self._content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._content_splitter.setHandleWidth(2)
+        content_layout.addWidget(self._content_splitter, stretch=1)
+
         center = QWidget()
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
@@ -164,15 +169,15 @@ class MainWindow(QMainWindow):
         center_layout.addWidget(self._viewer, stretch=1)
 
         self._ste_dialog: SteResultsDialog | None = None
-        content_layout.addWidget(center, stretch=1)
+        self._content_splitter.addWidget(center)
 
         self._tool_panel = ToolPanel()
         self._tool_panel.setFixedWidth(_TOOL_PANEL_WIDTH)
-        content_layout.addWidget(self._tool_panel)
+        self._content_splitter.addWidget(self._tool_panel)
 
-        content_layout.setStretch(0, 0)
-        content_layout.setStretch(1, 1)
-        content_layout.setStretch(2, 0)
+        self._content_splitter.setStretchFactor(0, 1)
+        self._content_splitter.setStretchFactor(1, 0)
+        self._content_splitter.setSizes([800, _TOOL_PANEL_WIDTH])
 
         self._gallery.instance_selected.connect(self._on_instance_selected)
         self._gallery.export_mp4_requested.connect(self._on_export_mp4_requested)
@@ -209,6 +214,8 @@ class MainWindow(QMainWindow):
             ("Escape", self._cancel_active_tool),
             ("Backspace", self._delete_current_contour),
             ("Delete", self._delete_current_contour),
+            ("`", self._toggle_gallery_shortcut),
+            ("F11", self._toggle_fullscreen_shortcut),
         ]
         for sequence, handler in bindings:
             shortcut = QShortcut(QKeySequence(sequence), self)
@@ -267,6 +274,19 @@ class MainWindow(QMainWindow):
         if self._viewer.delete_contour_for_current_phase():
             self._controller.on_contours_changed(self._viewer.contours())
             self._show_status("Contour deleted")
+
+    def _toggle_gallery_shortcut(self) -> None:
+        self._gallery.toggle_collapse()
+
+    def _toggle_fullscreen_shortcut(self) -> None:
+        if self.isFullScreen():
+            self.showNormal()
+            self._gallery.show()
+            self._tool_panel.show()
+        else:
+            self._gallery.hide()
+            self._tool_panel.hide()
+            self.showFullScreen()
 
     def _show_references(self) -> None:
         show_ase_reference_dialog(self)
@@ -434,6 +454,7 @@ class MainWindow(QMainWindow):
         self._instance_overlay_positions.clear()
         self._overlay_sync_instance_uid = None
         self._last_overlay_state = None
+        self._viewer.set_results_overlay("")
         populate_started_at = perf_counter()
         self._gallery.populate(study_list)
         populate_elapsed_ms = (perf_counter() - populate_started_at) * 1000.0
@@ -856,6 +877,7 @@ class MainWindow(QMainWindow):
         self._rv_fac_awaiting_es = False
         self._instance_overlay_cache.clear()
         self._viewer.cancel_active_tool()
+        self._viewer.set_results_overlay("")
         self._viewer.clear_doppler_calibration_display()
         self._viewer.clear_doppler_measurements()
         self._viewer.clear_speckle_overlay()
@@ -863,6 +885,8 @@ class MainWindow(QMainWindow):
             self._ste_dialog.clear()
         self._viewer.reset_dist_caliper_serial()
         self._controller.reset_measurements_and_calibration()
+        self._viewer.set_results_overlay("")
+        self._last_overlay_state = None
         if self._viewer._current_frame is None:
             self._show_status("Измерения и калибровка сброшены")
             return

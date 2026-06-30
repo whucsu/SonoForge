@@ -1,4 +1,4 @@
-"""Register DejaVu fonts bundled in ``echo_personal_tool.resources.fonts``."""
+"""Register bundled TTF fonts (DejaVu, Inter, JetBrains Mono)."""
 
 from __future__ import annotations
 
@@ -8,15 +8,18 @@ from pathlib import Path
 
 from PySide6.QtGui import QFont, QFontDatabase
 
-FONT_FAMILY_UI = "DejaVu Sans"
-FONT_FAMILY_MONO = "DejaVu Sans Mono"
-DEFAULT_UI_POINT_SIZE = 12
+FONT_FAMILY_UI = "Inter"
+FONT_FAMILY_MONO = "JetBrains Mono"
+DEFAULT_UI_POINT_SIZE = 13
 
 _FONT_FILES = (
-    "DejaVuSans.ttf",
-    "DejaVuSans-Bold.ttf",
-    "DejaVuSansMono.ttf",
-    "DejaVuSansMono-Bold.ttf",
+    "Inter-Regular.ttf",
+    "Inter-Bold.ttf",
+    "Inter-SemiBold.ttf",
+    "Inter-Medium.ttf",
+    "InterDisplay-Regular.ttf",
+    "JetBrainsMono-Regular.ttf",
+    "JetBrainsMono-Bold.ttf",
 )
 
 _FONT_CACHE_DIR = Path.home() / ".echo-personal-tool" / "fonts"
@@ -51,7 +54,7 @@ def mono_font(*, point_size: int = DEFAULT_UI_POINT_SIZE, bold: bool = False) ->
 
 def report_cyrillic_font_path() -> Path:
     """Stable on-disk path for ReportLab PDF export."""
-    return _resolved_font_path("DejaVuSans.ttf")
+    return _resolved_font_path("Inter-Regular.ttf")
 
 
 @lru_cache(maxsize=len(_FONT_FILES))

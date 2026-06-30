@@ -6,6 +6,11 @@
 
 ---
 
+## [2026-06-30 10:00] UI Enhancement: палитра, шрифты, иконки, collapse, анимации
+- **Тип:** feature + refactor
+- **Файлы:** `echopac_theme.py`, `bundled_fonts.py`, `system_bar.py`, `thumbnail_gallery.py`, `tool_panel.py`, `main_window.py`, `viewer_widget.py`, `resources/fonts/` (Inter, JetBrains Mono), `resources/icons/` (8 SVG)
+- **Суть:** Тёплая палитра (#111827), скругления 4/8/12, 8px grid. Шрифты Inter (UI) + JetBrains Mono. 8 SVG-иконок в SystemBar. Gallery/ToolPanel collapse + QSplitter. Slide-анимация gallery 200ms, theme fade 150ms. Timeline: step ⏮/⏭ кнопки. Gallery large thumbnails 176×132. F11 fullscreen.
+
 ## [2026-06-27 23:30] STE: progressive zone deformation, preprocessing, quality improvements
 - **Тип:** feature + fix
 - **Файлы:** `speckle_tracking.py`, `speckle_worker.py`, `tracking_smoothing.py`, `speckle.py`, `myocardial_zone.py`, `speckle_overlay.py`, `viewer_widget.py`, `speckle_settings_dialog.py`, `aha_segments.py`, `contour_utils.py`
@@ -102,35 +107,10 @@
 - **Файлы:** `segmentation_service.py`, `frame_panel_parser.py`, `app_controller.py`, `lvef_simpson.py`, `mbs_lite_service.py`, `onnx_worker.py`, тесты
 - **Суть:** Откат изменений после «DICOM Фото контур не плохо»: снова DICOM-first ROI, center-square EchoNet embed, без heuristic-priority и OOB-gate; убраны 25:35 и 26:10 правки.
 
-## [2026-06-19 25:15] MV: широкий конец маски + drag концов
-- **Тип:** fix
-- **Файлы:** `segmentation_service.py`, `viewer_widget.py`, `test_segmentation_service.py`
-- **Суть:** Annulus на более широком конце полости (не y_min); прямой drag узлов 0/N (раньше pinned → не двигались).
-
 ## [2026-06-19 25:00] MV annulus из верхней полосы маски + drag MV
 - **Тип:** fix
 - **Файлы:** `segmentation_service.py`, `app_controller.py`, `viewer_widget.py`, `test_segmentation_service.py`
 - **Суть:** Annulus = верхнее отверстие полости (не longest chord/ось ЛЖ); ручной drag концов open-arc обновляет mitral_annulus и линию MV.
-
-## [2026-06-19 24:40] mask_to_contour: cv2.findContours
-- **Тип:** fix
-- **Файлы:** `segmentation_service.py`, `test_segmentation_service.py`, `lvef_simpson.py`
-- **Суть:** Moore-tracer обходил только 2×2 px угол при большой маске (25862 px, дуга 1 px); граница через OpenCV findContours.
-
-## [2026-06-19 24:25] W/L/DR для B-mode DICOM RGB
-- **Тип:** fix
-- **Файлы:** `pixel_utils.py`, `viewer_widget.py`, `test_pixel_utils_display_range.py`
-- **Суть:** Слайдеры отключались на 3-канальных DICOM (псевдо-RGB); включены для effective grayscale и составных кадров (B-mode сверху).
-
-## [2026-06-19 24:10] EchoNet B-mode crop перед ONNX
-- **Тип:** fix
-- **Файлы:** `segmentation_service.py`, `onnx_engine.py`, `onnx_worker.py`, `app_controller.py`, `test_segmentation_service.py`
-- **Суть:** ONNX получает квадратный кроп B-mode сектора (DICOM regions / heuristic), а не сжатие всего кадра с UI — устраняет схлопнутую маску в центре; статус с mask_px и arc_px.
-
-## [2026-06-19 23:55] LV auto-segment quality gate по пикселям
-- **Тип:** fix
-- **Файлы:** `lvef_simpson.py`, `app_controller.py`, `model_manifest.json`, `test_lvef_simpson.py`
-- **Суть:** Отклонение ONNX-контура по геометрии в px (не по мм при плохом PixelSpacing); ранний fail при малой маске; `auto_refine_after_segment` выключен по умолчанию; статус с конкретной причиной отказа.
 
 ## [2026-06-24] DICOM tag dictionary + рефакторинг orthanc_dicom_json
 - **Тип:** feature + refactor
