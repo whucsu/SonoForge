@@ -6,6 +6,11 @@
 
 ---
 
+## [2026-06-29 21:00] P1: BOT / encapsulated frame index в DicomSession
+- **Тип:** feature
+- **Файлы:** `dicom_session.py`, `generate_synthetic_dicom.py`, `test_dicom_session.py`, `docs/.../dicom-scroll-performance-p1.md`
+- **Суть:** `pydicom.encaps.generate_frames` + `parse_basic_offsets` для O(1) доступа к JPEG-кадрам без full-cine fallback.
+
 ## [2026-06-29 20:00] Fix scroll color flash и playback FPS
 - **Тип:** fix
 - **Файлы:** `viewer_widget.py`, `main_window.py`, `app_controller.py`, `test_viewer_display_mode.py`

@@ -14,6 +14,7 @@ from echo_personal_tool.infrastructure.dicom_session import (
 )
 from tests.fixtures.generate_synthetic_dicom import (
     write_synthetic_dicom,
+    write_synthetic_jpeg_multiframe_dicom,
     write_synthetic_multiframe_dicom,
     write_synthetic_rgb_dicom,
 )
@@ -147,3 +148,51 @@ def test_dicom_reader_read_pixels_single_frame(tmp_path: Path) -> None:
     frame = reader.read_pixels(path, frame_index=3)
     assert frame.shape == (32, 32)
     assert frame[0, 0] == 3
+
+
+def test_jpeg_multiframe_builds_bot_index(tmp_path: Path) -> None:
+    path = tmp_path / "jpeg_multi.dcm"
+    write_synthetic_jpeg_multiframe_dicom(path, frame_count=8, rows=32, cols=32)
+    session = DicomSession()
+    session.open(path)
+    session._ensure_pixel_data()
+    assert session._encapsulated_frames is not None
+    assert len(session._encapsulated_frames) == 8
+    assert session._bot_offsets is not None
+    assert len(session._bot_offsets) == 8
+
+
+def test_jpeg_multiframe_read_frame_without_full_decode(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "jpeg_multi.dcm"
+    write_synthetic_jpeg_multiframe_dicom(path, frame_count=6, rows=24, cols=24)
+    session = DicomSession()
+    session.open(path)
+
+    fallback_called = False
+
+    def _fail_fallback(index: int) -> np.ndarray:
+        nonlocal fallback_called
+        fallback_called = True
+        raise AssertionError("full pydicom fallback should not run for JPEG BOT index")
+
+    monkeypatch.setattr(session, "_decode_pydicom_fallback", _fail_fallback)
+
+    frame = session.read_frame(4)
+    assert frame.shape == (24, 24)
+    assert abs(float(frame.mean()) - 60.0) < 3.0
+    assert session._frames is None
+    assert not fallback_called
+    session.release()
+
+
+def test_jpeg_multiframe_random_access_all_frames(tmp_path: Path) -> None:
+    path = tmp_path / "jpeg_multi.dcm"
+    frame_count = 12
+    write_synthetic_jpeg_multiframe_dicom(path, frame_count=frame_count, rows=16, cols=16)
+    session = DicomSession()
+    session.open(path)
+    for index in (0, 3, 7, 11):
+        frame = session.read_frame(index)
+        expected_mean = index * 10 + 20
+        assert abs(float(frame.mean()) - expected_mean) < 3.0
+    session.release()
