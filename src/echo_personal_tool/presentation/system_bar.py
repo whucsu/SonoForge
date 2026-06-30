@@ -5,7 +5,7 @@ from __future__ import annotations
 from importlib import resources
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtCore import Qt, Signal, QSize, QPoint
 from PySide6.QtGui import QResizeEvent, QIcon, QPixmap, QPainter, QColor
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -83,6 +83,9 @@ class SystemBar(QWidget):
     doppler_calibration_requested = Signal()
     settings_requested = Signal()
     references_requested = Signal()
+    minimize_requested = Signal()
+    maximize_requested = Signal()
+    close_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -143,6 +146,25 @@ class SystemBar(QWidget):
         btn_reset.setObjectName("resetButton")
         btn_reset.clicked.connect(self.reset_session_requested.emit)
 
+        # Window control buttons
+        self._btn_minimize = QPushButton()
+        self._btn_minimize.setIcon(_load_icon("minimize"))
+        self._btn_minimize.setObjectName("minimizeButton")
+        self._btn_minimize.setToolTip("Свернуть")
+        self._btn_minimize.clicked.connect(self.minimize_requested.emit)
+
+        self._btn_maximize = QPushButton()
+        self._btn_maximize.setIcon(_load_icon("maximize"))
+        self._btn_maximize.setObjectName("maximizeButton")
+        self._btn_maximize.setToolTip("Развернуть")
+        self._btn_maximize.clicked.connect(self.maximize_requested.emit)
+
+        self._btn_close = QPushButton()
+        self._btn_close.setIcon(_load_icon("close"))
+        self._btn_close.setObjectName("closeButton")
+        self._btn_close.setToolTip("Закрыть")
+        self._btn_close.clicked.connect(self.close_requested.emit)
+
         left = QWidget()
         left.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         left_layout = QHBoxLayout(left)
@@ -172,13 +194,28 @@ class SystemBar(QWidget):
         ):
             actions_layout.addWidget(button)
 
+        self._window_controls = QWidget()
+        self._window_controls.setObjectName("windowControls")
+        self._window_controls.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Preferred,
+        )
+        window_controls_layout = QHBoxLayout(self._window_controls)
+        window_controls_layout.setContentsMargins(0, 0, 0, 0)
+        window_controls_layout.setSpacing(0)
+        window_controls_layout.addWidget(self._btn_minimize)
+        window_controls_layout.addWidget(self._btn_maximize)
+        window_controls_layout.addWidget(self._btn_close)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(6, 6, 0, 6)
         layout.setSpacing(8)
         layout.addWidget(left, 1)
         layout.addWidget(self._actions_widget, 0)
+        layout.addWidget(self._window_controls, 0)
         layout.setStretch(0, 1)
         layout.setStretch(1, 0)
+        layout.setStretch(2, 0)
 
         self._status_label.set_full_text("Ready")
 
@@ -202,3 +239,29 @@ class SystemBar(QWidget):
     def hide_decode_progress(self) -> None:
         self._progress_bar.hide()
         self._progress_bar.setValue(0)
+
+    def update_maximize_button(self, is_maximized: bool) -> None:
+        if is_maximized:
+            self._btn_maximize.setIcon(_load_icon("restore"))
+            self._btn_maximize.setToolTip("Восстановить")
+        else:
+            self._btn_maximize.setIcon(_load_icon("maximize"))
+            self._btn_maximize.setToolTip("Развернуть")
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            window = self.window()
+            if window.isMaximized():
+                return
+            self._drag_pos = event.globalPosition().toPoint() - window.pos()
+
+    def mouseMoveEvent(self, event) -> None:
+        if (
+            hasattr(self, "_drag_pos")
+            and event.buttons() & Qt.MouseButton.LeftButton
+        ):
+            self.window().move(event.globalPosition().toPoint() - self._drag_pos)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.maximize_requested.emit()

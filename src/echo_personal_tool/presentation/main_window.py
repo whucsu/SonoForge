@@ -78,6 +78,7 @@ class MainWindow(QMainWindow):
         user_preferences: UserPreferences | None = None,
     ) -> None:
         super().__init__()
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setWindowTitle("ECHO Personal Tool")
         self._user_preferences = user_preferences or load_user_preferences()
         self._click_to_frame_started_at: float | None = None
@@ -289,6 +290,18 @@ class MainWindow(QMainWindow):
             self._gallery.hide()
             self._tool_panel.hide()
             self.showFullScreen()
+
+    def _toggle_maximize(self) -> None:
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+        self._system_bar.update_maximize_button(self.isMaximized())
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.WindowStateChange:
+            self._system_bar.update_maximize_button(self.isMaximized())
+        super().changeEvent(event)
 
     def _show_references(self) -> None:
         show_ase_reference_dialog(self)
@@ -715,6 +728,9 @@ class MainWindow(QMainWindow):
         )
         self._system_bar.settings_requested.connect(self._show_user_preferences)
         self._system_bar.references_requested.connect(self._show_references)
+        self._system_bar.minimize_requested.connect(self.showMinimized)
+        self._system_bar.maximize_requested.connect(self._toggle_maximize)
+        self._system_bar.close_requested.connect(self.close)
         self._tool_panel.action_requested.connect(self._on_measure_action)
         self._tool_panel.patient_metrics_changed.connect(
             self._controller.on_patient_metrics_changed

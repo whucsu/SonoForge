@@ -392,12 +392,12 @@ QCheckBox::indicator:checked {{
 #systemBar {{
     background: {p["bg_control"]};
     border-bottom: 1px solid {p["border"]};
-    min-height: 42px;
+    min-height: 34px;
 }}
 #systemBar QPushButton {{
-    min-height: 28px;
-    max-height: 28px;
-    padding: 3px 10px;
+    min-height: 23px;
+    max-height: 23px;
+    padding: 2px 10px;
     font-size: {max(font_size - 1, 11)}px;
     font-weight: 500;
 }}
@@ -412,6 +412,28 @@ QCheckBox::indicator:checked {{
 }}
 #systemBar QPushButton#resetButton:pressed {{
     background: {p["reset_pressed"]};
+}}
+
+/* ── Window Controls ──────────────────────────────────────────── */
+#windowControls {{
+    background: transparent;
+}}
+#windowControls QPushButton {{
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 23px;
+    max-height: 23px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+}}
+#windowControls QPushButton:hover {{
+    background: {p["bg_button"]};
+}}
+#windowControls QPushButton#closeButton:hover {{
+    background: #e81123;
+    color: white;
 }}
 
 /* ── ToolPanel ──────────────────────────────────────────────── */
