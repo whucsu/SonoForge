@@ -6,6 +6,11 @@
 
 ---
 
+## [2026-06-29 22:00] JPEG-2000 multiframe: openjpeg + EOT index
+- **Тип:** feature
+- **Файлы:** `dicom_session.py`, `generate_synthetic_dicom.py`, `test_dicom_session.py`
+- **Суть:** Декод J2K через openjpeg; `generate_frames` с Extended Offset Table; фикстуры BOT/EOT.
+
 ## [2026-06-29 21:00] P1: BOT / encapsulated frame index в DicomSession
 - **Тип:** feature
 - **Файлы:** `dicom_session.py`, `generate_synthetic_dicom.py`, `test_dicom_session.py`, `docs/.../dicom-scroll-performance-p1.md`

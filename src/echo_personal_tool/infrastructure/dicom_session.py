@@ -24,6 +24,13 @@ _UNCOMPRESSED_SYNTAXES = frozenset({
     "1.2.840.10008.1.2.2",
 })
 
+_JPEG2000_SYNTAXES = frozenset({
+    "1.2.840.10008.1.2.4.90",
+    "1.2.840.10008.1.2.4.91",
+    "1.2.840.10008.1.2.4.92",
+    "1.2.840.10008.1.2.4.93",
+})
+
 _MAX_DECODE_WORKERS = 4
 _PIXEL_DATA_TAG = struct.pack("<HH", 0x7FE0, 0x0010)
 
@@ -90,15 +97,27 @@ def _extract_pixel_data_from_bytes(raw: bytes) -> bytes | None:
     return None
 
 
+def _extended_offsets_from_metadata(
+    metadata: pydicom.Dataset,
+) -> tuple[bytes, bytes] | None:
+    eot = getattr(metadata, "ExtendedOffsetTable", None)
+    eot_lengths = getattr(metadata, "ExtendedOffsetTableLengths", None)
+    if eot is None or eot_lengths is None:
+        return None
+    return bytes(eot), bytes(eot_lengths)
+
+
 def _build_encapsulated_frame_index(
     pixel_data: bytes,
     *,
     frame_count: int,
+    extended_offsets: tuple[bytes, bytes] | None = None,
 ) -> tuple[list[bytes], list[int] | None]:
-    """Parse BOT and build per-frame compressed byte blobs via pydicom.encaps."""
-    frames = list(
-        generate_frames(pixel_data, number_of_frames=frame_count)
-    )
+    """Parse BOT/EOT and build per-frame compressed byte blobs via pydicom.encaps."""
+    kwargs: dict = {"number_of_frames": frame_count}
+    if extended_offsets is not None:
+        kwargs["extended_offsets"] = extended_offsets
+    frames = list(generate_frames(pixel_data, **kwargs))
     if not frames:
         raise ValueError("Encapsulated pixel data contains no frames")
     if len(frames) != frame_count:
@@ -115,6 +134,48 @@ def _build_encapsulated_frame_index(
     except Exception:
         bot_offsets = None
     return frames, bot_offsets
+
+
+def _decode_fragment_openjpeg(
+    fragment: bytes,
+    rows: int,
+    cols: int,
+) -> np.ndarray | None:
+    """Decode a JPEG-2000 codestream with pylibjpeg-openjpeg."""
+    try:
+        import openjpeg
+
+        img = openjpeg.decode(fragment)
+        if img is None:
+            return None
+        if img.ndim == 3:
+            if img.shape[2] == 4:
+                img = img[..., :3]
+            if img.shape[2] == 1:
+                img = img[..., 0]
+        if img.shape[:2] != (rows, cols):
+            return None
+        return np.ascontiguousarray(img)
+    except Exception:
+        return None
+
+
+def _decode_compressed_frame(
+    fragment: bytes,
+    rows: int,
+    cols: int,
+    transfer_syntax_uid: str,
+) -> np.ndarray | None:
+    if transfer_syntax_uid in _JPEG2000_SYNTAXES:
+        decoded = _decode_fragment_openjpeg(fragment, rows, cols)
+        if decoded is not None:
+            return decoded
+    decoded = _decode_fragment_cv2(fragment, rows, cols)
+    if decoded is not None:
+        return decoded
+    if transfer_syntax_uid not in _JPEG2000_SYNTAXES:
+        return _decode_fragment_openjpeg(fragment, rows, cols)
+    return None
 
 
 def _decode_fragment_cv2(fragment: bytes, rows: int, cols: int) -> np.ndarray | None:
@@ -160,6 +221,8 @@ class DicomSession:
         self._pixel_data_raw: bytes | None = None
         self._encapsulated_frames: list[bytes] | None = None
         self._bot_offsets: list[int] | None = None
+        self._extended_offsets: tuple[bytes, bytes] | None = None
+        self._transfer_syntax_uid: str = "1.2.840.10008.1.2.1"
         self._first_frame: np.ndarray | None = None
 
     @property
@@ -186,6 +249,8 @@ class DicomSession:
         tsuid = str(
             getattr(self._metadata.file_meta, "TransferSyntaxUID", "1.2.840.10008.1.2.1")
         )
+        self._transfer_syntax_uid = tsuid
+        self._extended_offsets = _extended_offsets_from_metadata(self._metadata)
         self._is_uncompressed = tsuid in _UNCOMPRESSED_SYNTAXES
         if self._is_uncompressed:
             self._compute_frame_slices()
@@ -214,6 +279,7 @@ class DicomSession:
             self._encapsulated_frames, self._bot_offsets = _build_encapsulated_frame_index(
                 self._pixel_data_raw,
                 frame_count=self._frame_count,
+                extended_offsets=self._extended_offsets,
             )
 
     def _encapsulated_frame_bytes(self, index: int) -> bytes | None:
@@ -278,7 +344,12 @@ class DicomSession:
 
         compressed = self._encapsulated_frame_bytes(index)
         if compressed is not None:
-            decoded = _decode_fragment_cv2(compressed, rows, cols)
+            decoded = _decode_compressed_frame(
+                compressed,
+                rows,
+                cols,
+                self._transfer_syntax_uid,
+            )
             if decoded is not None:
                 return decoded
 
@@ -321,6 +392,8 @@ class DicomSession:
         self._pixel_data_raw = None
         self._encapsulated_frames = None
         self._bot_offsets = None
+        self._extended_offsets = None
+        self._transfer_syntax_uid = "1.2.840.10008.1.2.1"
         self._first_frame = None
 
 
