@@ -932,7 +932,7 @@ class ViewerWidget(QWidget):
             self._dicom_tags_overlay_label.hide()
             return
         try:
-            rows = read_interesting_dicom_tag_rows(instance.path, list(self._interesting_dicom_tags))
+            rows = read_interesting_dicom_tag_rows(instance.path, tuple(self._interesting_dicom_tags))
         except Exception:  # noqa: BLE001
             self._dicom_tags_overlay_label.hide()
             return
@@ -1191,9 +1191,10 @@ class ViewerWidget(QWidget):
             if frame_changed or contours_updated:
                 self._refresh_frame_overlays()
             self._refresh_speckle_overlay_for_current_frame()
-            self._refresh_frame_panel_layout()
-            self._refresh_panel_frame_graphics()
-            self._refresh_dicom_tags_overlay()
+            if not viewer_state.is_playing:
+                self._refresh_frame_panel_layout()
+                self._refresh_panel_frame_graphics()
+                self._refresh_dicom_tags_overlay()
         finally:
             self._syncing_state = False
             pending = self._pending_viewer_state

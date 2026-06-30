@@ -63,24 +63,26 @@ class VideoDecodeWorker(QRunnable):
                 self.signals.progress.emit(total, total)
                 return
 
-            frames: list[np.ndarray] = [first_frame]
+            h, w = first_frame.shape[:2]
+            result = np.empty((total, h, w, first_frame.shape[2]), dtype=np.uint8)
+            result[0] = first_frame
+            count = 1
             for i in range(1, total):
                 ok, bgr = cap.read()
                 if not ok or bgr is None:
                     break
-                frame = to_bgr_uint8(bgr)
-                frames.append(frame)
-                if i % 5 == 0 or i == total - 1:
+                result[count] = to_bgr_uint8(bgr)
+                count += 1
+                if i % 10 == 0 or i == total - 1:
                     self.signals.progress.emit(i + 1, total)
 
-            if not frames:
+            if count == 0:
                 raise OSError(f"No frames decoded from: {self._path}")
 
-            result = np.stack(frames, axis=0)
             self.signals.finished.emit(
                 self._request_id,
                 self._path,
-                np.ascontiguousarray(result),
+                np.ascontiguousarray(result[:count]),
             )
         except Exception as exc:  # noqa: BLE001
             self.signals.failed.emit(self._request_id, str(exc))

@@ -24,6 +24,7 @@ class FrameCache:
         self._total_frames: int = 0
         self._current_index: int = 0
         self._evict_window: int = evict_window
+        self._pinned: set[int] = set()
 
     @property
     def frames(self) -> np.ndarray | None:
@@ -77,6 +78,7 @@ class FrameCache:
         self._frame_store.clear()
         self._total_frames = 0
         self._current_index = 0
+        self._pinned.clear()
 
     def frame_count(self) -> int:
         return self._total_frames
@@ -90,6 +92,12 @@ class FrameCache:
     def set_current(self, index: int) -> None:
         self._current_index = index
         self._evict()
+
+    def pin(self, index: int) -> None:
+        self._pinned.add(index)
+
+    def unpin(self, index: int) -> None:
+        self._pinned.discard(index)
 
     def prefetch(self, center: int, near: int = 5) -> None:
         self._current_index = center
@@ -126,6 +134,9 @@ class FrameCache:
     def _evict(self) -> None:
         lo = self._current_index - self._evict_window
         hi = self._current_index + self._evict_window
-        to_drop = [i for i in self._frame_store if i < lo or i > hi]
+        to_drop = [
+            i for i in self._frame_store
+            if i not in self._pinned and (i < lo or i > hi)
+        ]
         for i in to_drop:
             del self._frame_store[i]

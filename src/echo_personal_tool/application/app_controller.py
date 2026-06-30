@@ -148,6 +148,7 @@ class AppController(QObject):
         self._prefetch_request_id: int = 0
         self._prefetch_load_id: int = 0
         self._last_frame_shown_at: float = 0.0
+        self._last_pinned_frame: int | None = None
         self._segment_in_progress = False
         self._auto_segment_phase: str | None = None
         self._auto_segment_view: str = "A4C"
@@ -227,21 +228,21 @@ class AppController(QObject):
             return
         self._current_instance = instance
         self.status_message.emit(f"Loading {instance.path.name}…")
-        try:
-            if instance.media_format == "mp4":
+        total_frames = instance.number_of_frames
+        frame_time_ms = instance.frame_time_ms or 33.3
+        if total_frames <= 0 and instance.media_format == "mp4" and instance.path is not None:
+            try:
                 with VideoReader() as reader:
                     reader.open(instance.path)
                     total_frames = reader.frame_count
                     fps = reader.fps
                 frame_time_ms = 1000.0 / fps if fps > 0 else 33.3
-            else:
-                total_frames = instance.number_of_frames
-                frame_time_ms = instance.frame_time_ms or 33.3
-        except Exception as exc:  # noqa: BLE001 - surface to UI
-            self.frame_load_failed.emit(str(exc))
-            return
+            except Exception as exc:  # noqa: BLE001
+                self.frame_load_failed.emit(str(exc))
+                return
 
         self._frame_cache.clear()
+        self._last_pinned_frame = None
         self._loaded_source_path = None
         self._loaded_frame_index = None
         self._pending_source_path = None
@@ -952,7 +953,7 @@ class AppController(QObject):
         return active.series_uid
 
     def compute_overlay_snapshot(self, state: ViewerState) -> MeasurementSnapshot | None:
-        """Recompute metrics from the current instance contours/linear only (for on-image overlay)."""
+        """Recompute metrics from all study-wide measurements (for on-image overlay)."""
         instance = state.instance
         if instance is None:
             return None
@@ -975,8 +976,8 @@ class AppController(QObject):
                 instance.sop_instance_uid,
             )
         return self._build_measurement_snapshot(
-            contours=state.contours,
-            linear_measurements=state.linear_measurements,
+            contours=session.contours,
+            linear_measurements=session.linear_measurements,
             doppler_dto=doppler_dto,
             state=state,
             session=session,
@@ -1440,6 +1441,10 @@ class AppController(QObject):
         except (RuntimeError, IndexError):
             return False
         self._frame_cache.set_current(frame_index)
+        if self._last_pinned_frame is not None and self._last_pinned_frame != frame_index:
+            self._frame_cache.unpin(self._last_pinned_frame)
+        self._frame_cache.pin(frame_index)
+        self._last_pinned_frame = frame_index
         self._loaded_source_path = self._current_instance.path
         self._loaded_frame_index = frame_index
         self._current_frame_pixels = pixels

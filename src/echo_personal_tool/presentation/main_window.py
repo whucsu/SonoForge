@@ -430,6 +430,10 @@ class MainWindow(QMainWindow):
         study_list = list(studies)  # type: ignore[arg-type]
         n_inst = sum(len(s.instances) for st in study_list for s in st.series)
         logger.info("[MW] _on_studies_loaded: %d studies, %d instances", len(study_list), n_inst)
+        self._instance_overlay_cache.clear()
+        self._instance_overlay_positions.clear()
+        self._overlay_sync_instance_uid = None
+        self._last_overlay_state = None
         populate_started_at = perf_counter()
         self._gallery.populate(study_list)
         populate_elapsed_ms = (perf_counter() - populate_started_at) * 1000.0
