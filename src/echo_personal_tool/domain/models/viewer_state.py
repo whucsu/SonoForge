@@ -24,6 +24,7 @@ class ViewerState:
     measurement_snapshot: MeasurementSnapshot | None = None
     decode_in_progress: bool = False
     manual_pixel_spacing: tuple[float, float] | None = None
+    scroll_navigation: bool = False
 
     @property
     def effective_pixel_spacing(self) -> tuple[float, float] | None:

@@ -6,6 +6,16 @@
 
 ---
 
+## [2026-06-29 20:00] Fix scroll color flash и playback FPS
+- **Тип:** fix
+- **Файлы:** `viewer_widget.py`, `main_window.py`, `app_controller.py`, `test_viewer_display_mode.py`
+- **Суть:** scroll_settled больше не передаёт grayscale в show_frame; цветной допплер без W/L; playback только через QTimer без двойных advance.
+
+## [2026-06-29 18:00] DICOM scroll P0: debounce, two-phase load, fast path
+- **Тип:** feature
+- **Файлы:** `system_profiler.py`, `viewer_widget.py`, `app_controller.py`, `main_window.py`, `viewer_state.py`, `state_manager.py`, `test_scroll_debounce.py`, `test_scroll_two_phase_load.py`, `test_playback_prefetch.py`
+- **Суть:** Колесо коалесцируется (debounce), целевой кадр грузится первым (batch=1), соседи — prefetch; при скролле `show_frame_fast`, после паузы — полный `show_frame` с оверлеями. `scroll_frame_selected` отделён от timeline.
+
 ## [2026-06-30 10:00] UI Enhancement: палитра, шрифты, иконки, collapse, анимации
 - **Тип:** feature + refactor
 - **Файлы:** `echopac_theme.py`, `bundled_fonts.py`, `system_bar.py`, `thumbnail_gallery.py`, `tool_panel.py`, `main_window.py`, `viewer_widget.py`, `resources/fonts/` (Inter, JetBrains Mono), `resources/icons/` (8 SVG)

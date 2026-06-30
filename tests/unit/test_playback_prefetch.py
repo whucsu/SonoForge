@@ -54,7 +54,15 @@ def test_prefetch_starts_batch_worker(qapp, monkeypatch, tmp_path) -> None:
         _SpyLoader,
     )
     controller = AppController(thread_pool=_SpyPool())
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
     inst = _mp4_instance(mp4)
@@ -83,7 +91,15 @@ def test_prefetch_skipped_when_buffer_full(qapp, monkeypatch, tmp_path) -> None:
         MagicMock,
     )
     controller = AppController(thread_pool=_SpyPool())
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
     inst = _mp4_instance(mp4)
@@ -120,7 +136,15 @@ def test_prefetch_batch_capped_by_radius(qapp, monkeypatch, tmp_path) -> None:
         _SpyLoader,
     )
     controller = AppController(thread_pool=_SpyPool())
-    controller._playback_config = PlaybackConfig(prefetch_radius=5, min_buffer=2, batch_size=8, max_lag_frames=2, evict_window=30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=5,
+        min_buffer=2,
+        batch_size=8,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
     inst = _mp4_instance(mp4)
@@ -139,7 +163,15 @@ def test_prefetch_batch_capped_by_radius(qapp, monkeypatch, tmp_path) -> None:
 
 def test_advance_playback_skips_on_lag(qapp, tmp_path) -> None:
     controller = AppController()
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     controller._prefetch_playback_buffer = lambda *a, **k: None
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
@@ -163,7 +195,15 @@ def test_advance_playback_skips_on_lag(qapp, tmp_path) -> None:
 
 def test_advance_playback_lag_skip_to_nearest(qapp, tmp_path) -> None:
     controller = AppController()
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     controller._prefetch_playback_buffer = lambda *a, **k: None
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
@@ -222,7 +262,15 @@ def test_prefetch_cancelled_on_pause(qapp, monkeypatch, tmp_path) -> None:
     )
     controller = AppController(thread_pool=pool)
     controller._thread_pool = pool
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
     inst = _mp4_instance(mp4)

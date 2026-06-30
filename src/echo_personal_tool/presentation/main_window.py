@@ -118,6 +118,7 @@ class MainWindow(QMainWindow):
         self._controller.scan_failed.connect(self._on_scan_failed)
         self._controller.frame_loaded.connect(self._on_frame_loaded)
         self._controller.frame_load_failed.connect(self._on_frame_load_failed)
+        self._controller.scroll_settled.connect(self._on_scroll_settled)
         self._controller.status_message.connect(self._show_status)
         apply_echopac_theme(
             font_size=self._user_preferences.ui_font_size,
@@ -152,8 +153,12 @@ class MainWindow(QMainWindow):
         self._content_splitter.setHandleWidth(2)
 
         self._viewer = ViewerWidget()
+        self._viewer.set_scroll_debounce_ms(self._controller.playback_config.scroll_debounce_ms)
         self._viewer.play_pause_requested.connect(self._controller.toggle_playback)
         self._viewer.frame_selected.connect(self._controller.state_manager.set_frame)
+        self._viewer.scroll_frame_selected.connect(
+            lambda index: self._controller.state_manager.set_frame(index, scroll=True)
+        )
         self._viewer.contour_completed.connect(self._on_contour_completed)
         self._viewer.contour_landmark_rejected.connect(self._show_status)
         self._viewer.contours_changed.connect(self._controller.on_contours_changed)
@@ -523,11 +528,15 @@ class MainWindow(QMainWindow):
             except RuntimeError:
                 self._viewer2 = None
         self._viewer2 = ViewerWidget()
+        self._viewer2.set_scroll_debounce_ms(self._controller.playback_config.scroll_debounce_ms)
         self._viewer2.installEventFilter(self)
         self._viewer2._graphics.installEventFilter(self)
         self._viewer2._view.installEventFilter(self)
         self._viewer2.play_pause_requested.connect(self._controller.toggle_playback)
         self._viewer2.frame_selected.connect(self._controller.state_manager.set_frame)
+        self._viewer2.scroll_frame_selected.connect(
+            lambda index: self._controller.state_manager.set_frame(index, scroll=True)
+        )
         self._viewer2.contour_completed.connect(self._on_contour_completed)
         self._viewer2.contours_changed.connect(self._controller.on_contours_changed)
         self._viewer2.set_state(self._controller.state_manager.snapshot)
@@ -834,7 +843,8 @@ class MainWindow(QMainWindow):
             self._click_to_frame_started_at = None
         image = np.asarray(pixels)
         is_playing = self._controller.state_manager.snapshot.is_playing
-        if is_playing:
+        scroll_active = self._controller.is_scroll_active()
+        if is_playing or scroll_active:
             self._viewer.show_frame_fast(image)
         else:
             self._viewer.show_frame(image)
@@ -851,6 +861,16 @@ class MainWindow(QMainWindow):
                     self._show_status(
                         "Калибровка: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
                     )
+
+    def _on_scroll_settled(self) -> None:
+        if self._controller.state_manager.snapshot.is_playing:
+            return
+        self._viewer.refresh_after_scroll()
+        self._viewer.reposition_overlays()
+        self._viewer.refresh_dicom_tags_overlay()
+        self._restore_doppler_for_current_instance()
+        self._restore_mmode_for_current_instance()
+        self._sync_doppler_tool_availability()
 
     def _on_frame_load_failed(self, message: str) -> None:
         self._click_to_frame_started_at = None

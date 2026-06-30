@@ -414,6 +414,7 @@ class ViewerWidget(QWidget):
 
     play_pause_requested = Signal()
     frame_selected = Signal(int)
+    scroll_frame_selected = Signal(int)
     contour_completed = Signal(object)
     contour_landmark_rejected = Signal(str)
     contours_changed = Signal(object)
@@ -594,6 +595,12 @@ class ViewerWidget(QWidget):
         self._timeline_slider = QSlider(Qt.Orientation.Horizontal)
         self._timeline_slider.setSingleStep(1)
         self._timeline_slider.valueChanged.connect(self._on_timeline_changed)
+
+        self._scroll_debounce_ms = 70
+        self._pending_scroll_index: int | None = None
+        self._scroll_debounce_timer = QTimer(self)
+        self._scroll_debounce_timer.setSingleShot(True)
+        self._scroll_debounce_timer.timeout.connect(self._emit_pending_scroll)
 
         self._step_back_button = QPushButton("⏮")
         self._step_back_button.setFixedWidth(32)
@@ -791,9 +798,9 @@ class ViewerWidget(QWidget):
             x = geo.x() + int(x_ratio * max(geo.width() - rw, 0))
             y = geo.y() + int(y_ratio * max(geo.height() - rh, 0))
         else:
-            x = geo.x() + RESULTS_OVERLAY_EDGE_MARGIN
+            x = geo.x() + geo.width() - rw - RESULTS_OVERLAY_EDGE_MARGIN
             y = geo.y() + max(
-                geo.height() - rh - RESULTS_OVERLAY_EDGE_MARGIN,
+                int(geo.height() * DEFAULT_RESULTS_OVERLAY_Y_RATIO),
                 RESULTS_OVERLAY_EDGE_MARGIN,
             )
         x = max(geo.x(), min(x, geo.x() + max(geo.width() - rw, 0)))
@@ -1048,7 +1055,9 @@ class ViewerWidget(QWidget):
         """Return (color_display, window_level_enabled)."""
         if frame.ndim == 3 and frame.shape[2] >= 3:
             if media_format == "dicom":
-                return True, True
+                if is_color_frame(frame):
+                    return True, False
+                return False, True
             if is_effective_grayscale(frame, tolerance=24):
                 return False, True
             color = is_color_frame(frame)
@@ -1073,7 +1082,8 @@ class ViewerWidget(QWidget):
         if self._is_color_frame:
             self._color_source_rgb = to_display_rgb(frame, channel_order=channel_order)
             self._image_item.setImage(self._color_source_rgb, autoLevels=False)
-            self._update_levels()
+            if self._window_level_enabled:
+                self._update_levels()
         else:
             self._color_source_rgb = None
             gray = self._current_frame
@@ -1105,6 +1115,11 @@ class ViewerWidget(QWidget):
             if self._current_state is not None and self._current_state.instance is not None
             else None
         )
+        self._is_color_frame, self._window_level_enabled = self._resolve_display_mode(
+            frame,
+            media_format,
+        )
+        channel_order = "rgb" if media_format == "dicom" else "bgr"
         self._current_frame = to_grayscale_array(frame)
 
         levels_key = (
@@ -1116,23 +1131,27 @@ class ViewerWidget(QWidget):
         self._cached_levels_key = levels_key
 
         if self._is_color_frame:
-            channel_order = (
-                "rgb"
-                if media_format == "dicom"
-                else "bgr"
-            )
             self._color_source_rgb = to_display_rgb(frame, channel_order=channel_order)
             self._image_item.setImage(self._color_source_rgb, autoLevels=False)
-            if levels_changed:
+            if self._window_level_enabled and levels_changed:
                 self._update_levels()
         else:
             self._color_source_rgb = None
             self._image_item.setImage(self._current_frame, autoLevels=False)
-            if levels_changed:
+            if self._window_level_enabled and levels_changed:
                 self._update_levels()
         sync_enabled = getattr(self, "_sync_display_control_enabled", None)
         if callable(sync_enabled):
             sync_enabled()
+
+    def refresh_after_scroll(self) -> None:
+        """Restore layout/overlays after fast scroll without reprocessing pixels."""
+        if self._current_frame is not None:
+            height, width = self._current_frame.shape[:2]
+            self._view.setRange(xRange=(0, width), yRange=(0, height), padding=0)
+            self._refresh_frame_panel_layout()
+            self._configure_doppler_axis_for_frame()
+            self._invalidate_edge_map_cache()
 
     def clear(self) -> None:
         self._image_item.clear()
@@ -2383,6 +2402,16 @@ class ViewerWidget(QWidget):
     def is_contour_mode_active(self) -> bool:
         return self._contour_mode_active
 
+    def set_scroll_debounce_ms(self, ms: int) -> None:
+        self._scroll_debounce_ms = max(0, ms)
+
+    def _emit_pending_scroll(self) -> None:
+        if self._pending_scroll_index is None:
+            return
+        index = self._pending_scroll_index
+        self._pending_scroll_index = None
+        self.scroll_frame_selected.emit(index)
+
     def _handle_wheel(self, ev) -> bool:
         if self._current_state is None or self._current_state.total_frames <= 1:
             return False
@@ -2395,13 +2424,21 @@ class ViewerWidget(QWidget):
         if delta_y == 0:
             return False
         step = -1 if delta_y > 0 else 1
-        current = self._current_state.current_frame_index
+        current = (
+            self._pending_scroll_index
+            if self._pending_scroll_index is not None
+            else self._current_state.current_frame_index
+        )
         total = self._current_state.total_frames
         new_index = (current + step) % total
         if new_index == current:
             return False
         ev.accept()
-        self.frame_selected.emit(new_index)
+        self._pending_scroll_index = new_index
+        if self._scroll_debounce_ms <= 0:
+            self._emit_pending_scroll()
+            return True
+        self._scroll_debounce_timer.start(self._scroll_debounce_ms)
         return True
 
     def _update_timeline_indicator(self, viewer_state: ViewerState) -> None:

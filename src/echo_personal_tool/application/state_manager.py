@@ -32,6 +32,7 @@ class StateManager(QObject):
         self._measurement_snapshot: MeasurementSnapshot | None = None
         self._decode_in_progress = False
         self._manual_pixel_spacing: tuple[float, float] | None = None
+        self._scroll_navigation = False
 
     @property
     def snapshot(self) -> ViewerState:
@@ -90,7 +91,7 @@ class StateManager(QObject):
             self._current_frame_index = total_frames - 1
         self._emit_state()
 
-    def set_frame(self, index: int) -> None:
+    def set_frame(self, index: int, *, scroll: bool = False) -> None:
         if self._instance is None or self._total_frames < 1:
             raise RuntimeError("Cannot set frame without a loaded instance")
         if index < 0 or index >= self._total_frames:
@@ -98,6 +99,7 @@ class StateManager(QObject):
         if index == self._current_frame_index:
             return
         self._current_frame_index = index
+        self._scroll_navigation = scroll
         self._emit_state()
 
     def set_playing(self, is_playing: bool) -> None:
@@ -178,4 +180,20 @@ class StateManager(QObject):
         self._emit_state()
 
     def _emit_state(self) -> None:
-        self.state_changed.emit(self.snapshot)
+        scroll = self._scroll_navigation
+        self._scroll_navigation = False
+        state = ViewerState(
+            instance=self._instance,
+            current_frame_index=self._current_frame_index,
+            total_frames=self._total_frames,
+            frame_time_ms=self._frame_time_ms,
+            is_playing=self._is_playing,
+            doppler_measurement=self._doppler_measurement,
+            contours=self._contours,
+            linear_measurements=self._linear_measurements,
+            measurement_snapshot=self._measurement_snapshot,
+            decode_in_progress=self._decode_in_progress,
+            manual_pixel_spacing=self._manual_pixel_spacing,
+            scroll_navigation=scroll,
+        )
+        self.state_changed.emit(state)
