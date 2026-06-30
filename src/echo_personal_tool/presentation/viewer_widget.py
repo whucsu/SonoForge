@@ -10,13 +10,15 @@ from typing import Literal
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QEvent, QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QCursor, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QGraphicsView,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QMenu,
     QPushButton,
     QSlider,
     QVBoxLayout,
@@ -700,6 +702,10 @@ class ViewerWidget(QWidget):
             if event.type() == QEvent.Type.Wheel:
                 if self._handle_wheel(event):
                     return True
+            if event.type() == QEvent.Type.MouseButtonPress:
+                if event.button() == Qt.MouseButton.RightButton:
+                    self._show_save_context_menu(event)
+                    return True
             if event.type() == QEvent.Type.MouseMove:
                 if self._drag_session is None and hasattr(event, "globalPosition"):
                     self._handle_contour_hover_at_global(event.globalPosition())
@@ -998,6 +1004,27 @@ class ViewerWidget(QWidget):
 
     def _position_overlay_label(self) -> None:
         self._position_overlay_labels()
+
+    def _show_save_context_menu(self, ev) -> None:
+        menu = QMenu(self)
+        menu.addAction("Сохранить как...", self._save_viewer_image)
+        menu.exec(QCursor.pos())
+
+    def _save_viewer_image(self) -> None:
+        if self._current_frame is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить кадр",
+            "",
+            "PNG (*.png);JPEG (*.jpg)",
+        )
+        if not path:
+            return
+        full = self.grab()
+        geo = self._graphics.geometry()
+        cropped = full.copy(geo.x(), geo.y(), geo.width(), geo.height())
+        cropped.save(path)
 
     def _resolve_display_mode(
         self,

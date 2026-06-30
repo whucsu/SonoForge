@@ -8,7 +8,7 @@ from time import perf_counter
 from typing import Literal
 
 import numpy as np
-from PySide6.QtCore import QEvent, QSignalBlocker, Qt
+from PySide6.QtCore import QEvent, QSignalBlocker, Qt, QThreadPool
 from PySide6.QtGui import QCloseEvent, QKeyEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -175,6 +175,7 @@ class MainWindow(QMainWindow):
         content_layout.setStretch(2, 0)
 
         self._gallery.instance_selected.connect(self._on_instance_selected)
+        self._gallery.export_mp4_requested.connect(self._on_export_mp4_requested)
         self._viewer.set_state(self._controller.state_manager.snapshot)
         self._sync_results_overlay(self._controller.state_manager.snapshot)
         self._viewer.bind_display_controls(
@@ -345,6 +346,45 @@ class MainWindow(QMainWindow):
         self._user_preferences.last_opened_folder = str(folder)
         save_user_preferences(self._user_preferences)
         self.open_folder_path(folder)
+
+    def _on_export_mp4_requested(self, instance: object) -> None:
+        if not isinstance(instance, InstanceMetadata) or instance.path is None:
+            return
+        dest, _ = QFileDialog.getSaveFileName(
+            self, "Экспорт в MP4", "", "MP4 (*.mp4)",
+        )
+        if not dest:
+            return
+        if instance.media_format == "mp4":
+            import shutil as _shutil
+            _shutil.copy2(str(instance.path), dest)
+            self._show_status(f"MP4 скопирован: {dest}")
+            return
+        from echo_personal_tool.application.workers.mp4_export_worker import (
+            Mp4ExportWorker,
+        )
+        self._show_status("Экспорт в MP4...")
+        worker = Mp4ExportWorker(
+            source_path=Path(instance.path),
+            dest_path=dest,
+            media_format=instance.media_format,
+            frame_time_ms=instance.frame_time_ms,
+            parent=self,
+        )
+        worker.signals.progress.connect(self._on_mp4_export_progress)
+        worker.signals.finished.connect(self._on_mp4_export_finished)
+        worker.signals.failed.connect(self._on_mp4_export_failed)
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_mp4_export_progress(self, current: int, total: int) -> None:
+        self._show_status(f"Экспорт MP4: {current}/{total} кадров")
+
+    def _on_mp4_export_finished(self, path: str) -> None:
+        self._show_status(f"MP4 экспортирован: {path}")
+
+    def _on_mp4_export_failed(self, error: str) -> None:
+        QMessageBox.warning(self, "Ошибка экспорта", error)
+        self._show_status("Экспорт MP4 не удался")
 
     def _open_orthanc_dialog(self) -> None:
         settings = load_server_settings()

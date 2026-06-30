@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import inspect
+import shutil
 from collections.abc import Callable
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
+    QFileDialog,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QSizePolicy,
     QStyle,
     QStyledItemDelegate,
@@ -144,6 +147,7 @@ class ThumbnailGalleryWidget(QListWidget):
     """Two-column vertical thumbnail strip (EchoPac left panel)."""
 
     instance_selected = Signal(object)
+    export_mp4_requested = Signal(object)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -164,6 +168,8 @@ class ThumbnailGalleryWidget(QListWidget):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.itemClicked.connect(self._on_item_clicked)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._on_context_menu)
 
         self._thumbnail_cache: dict[str, QIcon] = {}
         self._thumbnail_pixmaps: dict[str, QPixmap] = {}
@@ -303,6 +309,40 @@ class ThumbnailGalleryWidget(QListWidget):
         instance = item.data(_ITEM_ROLE)
         if isinstance(instance, InstanceMetadata):
             self.instance_selected.emit(instance)
+
+    def _on_context_menu(self, pos) -> None:
+        item = self.itemAt(pos)
+        if item is None:
+            return
+        instance = item.data(_ITEM_ROLE)
+        if not isinstance(instance, InstanceMetadata):
+            return
+        menu = QMenu(self)
+        if instance.media_format == "dicom":
+            menu.addAction(
+                "Скопировать DICOM-файл...",
+                lambda: self._copy_source_file(instance),
+            )
+            menu.addAction(
+                "Экспорт в MP4...",
+                lambda: self.export_mp4_requested.emit(instance),
+            )
+        elif instance.media_format == "mp4":
+            menu.addAction(
+                "Скопировать MP4-файл...",
+                lambda: self._copy_source_file(instance),
+            )
+        menu.exec(self.viewport().mapToGlobal(pos))
+
+    def _copy_source_file(self, instance: InstanceMetadata) -> None:
+        if instance.path is None:
+            return
+        default_name = instance.path.name
+        dest, _ = QFileDialog.getSaveFileName(
+            self, "Сохранить файл", default_name,
+        )
+        if dest:
+            shutil.copy2(str(instance.path), dest)
 
     def _visible_instance_uids(self) -> set[str]:
         uids: set[str] = set()
