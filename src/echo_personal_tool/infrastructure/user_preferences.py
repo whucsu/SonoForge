@@ -99,6 +99,7 @@ class UserPreferences:
     last_opened_folder: str = ""
     theme_mode: str = "dark"
     language: str = "ru"
+    auto_play: bool = False
     layout_state_json: str = ""
 
 
@@ -285,6 +286,7 @@ def load_user_preferences() -> UserPreferences:
             store.value("theme_mode"), "dark", {"dark", "light", "system", "vscode_dark", "vscode_light"}
         ),
         language=_read_choice(store.value("language"), "ru", {"ru", "en"}),
+        auto_play=_read_bool(store.value("auto_play"), False),
         layout_state_json=str(store.value("layout_state_json", "")),
     )
 

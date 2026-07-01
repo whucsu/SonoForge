@@ -348,8 +348,6 @@ class _ContourNodeItem(pg.ScatterPlotItem):
 class _CaliperNodeItem(pg.ScatterPlotItem):
     """Single draggable caliper endpoint node."""
 
-    _DRAG_THRESHOLD = 5.0
-
     def __init__(
         self,
         viewer_widget: "ViewerWidget",
@@ -369,8 +367,6 @@ class _CaliperNodeItem(pg.ScatterPlotItem):
         self._endpoint_index = endpoint_index
         self._base_pen = pen
         self._base_size = 10
-        self._press_pos = None
-        self._drag_started = False
         self.setZValue(30)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
         self.setAcceptHoverEvents(True)
@@ -394,37 +390,13 @@ class _CaliperNodeItem(pg.ScatterPlotItem):
         ev.accept()
         view_box = self.getViewBox() or self._viewer_widget._view
         point = view_box.mapSceneToView(ev.scenePos())
-        self._press_pos = (float(point.x()), float(point.y()))
-        self._drag_started = False
         self._viewer_widget._select_caliper(self._caliper_key)
-
-    def mouseMoveEvent(self, ev) -> None:  # type: ignore[override]
-        if self._press_pos is None:
-            return
-        view_box = self.getViewBox() or self._viewer_widget._view
-        point = view_box.mapSceneToView(ev.scenePos())
-        dx = float(point.x()) - self._press_pos[0]
-        dy = float(point.y()) - self._press_pos[1]
-        if not self._drag_started and (abs(dx) > self._DRAG_THRESHOLD or abs(dy) > self._DRAG_THRESHOLD):
-            self._drag_started = True
-            self._viewer_widget._begin_caliper_node_drag(
-                self._caliper_key,
-                self._endpoint_index,
-                self._press_pos[0],
-                self._press_pos[1],
-            )
-        if self._drag_started:
-            self._viewer_widget._apply_caliper_node_drag(
-                float(point.x()), float(point.y()),
-            )
-            ev.accept()
-
-    def mouseReleaseEvent(self, ev) -> None:  # type: ignore[override]
-        if ev.button() == Qt.MouseButton.LeftButton:
-            if self._drag_started:
-                self._viewer_widget._finish_caliper_node_drag()
-            self._press_pos = None
-            self._drag_started = False
+        self._viewer_widget._begin_caliper_node_drag(
+            self._caliper_key,
+            self._endpoint_index,
+            float(point.x()),
+            float(point.y()),
+        )
 
     def mouseDragEvent(self, ev) -> None:  # type: ignore[override]
         if ev.button() != Qt.MouseButton.LeftButton:
@@ -446,6 +418,9 @@ class ResultsOverlayLabel(QLabel):
     """Draggable measurement summary overlay on the viewer."""
 
     position_changed = Signal(float, float)
+    clear_requested = Signal()
+    reset_position_requested = Signal()
+    pin_toggled = Signal(bool)
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
@@ -454,6 +429,7 @@ class ResultsOverlayLabel(QLabel):
         self._dragging = False
         self._drag_offset_x = 0.0
         self._drag_offset_y = 0.0
+        self._pinned = False
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setToolTip("Перетащите для смены позиции оверлея результатов")
 
@@ -502,6 +478,24 @@ class ResultsOverlayLabel(QLabel):
         if event.button() == Qt.MouseButton.LeftButton and self._dragging:
             self._dragging = False
             self.setCursor(Qt.CursorShape.OpenHandCursor)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def contextMenuEvent(self, event) -> None:  # type: ignore[override]
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        clear_action = menu.addAction("Очистить")
+        reset_action = menu.addAction("Сбросить позицию")
+        pin_action = menu.addAction("Открепить" if self._pinned else "Зафиксировать")
+        action = menu.exec(event.globalPos())
+        if action == clear_action:
+            self.clear_requested.emit()
+        elif action == reset_action:
+            self.reset_position_requested.emit()
+        elif action == pin_action:
+            self._pinned = not self._pinned
+            self.pin_toggled.emit(self._pinned)
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -668,6 +662,7 @@ class ViewerWidget(QWidget):
         self._panel_frame_items: list[pg.PlotDataItem] = []
         self._magnetic_snap_enabled = True
         self._results_overlay_custom_position = False
+        self._results_overlay_cleared = False
         self._edge_map_cache: EdgeMap | None = None
         self._edge_map_cache_key: tuple[int, tuple[float, float] | None] | None = None
 
@@ -684,6 +679,9 @@ class ViewerWidget(QWidget):
         self._results_overlay_label.position_changed.connect(
             self.results_overlay_position_changed.emit
         )
+        self._results_overlay_label.clear_requested.connect(self._on_results_overlay_clear)
+        self._results_overlay_label.reset_position_requested.connect(self._on_results_overlay_reset_position)
+        self._results_overlay_label.pin_toggled.connect(self._on_results_overlay_pin_toggled)
         self._results_overlay_label.hide()
 
         self._dicom_tags_overlay_label = QLabel(self)
@@ -872,7 +870,8 @@ class ViewerWidget(QWidget):
             self._overlay_label.move(x, y)
 
         if self._results_overlay_label.isVisible() and reposition_results:
-            self._reposition_results_overlay_label(geo)
+            if not self._results_overlay_label._pinned:
+                self._reposition_results_overlay_label(geo)
 
         if self._dicom_tags_overlay_label.isVisible():
             self._position_dicom_tags_overlay(geo)
@@ -886,6 +885,8 @@ class ViewerWidget(QWidget):
 
     def _request_results_overlay_reposition(self) -> None:
         if not self._results_overlay_label.isVisible():
+            return
+        if self._results_overlay_label._pinned:
             return
         QTimer.singleShot(0, self._reposition_results_overlay_deferred)
 
@@ -922,6 +923,19 @@ class ViewerWidget(QWidget):
         self._results_overlay_custom_position = False
         if self._results_overlay_label.isVisible():
             self._request_results_overlay_reposition()
+
+    def _on_results_overlay_clear(self) -> None:
+        self._results_overlay_cleared = True
+        self.set_results_overlay("")
+
+    def _on_results_overlay_reset_position(self) -> None:
+        self.reset_results_overlay_to_default()
+
+    def _on_results_overlay_pin_toggled(self, pinned: bool) -> None:
+        if pinned:
+            self._results_overlay_label.setCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            self._results_overlay_label.setCursor(Qt.CursorShape.OpenHandCursor)
 
     def _graphics_content_geometry(self):
         return self._graphics.geometry()
@@ -1085,6 +1099,9 @@ class ViewerWidget(QWidget):
 
     def set_results_overlay(self, text: str) -> None:
         """Show session measurement summary (top-right box, left-aligned text)."""
+        if self._results_overlay_cleared and text.strip():
+            return
+        self._results_overlay_cleared = False
         if text.strip():
             text_changed = text != self._results_overlay_label.text()
             was_visible = self._results_overlay_label.isVisible()

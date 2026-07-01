@@ -19,9 +19,17 @@ from PySide6.QtWidgets import (
 _ICON_DIR = Path(__file__).resolve().parent.parent / "resources" / "icons"
 
 
+def _icon_dir() -> Path:
+    import sys
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass is not None:
+        return Path(meipass) / "echo_personal_tool" / "resources" / "icons"
+    return _ICON_DIR
+
+
 def _load_icon(name: str) -> QIcon:
     from echo_personal_tool.presentation.echopac_theme import get_theme_palette
-    svg_path = _ICON_DIR / f"{name}.svg"
+    svg_path = _icon_dir() / f"{name}.svg"
     if svg_path.is_file():
         svg_text = svg_path.read_text(encoding="utf-8")
         color = get_theme_palette().get("text", "#f1f5f9")

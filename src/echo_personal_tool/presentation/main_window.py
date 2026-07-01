@@ -560,6 +560,31 @@ class MainWindow(QMainWindow):
         self._activity_bar = ActivityBar()
         self._activity_bar.tab_activated.connect(self._on_activity_tab_activated)
         self._activity_bar.tab_deactivated.connect(self._on_activity_tab_deactivated)
+        self._activity_bar.action_requested.connect(self._on_activity_action)
+
+    def _on_activity_action(self, action: str) -> None:
+        if action == "caliper":
+            self._on_caliper_requested()
+        elif action == "lv2d":
+            self._on_lv2d_all_diastole()
+        elif action == "esv":
+            self._on_lv2d_es()
+        elif action == "simpson_manual_ed":
+            self._on_measure_action(
+                MeasurementAction.MANUAL_SIMPSON, "A4C", "ED", ""
+            )
+        elif action == "simpson_manual_es":
+            self._on_measure_action(
+                MeasurementAction.MANUAL_SIMPSON, "A4C", "ES", ""
+            )
+        elif action == "auto_ed":
+            self._on_measure_action(
+                MeasurementAction.AUTO_SEGMENT, "A4C", "ED", ""
+            )
+        elif action == "auto_es":
+            self._on_measure_action(
+                MeasurementAction.AUTO_SEGMENT, "A4C", "ES", ""
+            )
 
     def _remove_tool_panel_from_content_layout(self) -> None:
         idx = self._content_layout.indexOf(self._tool_panel)
@@ -624,6 +649,7 @@ class MainWindow(QMainWindow):
             self._tool_panel.controls._magnetic_snap_check.setChecked(
                 preferences.magnetic_snap_enabled
             )
+        self._tool_panel.set_auto_play(preferences.auto_play)
         self._viewer.set_magnetic_snap_enabled(preferences.magnetic_snap_enabled)
         self._viewer.apply_user_preferences(preferences)
         self._gallery.apply_scale(preferences.thumbnail_scale)
@@ -883,17 +909,14 @@ class MainWindow(QMainWindow):
         if is_playing or scroll_active:
             self._viewer.show_frame_fast(image)
         else:
-            self._content_widget.setUpdatesEnabled(False)
-            try:
-                self._viewer.show_frame(image)
-            finally:
-                self._content_widget.setUpdatesEnabled(True)
-            self._viewer.reposition_overlays()
+            self._viewer.show_frame(image)
             self._viewer.reposition_overlays()
             self._viewer.refresh_dicom_tags_overlay()
             self._restore_doppler_for_current_instance()
             self._restore_mmode_for_current_instance()
             self._sync_doppler_tool_availability()
+            if self._user_preferences.auto_play and not is_playing:
+                self._controller.toggle_playback()
             if self._controller.needs_manual_calibration():
                 self._viewer._auto_calibration_succeeded = False
                 if self._controller.try_auto_depth_calibration(image):
@@ -1109,6 +1132,7 @@ class MainWindow(QMainWindow):
         )
         self._tool_panel.results_requested.connect(self._show_results_dialog)
         self._tool_panel.magnetic_snap_changed.connect(self._on_magnetic_snap_changed)
+        self._tool_panel.auto_play_changed.connect(self._on_auto_play_changed)
         self._controller.speckle_result_ready.connect(self._on_speckle_result_ready)
         self._apply_magnetic_snap_from_preferences()
 
@@ -1117,6 +1141,10 @@ class MainWindow(QMainWindow):
         with QSignalBlocker(self._tool_panel.controls._magnetic_snap_check):
             self._tool_panel.controls._magnetic_snap_check.setChecked(enabled)
         self._viewer.set_magnetic_snap_enabled(enabled)
+
+    def _on_auto_play_changed(self, enabled: bool) -> None:
+        self._user_preferences.auto_play = enabled
+        save_user_preferences(self._user_preferences)
 
     def _on_measure_action(
         self,

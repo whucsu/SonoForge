@@ -16,9 +16,17 @@ from PySide6.QtWidgets import (
 _ICON_DIR = Path(__file__).resolve().parent.parent / "resources" / "icons"
 
 
+def _icon_dir() -> Path:
+    import sys
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass is not None:
+        return Path(meipass) / "echo_personal_tool" / "resources" / "icons"
+    return _ICON_DIR
+
+
 def _load_icon(name: str) -> QIcon:
     from echo_personal_tool.presentation.echopac_theme import get_theme_palette
-    svg_path = _ICON_DIR / f"{name}.svg"
+    svg_path = _icon_dir() / f"{name}.svg"
     if svg_path.is_file():
         svg_text = svg_path.read_text(encoding="utf-8")
         color = get_theme_palette().get("text", "#f1f5f9")
@@ -31,30 +39,51 @@ def _load_icon(name: str) -> QIcon:
 
 
 class ActivityBar(QWidget):
-    """Vertical icon bar (VS Code style, ~48px)."""
+    """Vertical icon bar with tool shortcuts."""
 
     tab_activated = Signal(str)
     tab_deactivated = Signal(str)
+    action_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("activityBar")
-        self.setFixedWidth(48)
+        self.setFixedWidth(96)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self._buttons: dict[str, QPushButton] = {}
-        for name, icon_file in [
-            ("measures", "activity_measures"),
-            ("controls", "activity_controls"),
+        for name, icon_file, tooltip in [
+            ("measures", "activity_measures", "Измерения"),
+            ("controls", "activity_controls", "Управление"),
         ]:
             btn = QPushButton()
             btn.setIcon(_load_icon(icon_file))
             btn.setCheckable(True)
-            btn.setToolTip(name.capitalize())
+            btn.setToolTip(tooltip)
             btn.clicked.connect(lambda _, n=name: self._on_click(n))
             layout.addWidget(btn)
             self._buttons[name] = btn
+
+        layout.addSpacing(8)
+
+        self._action_buttons: dict[str, QPushButton] = {}
+        for name, icon_file, tooltip in [
+            ("caliper", "activity_caliper", "Линейный калипер"),
+            ("lv2d", "activity_lv2d", "МЖП-КДР-ЗСЛЖ (2D)"),
+            ("esv", "activity_esv", "КСР (ESV)"),
+            ("simpson_manual_ed", "activity_simpd", "Simpson manual КДО"),
+            ("simpson_manual_es", "activity_simps", "Simpson manual КСО"),
+            ("auto_ed", "activity_auto_d", "ЛЖ авто КДО"),
+            ("auto_es", "activity_auto_s", "ЛЖ авто КСО"),
+        ]:
+            btn = QPushButton()
+            btn.setIcon(_load_icon(icon_file))
+            btn.setToolTip(tooltip)
+            btn.clicked.connect(lambda _, n=name: self.action_requested.emit(n))
+            layout.addWidget(btn)
+            self._action_buttons[name] = btn
+
         layout.addStretch(1)
 
     def _on_click(self, name: str) -> None:

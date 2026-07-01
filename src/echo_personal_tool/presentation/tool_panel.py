@@ -103,6 +103,7 @@ class MeasureTab(QWidget):
 
     action_requested = Signal(object, str, str, str)
     patient_metrics_changed = Signal(object, object)
+    auto_play_changed = Signal(bool)
     results_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -111,6 +112,10 @@ class MeasureTab(QWidget):
         self._menu.action_requested.connect(self.action_requested.emit)
         self._patient_metrics = _PatientMetricsRow()
         self._patient_metrics.metrics_changed.connect(self.patient_metrics_changed.emit)
+
+        self._auto_play_check = QCheckBox("Автовоспроизведение")
+        self._auto_play_check.setToolTip("Автоматически воспроизводить cine при загрузке")
+        self._auto_play_check.toggled.connect(self.auto_play_changed.emit)
 
         self._results_button = QPushButton("Результаты")
         self._results_button.setMinimumHeight(32)
@@ -128,6 +133,7 @@ class MeasureTab(QWidget):
         self._layout.setSpacing(0)
         self._layout.addWidget(self._menu, stretch=1)
         self._layout.addWidget(self._patient_metrics, stretch=0)
+        self._layout.addWidget(self._auto_play_check, stretch=0)
         self._layout.addWidget(self._metrics_results_gap, stretch=0)
         self._layout.addWidget(results_wrap, stretch=0)
 
@@ -147,6 +153,11 @@ class MeasureTab(QWidget):
 
     def set_patient_metrics(self, height_cm: float | None, weight_kg: float | None) -> None:
         self._patient_metrics.set_metrics(height_cm, weight_kg)
+
+    def set_auto_play(self, enabled: bool) -> None:
+        self._auto_play_check.blockSignals(True)
+        self._auto_play_check.setChecked(enabled)
+        self._auto_play_check.blockSignals(False)
 
     def set_doppler_tool_availability(self, *, time_ok: bool) -> None:
         self._menu.set_doppler_tool_availability(time_ok=time_ok)
@@ -169,6 +180,7 @@ class ToolPanel(QWidget):
 
     action_requested = Signal(object, str, str, str)
     patient_metrics_changed = Signal(object, object)
+    auto_play_changed = Signal(bool)
     results_requested = Signal()
     magnetic_snap_changed = Signal(bool)
 
@@ -188,6 +200,7 @@ class ToolPanel(QWidget):
 
         self.measure.action_requested.connect(self.action_requested.emit)
         self.measure.patient_metrics_changed.connect(self.patient_metrics_changed.emit)
+        self.measure.auto_play_changed.connect(self.auto_play_changed.emit)
         self.measure.results_requested.connect(self.results_requested.emit)
         self.controls.magnetic_snap_changed.connect(self.magnetic_snap_changed.emit)
 
@@ -197,6 +210,9 @@ class ToolPanel(QWidget):
 
     def set_patient_metrics(self, height_cm: float | None, weight_kg: float | None) -> None:
         self.measure.set_patient_metrics(height_cm, weight_kg)
+
+    def set_auto_play(self, enabled: bool) -> None:
+        self.measure.set_auto_play(enabled)
 
     def set_dicom_inspector_visible(self, visible: bool) -> None:
         pass
