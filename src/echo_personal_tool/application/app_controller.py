@@ -1898,22 +1898,22 @@ class AppController(QObject):
             frames = self._frame_cache.require_full_cine()
         except IncompleteCineError:
             self.status_message.emit(
-                "speckle tracking: перезагрузите полную cine-последовательность"
+                tr("app.speckle_reload_cine")
             )
             return
 
         if len(frames) < 3:
-            self.status_message.emit("speckle tracking: недостаточно кадров")
+            self.status_message.emit(tr("app.speckle_not_enough_frames"))
             return
 
         if contour is None:
-            self.status_message.emit("speckle tracking: нарисуйте контур LV")
+            self.status_message.emit(tr("app.speckle_draw_contour"))
             return
 
         from echo_personal_tool.domain.models.contour import Contour
 
         if not isinstance(contour, Contour) or len(contour.points) < 3:
-            self.status_message.emit("speckle tracking: контур LV не найден")
+            self.status_message.emit(tr("app.speckle_contour_not_found"))
             return
 
         pixel_spacing = self._state_manager.snapshot.effective_pixel_spacing or (1.0, 1.0)
@@ -1928,7 +1928,7 @@ class AppController(QObject):
 
         frame_time_ms = self._state_manager.snapshot.frame_time_ms or 33.3
 
-        self.status_message.emit("speckle tracking: вычисление...")
+        self.status_message.emit(tr("app.speckle_compute"))
         worker = SpeckleTrackingWorker(
             frames=frames,
             zone=zone,
@@ -1956,4 +1956,4 @@ class AppController(QObject):
         self.speckle_result_ready.emit(result)
 
     def _on_speckle_tracking_error(self, message: str) -> None:
-        self.status_message.emit(f"speckle tracking ошибка: {message}")
+        self.status_message.emit(tr("app.speckle_error", message=message))
