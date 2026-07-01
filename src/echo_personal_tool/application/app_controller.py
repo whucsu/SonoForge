@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import sys
 from functools import partial
 from pathlib import Path
 from time import perf_counter
@@ -122,6 +123,10 @@ class AppController(QObject):
         self._timer = QTimer(self)
         self._timer.setSingleShot(False)
         self._timer.timeout.connect(self._advance_playback)
+        if sys.platform == "win32":
+            self._timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._last_frame_shown_at: float = 0.0
+        self._playback_warmup_pending = False
         self._studies: list[StudyMetadata] = []
         self._current_instance: InstanceMetadata | None = None
         self._loaded_source_path: Path | None = None
@@ -511,9 +516,23 @@ class AppController(QObject):
                             self._state_manager.set_frame(target)
         else:
             self._invalidate_prefetch()
+            self._playback_warmup_pending = False
         self._state_manager.set_playing(is_playing)
         if is_playing:
-            self._prefetch_playback_buffer(self._state_manager.snapshot.current_frame_index)
+            current = self._state_manager.snapshot.current_frame_index
+            self._prefetch_playback_buffer(current)
+            cfg = self._playback_config
+            if (
+                self._current_instance is not None
+                and self._current_instance.path is not None
+                and self._frame_cache.is_ready(self._current_instance.path)
+            ):
+                ahead = self._frame_cache.loaded_ahead(current)
+                if ahead < cfg.min_buffer:
+                    self._playback_warmup_pending = True
+                    return
+            self._last_frame_shown_at = perf_counter()
+            self._timer.start()
 
     def toggle_playback(self) -> None:
         self.set_playing(not self._state_manager.snapshot.is_playing)
@@ -1361,6 +1380,21 @@ class AppController(QObject):
             return
         if self._pending_decode_id != 0:
             return
+        if self._playback_warmup_pending:
+            cfg = self._playback_config
+            current = state.current_frame_index
+            if (
+                self._current_instance is not None
+                and self._current_instance.path is not None
+                and self._frame_cache.is_ready(self._current_instance.path)
+            ):
+                ahead = self._frame_cache.loaded_ahead(current)
+                if ahead >= cfg.min_buffer:
+                    self._playback_warmup_pending = False
+                    self._last_frame_shown_at = perf_counter()
+                    self._timer.start()
+                return
+            return
         if (
             self._current_instance is not None
             and self._current_instance.media_format in ("dicom", "mp4")
@@ -1374,6 +1408,7 @@ class AppController(QObject):
             if self._frame_cache.is_loaded(next_idx):
                 self._frame_cache.set_current(next_idx)
                 self.step_frame(1)
+                self._last_frame_shown_at = perf_counter()
                 self._prefetch_playback_buffer(next_idx)
                 return
 
@@ -1385,6 +1420,7 @@ class AppController(QObject):
                     self._frame_cache.set_current(skip_to)
                     self._state_manager.set_frame(skip_to)
                     self._emit_cached_frame(skip_to)
+                    self._last_frame_shown_at = perf_counter()
                     self._prefetch_playback_buffer(skip_to)
                     return
 

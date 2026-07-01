@@ -76,6 +76,17 @@ def _loaded_file_label(instance: InstanceMetadata) -> str:
     return instance.sop_instance_uid
 
 
+def apply_maximized_to_work_area(window: QMainWindow) -> None:
+    screen = window.screen() or QApplication.primaryScreen()
+    if screen is None:
+        window.showMaximized()
+        return
+    geo = screen.availableGeometry()
+    window.setGeometry(geo)
+    window.showMaximized()
+    window._user_maximized = True  # type: ignore[attr-defined]
+
+
 class MainWindow(QMainWindow):
     """EchoPac-style layout: thumbnails | viewer | tool panel."""
 
@@ -100,6 +111,8 @@ class MainWindow(QMainWindow):
         self._rv_fac_awaiting_es = False
         self._instance_overlay_cache: dict[str, str] = {}
         self._instance_overlay_positions: dict[str, tuple[float, float]] = {}
+        self._study_overlay_positions: dict[str, tuple[float, float]] = {}
+        self._current_overlay_study_uid: str | None = None
         self._overlay_sync_instance_uid: str | None = None
         self._last_overlay_state: ViewerState | None = None
         self._manual_ed_frame: int | None = None
@@ -111,6 +124,7 @@ class MainWindow(QMainWindow):
         self._viewer2_frame_index: int = 0
         self._active_viewer: ViewerWidget | None = None
         self._activity_bar = None
+        self._user_maximized = False
 
         self._controller = controller or AppController()
         orthanc_root = Path.home() / ".echo-personal-tool" / "orthanc"
@@ -312,13 +326,20 @@ class MainWindow(QMainWindow):
     def _toggle_maximize(self) -> None:
         if self.isMaximized():
             self.showNormal()
+            self._user_maximized = False
         else:
-            self.showMaximized()
+            apply_maximized_to_work_area(self)
         self._system_bar.update_maximize_button(self.isMaximized())
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.WindowStateChange:
             self._system_bar.update_maximize_button(self.isMaximized())
+            if self.isMaximized() and self._user_maximized:
+                screen = self.screen() or QApplication.primaryScreen()
+                if screen is not None:
+                    geo = screen.availableGeometry()
+                    if self.geometry() != geo:
+                        self.setGeometry(geo)
         super().changeEvent(event)
 
     def _load_layout_state(self) -> LayoutConfig:
@@ -632,6 +653,8 @@ class MainWindow(QMainWindow):
         self._user_preferences = preferences
         if not preferences.results_overlay_custom_position:
             self._instance_overlay_positions.clear()
+            self._study_overlay_positions.clear()
+            self._current_overlay_study_uid = None
         from echo_personal_tool.infrastructure.i18n import set_language
         set_language(preferences.language)
         app = QApplication.instance()
@@ -667,8 +690,21 @@ class MainWindow(QMainWindow):
         instance = self._controller.state_manager.snapshot.instance
         if instance is not None:
             self._instance_overlay_positions[instance.sop_instance_uid] = (x_ratio, y_ratio)
+        if self._viewer._results_overlay_label._pinned:
+            study_uid = self._controller._resolve_study_uid(instance)
+            self._study_overlay_positions[study_uid] = (x_ratio, y_ratio)
 
     def _restore_results_overlay_position(self, instance_uid: str | None) -> None:
+        instance = self._controller.state_manager.snapshot.instance
+        study_uid = self._controller._resolve_study_uid(instance)
+        if study_uid != self._current_overlay_study_uid:
+            self._current_overlay_study_uid = study_uid
+            if study_uid in self._study_overlay_positions:
+                x_ratio, y_ratio = self._study_overlay_positions[study_uid]
+                self._viewer.set_results_overlay_position(x_ratio, y_ratio, custom=True)
+                return
+            self._viewer.reset_results_overlay_to_default()
+            return
         if instance_uid and instance_uid in self._instance_overlay_positions:
             x_ratio, y_ratio = self._instance_overlay_positions[instance_uid]
             self._viewer.set_results_overlay_position(x_ratio, y_ratio, custom=True)
@@ -793,6 +829,8 @@ class MainWindow(QMainWindow):
         logger.info("[MW] _on_studies_loaded: %d studies, %d instances", len(study_list), n_inst)
         self._instance_overlay_cache.clear()
         self._instance_overlay_positions.clear()
+        self._study_overlay_positions.clear()
+        self._current_overlay_study_uid = None
         self._overlay_sync_instance_uid = None
         self._last_overlay_state = None
         self._viewer.set_results_overlay("")
@@ -829,6 +867,9 @@ class MainWindow(QMainWindow):
             if self._viewer.results_overlay_custom_position():
                 x_ratio, y_ratio = self._viewer.results_overlay_position()
                 self._instance_overlay_positions[previous.sop_instance_uid] = (x_ratio, y_ratio)
+                if self._viewer._results_overlay_label._pinned:
+                    study_uid = self._controller._resolve_study_uid(previous)
+                    self._study_overlay_positions[study_uid] = (x_ratio, y_ratio)
             frame_index = self._controller.state_manager.snapshot.current_frame_index
             self._controller.save_doppler_for_frame(
                 previous.sop_instance_uid,
@@ -899,7 +940,8 @@ class MainWindow(QMainWindow):
             self._viewer2.set_state(state)
 
     def _on_frame_loaded(self, pixels: object) -> None:
-        if self._click_to_frame_started_at is not None:
+        instance_switch = self._click_to_frame_started_at is not None
+        if instance_switch:
             elapsed_ms = (perf_counter() - self._click_to_frame_started_at) * 1000.0
             logger.info("click_to_frame_loaded duration_ms=%.2f", elapsed_ms)
             self._click_to_frame_started_at = None
@@ -908,6 +950,9 @@ class MainWindow(QMainWindow):
         scroll_active = self._controller.is_scroll_active()
         if is_playing or scroll_active:
             self._viewer.show_frame_fast(image)
+        elif instance_switch:
+            self._viewer.show_frame_fast(image)
+            QTimer.singleShot(0, lambda: self._deferred_instance_switch_restore(image, is_playing))
         else:
             self._viewer.show_frame(image)
             self._viewer.reposition_overlays()
@@ -925,6 +970,24 @@ class MainWindow(QMainWindow):
                     self._show_status(
                         "Калибровка: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
                     )
+
+    def _deferred_instance_switch_restore(self, image: np.ndarray, is_playing: bool) -> None:
+        self._viewer.show_frame(image)
+        self._viewer.reposition_overlays()
+        self._viewer.refresh_dicom_tags_overlay()
+        self._restore_doppler_for_current_instance()
+        self._restore_mmode_for_current_instance()
+        self._sync_doppler_tool_availability()
+        if self._user_preferences.auto_play and not is_playing:
+            self._controller.toggle_playback()
+        if self._controller.needs_manual_calibration():
+            self._viewer._auto_calibration_succeeded = False
+            if self._controller.try_auto_depth_calibration(image):
+                self._viewer.show_calibration_ok_overlay()
+            elif self._viewer.start_calibration_caliper():
+                self._show_status(
+                    "Калибровка: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
+                )
 
     def _on_scroll_settled(self) -> None:
         if self._controller.state_manager.snapshot.is_playing:

@@ -270,6 +270,8 @@ class ContourViewBox(pg.ViewBox):
     def leaveEvent(self, ev) -> None:  # type: ignore[override]
         if self._viewer_widget is not None:
             self._viewer_widget._clear_contour_hover()
+            if self._viewer_widget._caliper_drag_active:
+                self._viewer_widget._finish_caliper_node_drag(cancel=True)
         super().leaveEvent(ev)
 
     def wheelEvent(self, ev, axis=None) -> None:  # type: ignore[override]
@@ -348,6 +350,9 @@ class _ContourNodeItem(pg.ScatterPlotItem):
 class _CaliperNodeItem(pg.ScatterPlotItem):
     """Single draggable caliper endpoint node."""
 
+    _SYMBOL_DEFAULT = "+"
+    _SYMBOL_HOVER = "o"
+
     def __init__(
         self,
         viewer_widget: "ViewerWidget",
@@ -357,8 +362,8 @@ class _CaliperNodeItem(pg.ScatterPlotItem):
         pen: pg.functions.mkPen,
     ) -> None:
         super().__init__(
-            symbol="o",
-            size=10,
+            symbol=self._SYMBOL_DEFAULT,
+            size=12,
             pen=pen,
             brush=pg.mkBrush(pen.color()),
         )
@@ -366,7 +371,7 @@ class _CaliperNodeItem(pg.ScatterPlotItem):
         self._caliper_key = caliper_key
         self._endpoint_index = endpoint_index
         self._base_pen = pen
-        self._base_size = 10
+        self._base_size = 12
         self.setZValue(30)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
         self.setAcceptHoverEvents(True)
@@ -374,11 +379,13 @@ class _CaliperNodeItem(pg.ScatterPlotItem):
 
     def hoverEvent(self, ev) -> None:  # type: ignore[override]
         if ev.isEnter():
+            self.setSymbol(self._SYMBOL_HOVER)
             self.setSize(14)
             self.setPen(pg.mkPen("#ffb300", width=2))
             self.setBrush(pg.mkBrush("#ffb300"))
         elif ev.isExit():
             if self._viewer_widget._selected_caliper_key != self._caliper_key:
+                self.setSymbol(self._SYMBOL_DEFAULT)
                 self.setSize(self._base_size)
                 self.setPen(self._base_pen)
                 self.setBrush(pg.mkBrush(self._base_pen.color()))
@@ -402,13 +409,27 @@ class _CaliperNodeItem(pg.ScatterPlotItem):
         if ev.button() != Qt.MouseButton.LeftButton:
             return
         ev.accept()
+        view_box = self.getViewBox() or self._viewer_widget._view
+        point = view_box.mapSceneToView(ev.scenePos())
+        self._viewer_widget._apply_caliper_node_drag(
+            float(point.x()), float(point.y())
+        )
+
+    def mouseReleaseEvent(self, ev) -> None:  # type: ignore[override]
+        if ev.button() != Qt.MouseButton.LeftButton:
+            super().mouseReleaseEvent(ev)
+            return
+        ev.accept()
+        self._viewer_widget._finish_caliper_node_drag()
 
     def set_selected(self, selected: bool) -> None:
         if selected:
+            self.setSymbol(self._SYMBOL_HOVER)
             self.setSize(14)
             self.setPen(pg.mkPen("#ffb300", width=2))
             self.setBrush(pg.mkBrush("#ffb300"))
         else:
+            self.setSymbol(self._SYMBOL_DEFAULT)
             self.setSize(self._base_size)
             self.setPen(self._base_pen)
             self.setBrush(pg.mkBrush(self._base_pen.color()))
@@ -635,6 +656,7 @@ class ViewerWidget(QWidget):
         self._caliper_drag_key: tuple[str, int] | None = None
         self._caliper_drag_node: int | None = None
         self._caliper_drag_original: LinearMeasurement | None = None
+        self._caliper_drag_persistent_items: list | None = None
         self._selected_caliper_key: tuple[str, int] | None = None
         self._syncing_state = False
         self._is_color_frame = False
@@ -926,6 +948,10 @@ class ViewerWidget(QWidget):
 
     def _on_results_overlay_clear(self) -> None:
         self._results_overlay_cleared = True
+        self._stored_linear_measurements.clear()
+        self._persistent_linear_graphics.clear()
+        self._render_persistent_linear_calipers()
+        self._emit_stored_linear_measurements()
         self.set_results_overlay("")
 
     def _on_results_overlay_reset_position(self) -> None:
@@ -934,6 +960,9 @@ class ViewerWidget(QWidget):
     def _on_results_overlay_pin_toggled(self, pinned: bool) -> None:
         if pinned:
             self._results_overlay_label.setCursor(Qt.CursorShape.ArrowCursor)
+            if self._results_overlay_custom_position:
+                x_ratio, y_ratio = self._results_overlay_label.position_ratios()
+                self.results_overlay_position_changed.emit(x_ratio, y_ratio)
         else:
             self._results_overlay_label.setCursor(Qt.CursorShape.OpenHandCursor)
 
@@ -3922,8 +3951,9 @@ class ViewerWidget(QWidget):
         self,
         start: tuple[float, float],
         end: tuple[float, float],
+        label: str | None = None,
     ) -> tuple[float, float]:
-        if self._current_caliper_label() in self._vertical_caliper_labels:
+        if (label or self._current_caliper_label()) in self._vertical_caliper_labels:
             end_y = end[1]
             if self._mmode_calibration_state is not None:
                 roi = self._mmode_calibration_state.roi
@@ -4168,12 +4198,10 @@ class ViewerWidget(QWidget):
         self._caliper_drag_key = caliper_key
         self._caliper_drag_node = endpoint_index
         self._caliper_drag_original = measurement
-        # Hide persistent graphics for this caliper
+        self._caliper_drag_persistent_items: list | None = None
         for item in self._persistent_linear_graphics:
             if len(item) >= 4 and item[3] == caliper_key:
-                item[0].hide()
-                item[1].hide()
-                item[2].hide()
+                self._caliper_drag_persistent_items = item
                 break
         self._ensure_linear_caliper_graphics()
         assert self._linear_caliper_line_item is not None
@@ -4202,7 +4230,9 @@ class ViewerWidget(QWidget):
             new_end = measurement.end
         else:
             new_start = measurement.start
-            new_end = (x, y)
+            new_end = self._constrain_linear_endpoint(
+                measurement.start, (x, y), label=measurement.label,
+            )
         updated = self._linear_measurement_from_endpoints(
             new_start, new_end, measurement.label,
         )
@@ -4217,6 +4247,14 @@ class ViewerWidget(QWidget):
             [new_start[0], new_end[0]],
             [new_start[1], new_end[1]],
         )
+        if self._caliper_drag_persistent_items is not None:
+            line_item, start_node, end_node, _ = self._caliper_drag_persistent_items
+            line_item.setData(
+                [new_start[0], new_end[0]],
+                [new_start[1], new_end[1]],
+            )
+            start_node.setData([new_start[0]], [new_start[1]])
+            end_node.setData([new_end[0]], [new_end[1]])
         self._update_caliper_label_graphics(
             new_start, new_end, color="#ffb300", is_preview=True,
         )
@@ -4230,10 +4268,16 @@ class ViewerWidget(QWidget):
             return
         if cancel and self._caliper_drag_original is not None and self._caliper_drag_key is not None:
             self._stored_linear_measurements[self._caliper_drag_key] = self._caliper_drag_original
+        if self._caliper_drag_persistent_items is not None:
+            line_item, start_node, end_node, _ = self._caliper_drag_persistent_items
+            line_item.show()
+            start_node.show()
+            end_node.show()
         self._caliper_drag_active = False
         self._caliper_drag_key = None
         self._caliper_drag_node = None
         self._caliper_drag_original = None
+        self._caliper_drag_persistent_items = None
         self._clear_linear_caliper_graphics()
         self._emit_stored_linear_measurements()
         self._render_persistent_linear_calipers()
@@ -4283,6 +4327,11 @@ class ViewerWidget(QWidget):
         return True
 
     def keyPressEvent(self, event) -> None:  # type: ignore[override]
+        if event.key() == Qt.Key.Key_Escape:
+            if self._caliper_drag_active:
+                self._finish_caliper_node_drag(cancel=True)
+                event.accept()
+                return
         if event.key() == Qt.Key.Key_Delete:
             if self._delete_selected_caliper():
                 event.accept()
