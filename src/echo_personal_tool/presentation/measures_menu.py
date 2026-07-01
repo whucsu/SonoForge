@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.presentation.measurement_action import MeasurementAction
 
 _MENU_BUTTON_HEIGHT_PX = 18
@@ -60,81 +61,81 @@ def _btn(
 
 _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
     (
-        "Общие",
+        tr("menu.general"),
         (
-            _btn("Калипер", MeasurementAction.CALIPER),
-            _btn("Площадь", MeasurementAction.SPLINE_AREA),
-            _btn("Объём", MeasurementAction.SPLINE_VOLUME),
+            _btn(tr("menu.caliper"), MeasurementAction.CALIPER),
+            _btn(tr("menu.spline_area"), MeasurementAction.SPLINE_AREA),
+            _btn(tr("menu.spline_volume"), MeasurementAction.SPLINE_VOLUME),
         ),
     ),
     (
-        "Левый желудочек",
+        tr("menu.lv_diastole_group"),
         (
-            _btn("МЖП-КДР-ЗСЛЖ (2D)", MeasurementAction.LV2D_ALL_DIASTOLE),
-            _btn("КСР (2D)", MeasurementAction.LV2D_ES),
-            _btn("ФВ ЛЖ Simpson КДО", MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ED"),
-            _btn("ФВ ЛЖ Simpson КСО", MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ES"),
-            _btn("Simpson Biplane КДО", MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ED"),
-            _btn("Simpson Biplane КСО", MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ES"),
+            _btn(tr("menu.lv2d_all_diastole"), MeasurementAction.LV2D_ALL_DIASTOLE),
+            _btn(tr("menu.lv2d_es"), MeasurementAction.LV2D_ES),
+            _btn(tr("menu.simpson_ed_kdo"), MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ED"),
+            _btn(tr("menu.simpson_es_kso"), MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ES"),
+            _btn(tr("menu.simpson_biplane_kdo"), MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ED"),
+            _btn(tr("menu.simpson_biplane_kso"), MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ES"),
         ),
     ),
     (
-        "ЛЖ авто",
+        tr("menu.lv_auto"),
         (
-            _btn("ФВ ЛЖ Simpson КДО", MeasurementAction.MBS_SIMPSON, view="A4C", phase="ED"),
-            _btn("ФВ ЛЖ Simpson КСО", MeasurementAction.MBS_SIMPSON, view="A4C", phase="ES"),
+            _btn(tr("menu.simpson_ed_kdo"), MeasurementAction.MBS_SIMPSON, view="A4C", phase="ED"),
+            _btn(tr("menu.simpson_es_kso"), MeasurementAction.MBS_SIMPSON, view="A4C", phase="ES"),
         ),
     ),
     (
-        "Аорта",
+        tr("menu.aorta"),
         (
-            _btn("АК", caliper_label="AV"),
-            _btn("Кольцо", caliper_label="Annulus"),
-            _btn("Синус аорты", caliper_label="Ao Sinus"),
-            _btn("Переход", caliper_label="Ao Junction"),
-            _btn("Восходящая", caliper_label="Prox Ao"),
+            _btn(tr("menu.av"), caliper_label="AV"),
+            _btn(tr("menu.annulus"), caliper_label="Annulus"),
+            _btn(tr("menu.ao_sinus"), caliper_label="Ao Sinus"),
+            _btn(tr("menu.ao_junction"), caliper_label="Ao Junction"),
+            _btn(tr("menu.prox_ao"), caliper_label="Prox Ao"),
         ),
     ),
     (
-        "Левое предсердие",
+        tr("menu.la_group"),
         (
-            _btn("ЛП ПЗР", MeasurementAction.LA_DIAMETER),
-            _btn("ОЛП 4C", MeasurementAction.LAV_4C),
-            _btn("ОЛП 2C", MeasurementAction.LAV_BI),
+            _btn(tr("menu.la_lavir"), MeasurementAction.LA_DIAMETER),
+            _btn(tr("menu.lav_4c"), MeasurementAction.LAV_4C),
+            _btn(tr("menu.lav_bi"), MeasurementAction.LAV_BI),
         ),
     ),
     (
-        "Правое предсердие",
+        tr("menu.ra_group"),
         (
-            _btn("ПП", MeasurementAction.RA_DIAMETER),
-            _btn("ОПП 4C", MeasurementAction.RAV_VOLUME),
+            _btn(tr("menu.ra_diameter"), MeasurementAction.RA_DIAMETER),
+            _btn(tr("menu.rav_volume"), MeasurementAction.RAV_VOLUME),
         ),
     ),
     (
-        "Правый желудочек",
+        tr("menu.rv_group"),
         (
             _btn("RVOT", caliper_label="RVOT"),
-            _btn("ПЖ основание", MeasurementAction.RV_BASAL),
-            _btn("ПЖ средний", caliper_label="RV mid"),
+            _btn(tr("menu.rv_basal"), MeasurementAction.RV_BASAL),
+            _btn(tr("menu.rv_mid"), caliper_label="RV mid"),
             _btn("TAPSE", MeasurementAction.RV_TAPSE),
-            _btn("s' ПЖ", MeasurementAction.RV_S_PRIME),
-            _btn("FAC ПЖ", MeasurementAction.RV_FAC, view="A4C"),
+            _btn(tr("menu.s_prime_rv"), MeasurementAction.RV_S_PRIME),
+            _btn(tr("menu.rv_fac"), MeasurementAction.RV_FAC, view="A4C"),
         ),
     ),
     (
-        "Диастолическая функция",
+        tr("menu.diastolic_group"),
         (
-            _btn("Пик E/DT/A", MeasurementAction.DOPPLER_MITRAL_INFLOW),
-            _btn("Пик E", doppler_peak="E"),
-            _btn("Пик A", doppler_peak="A"),
+            _btn(tr("menu.mitral_inflow"), MeasurementAction.DOPPLER_MITRAL_INFLOW),
+            _btn(tr("menu.peak_e"), doppler_peak="E"),
+            _btn(tr("menu.peak_a"), doppler_peak="A"),
             _btn("DT", doppler_interval="DT"),
-            _btn("e' септ.", doppler_peak="e_sept"),
-            _btn("e' лат.", doppler_peak="e_lat"),
+            _btn(tr("menu.e_sept"), doppler_peak="e_sept"),
+            _btn(tr("menu.e_lat"), doppler_peak="e_lat"),
             _btn("IVRT", doppler_interval="IVRT"),
         ),
     ),
     (
-        "МК/АК",
+        tr("menu.mv_group"),
         (
             _btn("Trace MV", doppler_trace="VTI MV"),
             _btn("Trace MR", doppler_trace="VTI MR"),
@@ -147,7 +148,7 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
         ),
     ),
     (
-        "ТК/ЛК",
+        tr("menu.tv_group"),
         (
             _btn("TRpeak", doppler_peak="TR Vmax"),
             _btn("Trace TR", doppler_trace="VTI TR"),
@@ -155,9 +156,9 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
         ),
     ),
     (
-        "Стрейн",
+        tr("menu.strain_group"),
         (
-            _btn("Speckle Tracking", MeasurementAction.SPECKLE_TRACKING, view="A4C"),
+            _btn(tr("menu.speckle_tracking"), MeasurementAction.SPECKLE_TRACKING, view="A4C"),
         ),
     ),
 )
@@ -203,7 +204,7 @@ class MeasuresAccordionSection(QWidget):
             button.setEnabled(spec.enabled)
             style_menu_button(button)
             if not spec.enabled:
-                button.setToolTip("A2C auto — в следующей версии")
+                button.setToolTip(tr("tooltip.a2c_auto_next"))
             if spec.enabled:
                 button.clicked.connect(emit_handler(spec))
             body_layout.addWidget(button)
@@ -318,6 +319,10 @@ class MeasuresMenuWidget(QWidget):
             if not needs_time:
                 continue
             button.setEnabled(time_ok)
+
+    def reload_text(self) -> None:
+        for button, spec in self._tool_buttons:
+            button.setText(tr(spec.label))
 
     def highlight_action(
         self,

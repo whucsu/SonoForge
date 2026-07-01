@@ -159,6 +159,13 @@ class MeasureTab(QWidget):
         self._auto_play_check.setChecked(enabled)
         self._auto_play_check.blockSignals(False)
 
+    def reload_text(self) -> None:
+        from echo_personal_tool.infrastructure.i18n import tr
+        self._auto_play_check.setText(tr("preferences.auto_play"))
+        self._auto_play_check.setToolTip(tr("preferences.auto_play"))
+        self._results_button.setText(tr("tool_panel.measures"))
+        self._menu.reload_text()
+
     def set_doppler_tool_availability(self, *, time_ok: bool) -> None:
         self._menu.set_doppler_tool_availability(time_ok=time_ok)
 
@@ -213,6 +220,10 @@ class ToolPanel(QWidget):
 
     def set_auto_play(self, enabled: bool) -> None:
         self.measure.set_auto_play(enabled)
+
+    def reload_text(self) -> None:
+        from echo_personal_tool.infrastructure.i18n import tr
+        self.measure.reload_text()
 
     def set_dicom_inspector_visible(self, visible: bool) -> None:
         pass

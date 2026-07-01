@@ -62,6 +62,14 @@ class MeasurementToolsPanel(QWidget):
         layout.addWidget(self._build_rv_group())
         layout.addStretch(1)
 
+    def reload_text(self) -> None:
+        from echo_personal_tool.infrastructure.i18n import tr
+        for (view, phase), btn in self._manual_buttons.items():
+            if phase == "ED":
+                btn.setText(tr(f"menu.{view.lower()}_ed"))
+            else:
+                btn.setText(tr(f"menu.{view.lower()}_es"))
+
     def _build_view_column(
         self,
         view: str,

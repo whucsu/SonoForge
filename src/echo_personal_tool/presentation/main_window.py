@@ -657,6 +657,7 @@ class MainWindow(QMainWindow):
             self._current_overlay_study_uid = None
         from echo_personal_tool.infrastructure.i18n import set_language
         set_language(preferences.language)
+        self._reload_ui_language()
         app = QApplication.instance()
         if app is not None:
             app.setFont(ui_font(point_size=preferences.ui_font_size))
@@ -665,9 +666,6 @@ class MainWindow(QMainWindow):
             theme=preferences.theme_mode,
         )
         self._system_bar.reload_icons()
-        self._system_bar.reload_text()
-        if self._activity_bar is not None:
-            self._activity_bar.reload_text()
         with QSignalBlocker(self._tool_panel.controls._magnetic_snap_check):
             self._tool_panel.controls._magnetic_snap_check.setChecked(
                 preferences.magnetic_snap_enabled
@@ -679,6 +677,14 @@ class MainWindow(QMainWindow):
         self._controller.set_playback_speed_multiplier(preferences.playback_speed_multiplier)
         self._tool_panel.set_dicom_inspector_visible(preferences.show_dicom_tag_inspector)
         self._refresh_dicom_inspector()
+        self._sync_results_overlay(self._controller.state_manager.snapshot)
+
+    def _reload_ui_language(self) -> None:
+        self._system_bar.reload_text()
+        if self._activity_bar is not None:
+            self._activity_bar.reload_text()
+        self._viewer.reload_text()
+        self._tool_panel.reload_text()
         self._sync_results_overlay(self._controller.state_manager.snapshot)
 
     def _on_magnetic_snap_changed(self, enabled: bool) -> None:

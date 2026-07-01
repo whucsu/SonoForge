@@ -1029,6 +1029,14 @@ class ViewerWidget(QWidget):
             self._measurement_label.hide()
         self._position_overlay_labels()
 
+    def reload_text(self) -> None:
+        from echo_personal_tool.infrastructure.i18n import tr
+        self._play_button.setText(tr("system_bar.reset"))
+        self._step_back_button.setToolTip(tr("viewer.caliper.click_start"))
+        self._step_forward_button.setToolTip(tr("viewer.caliper.click_end"))
+        self._timeline_slider.setToolTip(tr("tool_panel.controls"))
+        self._source_label.setText(tr("system_bar.no_study_loaded"))
+
     def _rebuild_contour_pens(self, preferences: UserPreferences) -> None:
         manual_width = preferences.contour_pen_manual_width
         ai_width = preferences.contour_pen_ai_width
