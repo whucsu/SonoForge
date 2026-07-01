@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
-from echo_personal_tool.infrastructure.dicom_reader import DicomReaderImpl
 from echo_personal_tool.infrastructure.dicom_session import get_thread_dicom_session
 from echo_personal_tool.infrastructure.image_reader import ImageReader
 from echo_personal_tool.infrastructure.video_reader import get_thread_video_reader
@@ -67,8 +66,9 @@ class FrameLoaderWorker(QRunnable):
         elif self._media_format in ("jpeg", "png"):
             pixels = ImageReader().read_pixels(self._path)
         else:
-            reader = DicomReaderImpl()
-            pixels = reader.read_pixels(self._path, frame_index=self._frame_index)
+            session = get_thread_dicom_session()
+            session.open(self._path)
+            pixels = session.read_frame(self._frame_index)
         self.signals.finished.emit(np.ascontiguousarray(pixels).copy())
 
     def _run_batch(self) -> None:

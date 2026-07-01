@@ -1530,6 +1530,8 @@ class AppController(QObject):
             self._pending_emit_after_decode = False
             self._state_manager.emit_state()
         self.frame_loaded.emit(first_frame)
+        self.status_message.emit("First frame ready")
+        self.decode_finished.emit()
 
     def _on_dicom_decoded(self, request_id: int, path: Path, frames: object) -> None:
         if request_id != self._pending_decode_id:
