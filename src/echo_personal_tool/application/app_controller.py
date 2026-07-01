@@ -81,6 +81,7 @@ from echo_personal_tool.infrastructure.onnx_engine import (
 from echo_personal_tool.domain.services.auto_depth_calibration import (
     try_auto_depth_calibration,
 )
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.system_profiler import (
     PlaybackConfig,
     detect_playback_config,
@@ -579,7 +580,7 @@ class AppController(QObject):
         if not found:
             return False
         self.on_contours_changed(updated_contours)
-        self.status_message.emit(f"{target_view} {target_phase}: контур принят")
+        self.status_message.emit(tr("app.contour_accepted", target_view=target_view, target_phase=target_phase))
         return True
 
     def request_auto_segment(
@@ -608,7 +609,7 @@ class AppController(QObject):
             return
 
         if (view or "").upper() != "A4C":
-            self.status_message.emit("A2C auto — в следующей версии")
+            self.status_message.emit(tr("app.segmentation_unavailable"))
             return
 
         if (
@@ -619,7 +620,7 @@ class AppController(QObject):
             return
 
         if not self._segmenter.is_available():
-            self.status_message.emit("сегментация недоступна — используйте ручной контур")
+            self.status_message.emit(tr("app.segmentation_unavailable"))
             return
 
         frame = np.ascontiguousarray(self._current_frame_pixels)
@@ -882,7 +883,7 @@ class AppController(QObject):
         self._measurement_session.set_manual_pixel_spacing(study_uid, spacing_tuple)
         self._recompute_measurements()
         self.status_message.emit(
-            f"Калибровка: {row_spacing:.3f} × {col_spacing:.3f} mm/px (ручная)"
+            tr("status.calibration_info", row=row_spacing, col=col_spacing)
         )
 
     def needs_manual_calibration(self) -> bool:
@@ -905,7 +906,7 @@ class AppController(QObject):
         if result is None:
             return False
         self.on_manual_calibration(result.spacing)
-        self.status_message.emit("Калибровка успешна")
+        self.status_message.emit(tr("status.calibration_ok"))
         return True
 
     def on_patient_metrics_changed(
@@ -933,14 +934,14 @@ class AppController(QObject):
         self._state_manager.clear_manual_pixel_spacing()
         self._measurement_session.set_manual_pixel_spacing(study_uid, None)
         self._recompute_measurements()
-        self.status_message.emit("Ручная калибровка сброшена")
+        self.status_message.emit(tr("status.calibration_reset"))
 
     def reset_measurements_and_calibration(self) -> None:
         study_uid = self._resolve_study_uid()
         self._measurement_session.reset_measurements(study_uid)
         self._state_manager.reset_measurement_inputs()
         self._recompute_measurements()
-        self.status_message.emit("Измерения и калибровка сброшены")
+        self.status_message.emit(tr("status.measurements_reset"))
 
     def _on_state_changed(self, state: object) -> None:
         if not isinstance(state, ViewerState):
@@ -1755,7 +1756,7 @@ class AppController(QObject):
         cleaned_mask = papillary_mask_cleanup(mask)
         if int(np.count_nonzero(cleaned_mask)) < 80:
             self.status_message.emit(
-                "сегментация: маска ONNX слишком мала — нужен A4C ED/ES с видимой полостью ЛЖ"
+                tr("app.segmentation_mask_too_small")
             )
             return
 
@@ -1776,12 +1777,12 @@ class AppController(QObject):
                 num_nodes=32,
             )
             if not closed_points:
-                self.status_message.emit("сегментация не нашла контур — используйте ручной")
+                self.status_message.emit(tr("app.segmentation_no_contour"))
                 return
             try:
                 open_points, annulus = closed_polygon_to_open_arc(closed_points, view_hint=view)
             except ValueError:
-                self.status_message.emit("сегментация: не удалось построить open arc")
+                self.status_message.emit(tr("app.segmentation_open_arc_fail"))
                 return
             apex = apex_point(open_points, annulus)
 
@@ -1840,15 +1841,11 @@ class AppController(QObject):
             mask_px = int(np.count_nonzero(cleaned_mask))
             arc_px = _contour_arc_span_px(contour)
             self.status_message.emit(
-                f"сегментация: {reject_reason} (маска {mask_px}px, дуга {arc_px:.0f}px) "
-                "— используйте ручной контур"
+                tr("app.segmentation_reject", reason=reject_reason, mask=mask_px, arc=arc_px)
             )
             return
 
-        review_status = (
-            f"{view} {phase}: проверьте контур (ASE, без папиллярных мышц) · "
-            "R — уточнить · Enter — принять"
-        )
+        review_status = tr("app.ai_review_prompt", view=view, phase=phase)
         contours = [
             existing
             for existing in self._state_manager.snapshot.contours
@@ -1869,13 +1866,13 @@ class AppController(QObject):
         self._segment_in_progress = False
         if not self._auto_segment_context_matches(instance_path, frame_index):
             return
-        self.status_message.emit("сегментация недоступна — используйте ручной контур")
+        self.status_message.emit(tr("app.segmentation_unavailable"))
 
     def _on_auto_segment_timed_out(self, instance_path: Path | None, frame_index: int) -> None:
         self._segment_in_progress = False
         if not self._auto_segment_context_matches(instance_path, frame_index):
             return
-        self.status_message.emit("сегментация недоступна — используйте ручной контур")
+        self.status_message.emit(tr("app.segmentation_unavailable"))
 
     # ── Speckle Tracking ──────────────────────────────────────────────────
 

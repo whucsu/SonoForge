@@ -25,6 +25,7 @@ from echo_personal_tool.domain.services.ase_reference_parser import (
     load_ase_reference_text,
     markdown_to_html,
 )
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.presentation.echopac_theme import get_theme_palette
 from echo_personal_tool.resources.bundled_fonts import FONT_FAMILY_UI
 
@@ -42,8 +43,8 @@ def show_ase_reference_dialog(parent: QWidget | None = None) -> None:
     except Exception as exc:  # noqa: BLE001 — show load errors in UI
         QMessageBox.critical(
             parent,
-            "Нормативы",
-            f"Не удалось открыть справочник ASE:\n{exc}",
+            tr("ase_refs.load_error.title"),
+            tr("ase_refs.load_error.body", exc=str(exc)),
         )
         return
     dialog.exec()
@@ -52,7 +53,7 @@ def show_ase_reference_dialog(parent: QWidget | None = None) -> None:
 class AseReferenceDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Нормативы ASE")
+        self.setWindowTitle(tr("ase_refs.title"))
         self.resize(980, 720)
 
         self._settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
@@ -66,21 +67,18 @@ class AseReferenceDialog(QDialog):
         root.setMenuBar(self._build_menu())
 
         hint = QLabel(
-            f"Содержимое загружается из файла "
-            f"<b>{self._md_path.name}</b> в корне приложения. "
-            "Добавляйте, удаляйте и меняйте показатели прямо в этом .md-файле, "
-            "затем нажмите «Обновить»."
+            tr("ase_refs.hint", name=self._md_path.name)
         )
         hint.setWordWrap(True)
         hint.setTextFormat(Qt.TextFormat.RichText)
         root.addWidget(hint)
 
         toolbar = QHBoxLayout()
-        btn_reload = QPushButton("Обновить")
-        btn_reload.setToolTip("Перечитать References ASE+.md с диска")
+        btn_reload = QPushButton(tr("ase_refs.reload"))
+        btn_reload.setToolTip(tr("ase_refs.reload_tip"))
         btn_reload.clicked.connect(self._reload_document)
-        btn_open = QPushButton("Открыть файл…")
-        btn_open.setToolTip("Открыть References ASE+.md во внешнем редакторе")
+        btn_open = QPushButton(tr("ase_refs.open_file"))
+        btn_open.setToolTip(tr("ase_refs.open_file_tip"))
         btn_open.clicked.connect(self._open_markdown_file)
         toolbar.addWidget(btn_reload)
         toolbar.addWidget(btn_open)
@@ -110,13 +108,13 @@ class AseReferenceDialog(QDialog):
 
         menu_bar = QMenuBar(self)
 
-        file_menu = QMenu("Файл", menu_bar)
-        file_menu.addAction("Обновить", self._reload_document)
-        file_menu.addAction("Открыть References ASE+.md", self._open_markdown_file)
+        file_menu = QMenu(tr("ase_refs.file_menu"), menu_bar)
+        file_menu.addAction(tr("ase_refs.reload"), self._reload_document)
+        file_menu.addAction(tr("ase_refs.open_file"), self._open_markdown_file)
         menu_bar.addMenu(file_menu)
 
-        settings_menu = QMenu("Настройки", menu_bar)
-        settings_menu.addAction("Шрифт…", self._show_font_settings)
+        settings_menu = QMenu(tr("ase_refs.settings_menu"), menu_bar)
+        settings_menu.addAction(tr("ase_refs.font_action"), self._show_font_settings)
         menu_bar.addMenu(settings_menu)
 
         return menu_bar
@@ -127,8 +125,8 @@ class AseReferenceDialog(QDialog):
         except OSError as exc:
             QMessageBox.warning(
                 self,
-                "Нормативы",
-                f"Не удалось прочитать файл:\n{self._md_path}\n\n{exc}",
+                tr("ase_refs.read_error.title"),
+                tr("ase_refs.read_error.body", path=str(self._md_path), exc=str(exc)),
             )
             return
         self._browser.setHtml(markdown_to_html(markdown))
@@ -138,8 +136,8 @@ class AseReferenceDialog(QDialog):
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._md_path))):
             QMessageBox.warning(
                 self,
-                "Нормативы",
-                f"Не удалось открыть файл:\n{self._md_path}",
+                tr("ase_refs.open_error.title"),
+                tr("ase_refs.open_error.body", path=str(self._md_path)),
             )
 
     def _show_font_settings(self) -> None:
@@ -170,7 +168,7 @@ class ReferenceFontSettingsDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Настройки шрифта")
+        self.setWindowTitle(tr("ase_refs.font_settings"))
 
         self._family = QFontComboBox()
         self._family.setCurrentFont(QFont(family))
@@ -181,8 +179,8 @@ class ReferenceFontSettingsDialog(QDialog):
         self._size.setValue(size)
 
         form = QFormLayout()
-        form.addRow("Шрифт:", self._family)
-        form.addRow("Размер:", self._size)
+        form.addRow(tr("ase_refs.font"), self._family)
+        form.addRow(tr("ase_refs.font_size"), self._size)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel

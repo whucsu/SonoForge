@@ -113,23 +113,16 @@ from echo_personal_tool.infrastructure.user_preferences import (
     resolve_wl_values,
 )
 from echo_personal_tool.presentation.doppler_overlay import DopplerOverlayTools
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.resources.bundled_fonts import FONT_FAMILY_MONO
 
-CALIBRATION_PROMPT_OVERLAY = "Проведите калибровку"
-CALIBRATION_SUCCESS_OVERLAY = "Авто-калибровка ОК"
+CALIBRATION_PROMPT_OVERLAY_KEY = "viewer.calibration.calibration_prompt"
+CALIBRATION_SUCCESS_OVERLAY_KEY = "viewer.calibration.auto_ok"
 
-_DOPPLER_CAL_ROI_STEP1 = (
-    "Doppler калибровка 1/3: клик — первый угол окна спектра (не весь кадр)"
-)
-_DOPPLER_CAL_ROI_STEP2 = (
-    "Doppler калибровка 1/3: клик — противоположный угол окна спектра"
-)
-_DOPPLER_CAL_BASELINE = (
-    "Doppler калибровка 2/3: клик на линию нулевой скорости (baseline)"
-)
-_DOPPLER_CAL_VELOCITY = (
-    "Doppler калибровка 3/3: клик верх и низ шкалы скорости на краю спектра"
-)
+_DOPPLER_CAL_ROI_STEP1_KEY = "viewer.doppler.cal_roi1"
+_DOPPLER_CAL_ROI_STEP2_KEY = "viewer.doppler.cal_roi2"
+_DOPPLER_CAL_BASELINE_KEY = "viewer.doppler.cal_baseline"
+_DOPPLER_CAL_VELOCITY_KEY = "viewer.doppler.cal_velocity"
 _CALIBRATION_OVERLAY_STYLE = (
     "background-color: rgba(0, 0, 0, 210);"
     " color: #ffffff;"
@@ -452,7 +445,7 @@ class ResultsOverlayLabel(QLabel):
         self._drag_offset_y = 0.0
         self._pinned = False
         self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.setToolTip("Перетащите для смены позиции оверлея результатов")
+        self.setToolTip(tr("viewer.results_drag_tip"))
 
     def set_position_ratios(self, x_ratio: float, y_ratio: float) -> None:
         self._x_ratio = max(0.0, min(1.0, x_ratio))
@@ -506,9 +499,9 @@ class ResultsOverlayLabel(QLabel):
     def contextMenuEvent(self, event) -> None:  # type: ignore[override]
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
-        clear_action = menu.addAction("Очистить")
-        reset_action = menu.addAction("Сбросить позицию")
-        pin_action = menu.addAction("Открепить" if self._pinned else "Зафиксировать")
+        clear_action = menu.addAction(tr("viewer.overlay_clear"))
+        reset_action = menu.addAction(tr("viewer.overlay_reset_position"))
+        pin_action = menu.addAction(tr("viewer.overlay_unpin") if self._pinned else tr("viewer.overlay_pin"))
         action = menu.exec(event.globalPos())
         if action == clear_action:
             self.clear_requested.emit()
@@ -899,8 +892,8 @@ class ViewerWidget(QWidget):
             self._overlay_label.adjustSize()
             label_w = self._overlay_label.width()
             label_h = self._overlay_label.height()
-            calibration_banner = self._frame_overlay_lines == [CALIBRATION_PROMPT_OVERLAY]
-            calibration_ok = self._frame_overlay_lines == [CALIBRATION_SUCCESS_OVERLAY]
+            calibration_banner = self._frame_overlay_lines == [tr(CALIBRATION_PROMPT_OVERLAY_KEY)]
+            calibration_ok = self._frame_overlay_lines == [tr(CALIBRATION_SUCCESS_OVERLAY_KEY)]
             if calibration_banner or calibration_ok:
                 x = geo.x() + max((geo.width() - label_w) // 2, 8)
                 y = geo.y() + max(geo.height() // 6 - label_h // 2, 8)
@@ -1246,7 +1239,7 @@ class ViewerWidget(QWidget):
 
     def _show_save_context_menu(self, ev) -> None:
         menu = QMenu(self)
-        menu.addAction("Сохранить как...", self._save_viewer_image)
+        menu.addAction(tr("viewer.context_save_as"), self._save_viewer_image)
         menu.exec(QCursor.pos())
 
     def _save_viewer_image(self) -> None:
@@ -1254,7 +1247,7 @@ class ViewerWidget(QWidget):
             return
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Сохранить кадр",
+            tr("viewer.context_save_frame"),
             "",
             "PNG (*.png);JPEG (*.jpg)",
         )
@@ -1548,7 +1541,7 @@ class ViewerWidget(QWidget):
             self._depth_tick_y_positions = self._detect_calibration_ticks()
         else:
             self._depth_tick_y_positions = []
-        self._measurement_label.setText("Калибровка: 1-й клик — верхняя метка")
+        self._measurement_label.setText(tr("viewer.calibration_click_start"))
         return True
 
     def _detect_calibration_ticks(self) -> list[float]:
@@ -1570,17 +1563,13 @@ class ViewerWidget(QWidget):
         self._doppler_roi_corner1 = None
         self._doppler_pending_roi = None
         self._doppler_pending_baseline_y = None
-        self._measurement_label.setText(_DOPPLER_CAL_ROI_STEP1)
+        self._measurement_label.setText(tr(_DOPPLER_CAL_ROI_STEP1_KEY))
         self._measurement_label.show()
         return True
 
     @staticmethod
     def doppler_calibration_prompt() -> str:
-        return (
-            "Калибровка Doppler: шаг 1 — два клика по углам окна спектра; "
-            "шаг 2 — baseline (нулевая скорость); шаг 3 — верх и низ шкалы "
-            "скорости на правом крае спектра + ввод полного диапазона (см. строку под кадром)"
-        )
+        return tr("viewer.doppler_calibration_prompt")
 
     def _current_instance_uid(self) -> str | None:
         if self._current_state is None or self._current_state.instance is None:
@@ -1641,7 +1630,7 @@ class ViewerWidget(QWidget):
         self._measurement_label.setText(prompt)
 
     def _on_doppler_workflow_completed(self) -> None:
-        self._measurement_label.setText("Mitral inflow E/DT/A: готово")
+        self._measurement_label.setText(tr("viewer.mitral_inflow_done"))
 
     def _on_doppler_trace_prompt_changed(self, prompt: str) -> None:
         self._measurement_label.setText(prompt)
@@ -1743,10 +1732,10 @@ class ViewerWidget(QWidget):
                 prompt = self._doppler.trace_prompt()
                 self._measurement_label.setText(
                     prompt
-                    or "Doppler trace: baseline → обводка → baseline"
+                    or tr("viewer.doppler_trace_prompt")
                 )
             else:
-                self._measurement_label.setText(f"Doppler {mode}: клик на спектре")
+                self._measurement_label.setText(tr("viewer.doppler_mode_click", mode=mode))
             self._ensure_crosshair_graphics()
 
     def is_doppler_context(self) -> bool:
@@ -1816,7 +1805,7 @@ class ViewerWidget(QWidget):
         self._mmode_cal_step = "roi"
         self._mmode_roi_corner1 = None
         self._mmode_pending_roi = None
-        self._measurement_label.setText("M-mode: 1-й клик — угол полосы M-режима")
+        self._measurement_label.setText(tr("viewer.mmode_cal1"))
         return True
 
     def _handle_mmode_calibration_click(self, ev) -> bool:
@@ -1830,7 +1819,7 @@ class ViewerWidget(QWidget):
         x, y = click
         if self._mmode_roi_corner1 is None:
             self._mmode_roi_corner1 = (x, y)
-            self._measurement_label.setText("M-mode: 2-й клик — противоположный угол полосы")
+            self._measurement_label.setText(tr("viewer.mmode_cal2"))
             return True
         height, width = self._current_frame.shape[:2]
         roi = roi_from_corners(self._mmode_roi_corner1, (x, y)).normalized(
@@ -1844,7 +1833,7 @@ class ViewerWidget(QWidget):
         self._calibration_active = True
         self._calibration_x = roi.x0 + roi.width / 2.0
         self._calibration_start_y = None
-        self._measurement_label.setText("M-mode: 1-й клик — верх шкалы глубины в полосе")
+        self._measurement_label.setText(tr("viewer.mmode_cal_depth"))
         return True
 
     def _refresh_frame_panel_layout(self) -> None:
@@ -1939,7 +1928,7 @@ class ViewerWidget(QWidget):
             self._measurement_label.setText(f"{self._current_caliper_label()}: —")
         else:
             self._measurement_label.setText(
-                "Doppler trace: завершите на baseline (клик или V)"
+                tr("viewer.doppler_trace_finish")
             )
         return finished
 
@@ -2138,7 +2127,7 @@ class ViewerWidget(QWidget):
         self._set_caliper_label(label)
         self._linear_caliper_active = True
         self._linear_caliper_start = None
-        self._measurement_label.setText(f"{label}: 1-й клик — начало")
+        self._measurement_label.setText(tr("viewer.linear_caliper_click_start", label=label))
         return True
 
     def cycle_caliper_label(self) -> None:
@@ -2149,7 +2138,7 @@ class ViewerWidget(QWidget):
             return
         self._linear_caliper_start = None
         self._clear_linear_caliper_graphics()
-        self._measurement_label.setText(f"{label}: 1-й клик — начало")
+        self._measurement_label.setText(tr("viewer.linear_caliper_click_start", label=label))
 
     def start_contour(
         self,
@@ -2207,7 +2196,7 @@ class ViewerWidget(QWidget):
         ):
             return False
         self._measurement_label.setText(
-            "Площадь: клики по контуру, двойной щелчок — замкнуть"
+            tr("viewer.area_contour_prompt")
         )
         return True
 
@@ -2222,7 +2211,7 @@ class ViewerWidget(QWidget):
         ):
             return False
         self._measurement_label.setText(
-            "Объем: клики по контуру, двойной щелчок — замкнуть"
+            tr("viewer.volume_contour_prompt")
         )
         return True
 
@@ -2727,8 +2716,8 @@ class ViewerWidget(QWidget):
 
     def _refresh_frame_overlay(self) -> None:
         if self._frame_overlay_lines:
-            calibration_banner = self._frame_overlay_lines == [CALIBRATION_PROMPT_OVERLAY]
-            calibration_ok = self._frame_overlay_lines == [CALIBRATION_SUCCESS_OVERLAY]
+            calibration_banner = self._frame_overlay_lines == [tr(CALIBRATION_PROMPT_OVERLAY_KEY)]
+            calibration_ok = self._frame_overlay_lines == [tr(CALIBRATION_SUCCESS_OVERLAY_KEY)]
             if calibration_banner:
                 self._overlay_label.setStyleSheet(_CALIBRATION_OVERLAY_STYLE)
                 self._overlay_label.setMinimumWidth(360)
@@ -3636,9 +3625,9 @@ class ViewerWidget(QWidget):
     def _refresh_frame_overlays(self, *, extra_lines: tuple[str, ...] = ()) -> None:
         self.clear_frame_overlay()
         if self._needs_calibration_prompt():
-            self.append_frame_overlay(CALIBRATION_PROMPT_OVERLAY)
+            self.append_frame_overlay(tr(CALIBRATION_PROMPT_OVERLAY_KEY))
         elif self._auto_calibration_ok():
-            self.append_frame_overlay(CALIBRATION_SUCCESS_OVERLAY)
+            self.append_frame_overlay(tr(CALIBRATION_SUCCESS_OVERLAY_KEY))
         frame_index = self._contour_frame_index()
         spacing, spacing_calibrated = self._effective_pixel_spacing()
         if frame_index is not None:
@@ -3866,9 +3855,9 @@ class ViewerWidget(QWidget):
             self._update_calibration_preview(y, y)
             self._update_calibration_horizontal_guides(y)
             if self._calibration_kind in {"spectral", "doppler_velocity"}:
-                self._measurement_label.setText("Спектр: 2-й клик — низ шкалы скорости")
+                self._measurement_label.setText(tr("viewer.spectral_click_end"))
             else:
-                self._measurement_label.setText("Калибровка: 2-й клик — нижняя метка")
+                self._measurement_label.setText(tr("viewer.calibration_click_end"))
             return True
 
         length_px = abs(y - self._calibration_start_y)
@@ -3885,8 +3874,8 @@ class ViewerWidget(QWidget):
         default_span = self._doppler_cal_kind.default_velocity_span_cm_s
         span_cm_s, accepted = QInputDialog.getDouble(
             self,
-            "Калибровка спектрального Doppler",
-            "Полный диапазон шкалы скорости (см/с), например 200 для ±100:",
+            tr("viewer.calibration_spectral_title"),
+            tr("viewer.calibration_spectral_prompt"),
             default_span,
             1.0,
             1000.0,
@@ -3911,7 +3900,7 @@ class ViewerWidget(QWidget):
             self.apply_doppler_calibration_state(state)
             self._doppler_pending_roi = None
             self._doppler_pending_baseline_y = None
-            self._measurement_label.setText("Doppler: калибровка завершена")
+            self._measurement_label.setText(tr("viewer.doppler_calibration_complete"))
             self.spectral_calibration_completed.emit(velocity_span)
             return
 
@@ -3966,7 +3955,7 @@ class ViewerWidget(QWidget):
         span_ms, accepted = QInputDialog.getDouble(
             self,
             "M-mode time scale",
-            "Известный интервал времени (мс) между метками:",
+            tr("viewer.mmode_time_prompt"),
             1000.0,
             1.0,
             10000.0,
@@ -3982,8 +3971,8 @@ class ViewerWidget(QWidget):
     def _prompt_mmode_depth_calibration(self, length_px: float) -> None:
         known_cm, accepted = QInputDialog.getDouble(
             self,
-            "Калибровка M-режима",
-            "Известное расстояние по глубине (см):",
+            tr("viewer.mmode_calibration_title"),
+            tr("viewer.mmode_depth_prompt"),
             1.0,
             0.01,
             100.0,
@@ -4004,8 +3993,8 @@ class ViewerWidget(QWidget):
     def _prompt_calibration_distance(self, length_px: float) -> None:
         known_cm, accepted = QInputDialog.getDouble(
             self,
-            "Калибровка по шкале глубины",
-            "Известное расстояние (см), например 5 для отметок 0–5 см:",
+            tr("viewer.calibration_depth_title"),
+            tr("viewer.calibration_distance_prompt"),
             5.0,
             0.01,
             1000.0,
@@ -4045,13 +4034,13 @@ class ViewerWidget(QWidget):
             and self._mmode_calibration_state is not None
             and not self._mmode_calibration_state.roi.contains(click[0], click[1])
         ):
-            self._measurement_label.setText("TAPSE: клик внутри полосы M-режима")
+            self._measurement_label.setText(tr("viewer.tapse_click_in_mmode"))
             return True
 
         if self._linear_caliper_start is None:
             self._linear_caliper_start = click
             self._update_linear_caliper_preview(click, click)
-            self._measurement_label.setText(f"{self._current_caliper_label()}: 2-й клик — конец")
+            self._measurement_label.setText(tr("viewer.linear_caliper_click_end", label=self._current_caliper_label()))
             return True
 
         start = self._linear_caliper_start
@@ -4251,7 +4240,7 @@ class ViewerWidget(QWidget):
             return
         if self._linear_caliper_start is None:
             label = self._current_caliper_label()
-            self._measurement_label.setText(f"{label}: 1-й клик — начало")
+            self._measurement_label.setText(tr("viewer.linear_caliper_click_start", label=label))
             return
         self._update_linear_caliper_label_preview(
             self._linear_caliper_start,
@@ -4280,7 +4269,7 @@ class ViewerWidget(QWidget):
         if self._caliper_sequence:
             next_label = self._caliper_sequence.pop(0)
             self._begin_linear_caliper(next_label)
-            self._measurement_label.setText(f"{next_label}: 1-й клик — начало")
+            self._measurement_label.setText(tr("viewer.linear_caliper_click_start", label=next_label))
         else:
             self._linear_caliper_active = False
             if self._caliper_sequence_size > 1:

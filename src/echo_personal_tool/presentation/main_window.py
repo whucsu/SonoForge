@@ -33,6 +33,7 @@ from echo_personal_tool.domain.services.measurement_results_formatter import (
     format_results_overlay,
 )
 from echo_personal_tool.infrastructure.fake_dicom_web_client import FakeDicomWebClient
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
 from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClient
 from echo_personal_tool.infrastructure.server_settings import load_server_settings
@@ -276,7 +277,7 @@ class MainWindow(QMainWindow):
         if self._viewer.get_doppler_tool_mode() != "none":
             return
         if not self._controller.is_lv_auto_session_active():
-            self._show_status("Выберите LV Auto → EDV/ESV")
+            self._show_status(tr("status.select_lv_auto"))
             return
         if not self._controller.state_manager.snapshot.is_playing:
             self._controller.request_auto_segment()
@@ -297,7 +298,7 @@ class MainWindow(QMainWindow):
     def _cancel_active_tool(self) -> None:
         if self._viewer.discard_pending_ai_contour():
             self._controller.on_contours_changed(self._viewer.contours())
-            self._show_status("AI контур отменён — нажмите LV Auto EDV/ESV")
+            self._show_status(tr("status.ai_contour_cancelled"))
             return
         self._viewer.cancel_active_tool()
 
@@ -364,11 +365,11 @@ class MainWindow(QMainWindow):
         menu = QMenu(self._system_bar._btn_layout)
         menu.setObjectName("layoutMenu")
         items = [
-            ("swap_places", "Менять местами Gallery и Tools"),
-            ("gallery_horizontal", "Миниатюры снизу, 2 ряда"),
-            ("activity_bar", "Узкая панель инструментов"),
-            ("status_bar_visible", "Полоса статуса"),
-            ("multiview", "Два независимых окна просмотра"),
+            ("swap_places", tr("layout.swap_places")),
+            ("gallery_horizontal", tr("layout.gallery_horizontal")),
+            ("activity_bar", tr("layout.activity_bar_mode")),
+            ("status_bar_visible", tr("layout.status_bar_mode")),
+            ("multiview", tr("layout.multiview_mode")),
         ]
         for attr, tooltip in items:
             action = menu.addAction(tooltip)
@@ -754,19 +755,19 @@ class MainWindow(QMainWindow):
         if not isinstance(instance, InstanceMetadata) or instance.path is None:
             return
         dest, _ = QFileDialog.getSaveFileName(
-            self, "Экспорт в MP4", "", "MP4 (*.mp4)",
+            self, tr("dialog.export_mp4.title"), "", "MP4 (*.mp4)",
         )
         if not dest:
             return
         if instance.media_format == "mp4":
             import shutil as _shutil
             _shutil.copy2(str(instance.path), dest)
-            self._show_status(f"MP4 скопирован: {dest}")
+            self._show_status(tr("status.mp4_copied", dest=dest))
             return
         from echo_personal_tool.application.workers.mp4_export_worker import (
             Mp4ExportWorker,
         )
-        self._show_status("Экспорт в MP4...")
+        self._show_status(tr("status.mp4_exporting"))
         worker = Mp4ExportWorker(
             source_path=Path(instance.path),
             dest_path=dest,
@@ -780,14 +781,14 @@ class MainWindow(QMainWindow):
         QThreadPool.globalInstance().start(worker)
 
     def _on_mp4_export_progress(self, current: int, total: int) -> None:
-        self._show_status(f"Экспорт MP4: {current}/{total} кадров")
+        self._show_status(tr("status.mp4_export_progress", current=current, total=total))
 
     def _on_mp4_export_finished(self, path: str) -> None:
-        self._show_status(f"MP4 экспортирован: {path}")
+        self._show_status(tr("status.mp4_exported", path=path))
 
     def _on_mp4_export_failed(self, error: str) -> None:
-        QMessageBox.warning(self, "Ошибка экспорта", error)
-        self._show_status("Экспорт MP4 не удался")
+        QMessageBox.warning(self, tr("dialog.export_error.title"), error)
+        self._show_status(tr("status.mp4_export_failed"))
 
     def _open_orthanc_dialog(self) -> None:
         settings = load_server_settings()
@@ -974,7 +975,7 @@ class MainWindow(QMainWindow):
                     self._viewer.show_calibration_ok_overlay()
                 elif self._viewer.start_calibration_caliper():
                     self._show_status(
-                        "Калибровка: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
+                        tr("status.calibration_click")
                     )
 
     def _deferred_instance_switch_restore(self, image: np.ndarray, is_playing: bool) -> None:
@@ -992,7 +993,7 @@ class MainWindow(QMainWindow):
                 self._viewer.show_calibration_ok_overlay()
             elif self._viewer.start_calibration_caliper():
                 self._show_status(
-                    "Калибровка: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
+                    tr("status.calibration_click")
                 )
 
     def _on_scroll_settled(self) -> None:
@@ -1112,10 +1113,10 @@ class MainWindow(QMainWindow):
             return True
         if self._viewer.start_mmode_panel_calibration():
             self._show_status(
-                "M-mode: 1–2 клик — полоса M-режима, затем шкала глубины (не B-режим)"
+                tr("status.mmode_tapse_click")
             )
         else:
-            self._show_status("Сначала загрузите кадр с M-режимом")
+            self._show_status(tr("status.load_first_frame_mmode"))
         return False
 
     def _sync_results_overlay(self, state: ViewerState) -> None:
@@ -1168,14 +1169,13 @@ class MainWindow(QMainWindow):
 
     def _ensure_doppler_ready(self, *, require_time: bool = False) -> bool:
         if self._viewer._current_frame is None:
-            self._show_status("Сначала загрузите кадр Doppler")
+            self._show_status(tr("status.load_first_frame_doppler"))
             return False
         if require_time:
             if self._viewer.is_doppler_time_calibrated():
                 return True
             self._show_status(
-                "Нет DICOM-тегов шкалы времени (PhysicalDeltaX, PhysicalUnitsX=с) "
-                "— DT/IVRT/VTI недоступны"
+                tr("status.doppler_no_time")
             )
             return False
         return True
@@ -1277,7 +1277,7 @@ class MainWindow(QMainWindow):
         self._tool_panel.measure.clear_action_highlight()
         if self._viewer.start_generic_area_contour():
             self._viewer.clear_frame_overlay()
-            self._show_status("Площадь: клики по контуру, двойной щелчок — замкнуть; точки можно двигать")
+            self._show_status(tr("status.area_tool"))
         else:
             self._show_status("Load a frame first (or finish the active tool)")
 
@@ -1285,7 +1285,7 @@ class MainWindow(QMainWindow):
         self._tool_panel.measure.clear_action_highlight()
         if self._viewer.start_generic_volume_contour():
             self._viewer.clear_frame_overlay()
-            self._show_status("Объем: клики по контуру, двойной щелчок — замкнуть; точки можно двигать")
+            self._show_status(tr("status.volume_tool"))
         else:
             self._show_status("Load a frame first (or finish the active tool)")
 
@@ -1293,36 +1293,35 @@ class MainWindow(QMainWindow):
         if not self._ensure_doppler_ready():
             return
         self._viewer.set_doppler_tool_mode("peak", peak_label=label or "E")
-        self._show_status(f"Doppler peak {label or 'E'}: один клик на огибающей")
+        self._show_status(tr("status.doppler_peak_tool", label=label or 'E'))
 
     def _on_doppler_mitral_inflow(self) -> None:
         if not self._ensure_doppler_ready(require_time=True):
             return
         if self._viewer.start_mitral_inflow_workflow():
-            self._show_status("Mitral inflow: E (пик) → DT (наклон/baseline) → A (пик)")
+            self._show_status(tr("status.mitral_inflow_tool"))
         else:
-            self._show_status("Сначала загрузите кадр Doppler")
+            self._show_status(tr("status.load_first_frame_doppler"))
 
     def _on_doppler_interval_tool(self, label: str | None = None) -> None:
         if not self._ensure_doppler_ready(require_time=True):
             return
         self._viewer.set_doppler_tool_mode("interval", interval_label=label or "DT")
-        self._show_status(f"Doppler interval {label or 'DT'}: 2 клика на baseline")
+        self._show_status(tr("status.doppler_interval_tool", label=label or 'DT'))
 
     def _on_doppler_trace_tool(self, trace_label: str = "VTI") -> None:
         if not self._ensure_doppler_ready(require_time=True):
             return
         self._viewer.set_doppler_tool_mode("trace", trace_label=trace_label)
         self._show_status(
-            f"Doppler {trace_label}: клик baseline (начало) → вести вдоль огибающей → "
-            "отпустить на baseline (конец)"
+            tr("status.doppler_trace_tool", trace_label=trace_label)
         )
 
     def _on_rv_s_prime(self) -> None:
         if not self._ensure_doppler_ready():
             return
         self._viewer.set_doppler_tool_mode("peak", peak_label="s_sept")
-        self._show_status("RV s': клик на пике septal TDI")
+        self._show_status(tr("status.rv_s_prime_tool"))
 
     def _on_rv_fac(self) -> None:
         phase = "ES" if self._rv_fac_awaiting_es else "ED"
@@ -1332,7 +1331,7 @@ class MainWindow(QMainWindow):
             "A4C",
             overlay=f"RV FAC {phase}: TV lateral → septal → free wall",
             status=(
-                f"RV FAC {phase}: 1) TV lateral  2) TV septal  3) free wall · Enter — подтвердить"
+                f"RV FAC {phase}: 1) TV lateral  2) TV septal  3) free wall · Enter — {tr('status.ready_done', line='confirm')}"
             ),
         ):
             self._show_status("Load a frame first or cancel the active tool (Esc)")
@@ -1343,9 +1342,9 @@ class MainWindow(QMainWindow):
 
     def _on_caliper_requested(self, label: str | None = None) -> None:
         if label and self._viewer.start_linear_caliper_for(label):
-            self._show_status(f"Linear caliper ({label}): 1-й клик — начало, 2-й — конец")
+            self._show_status(tr("status.linear_caliper_tool", label=label))
         elif (label := self._viewer.activate_generic_dist_caliper()):
-            self._show_status(f"Linear caliper ({label}): 1-й клик — начало, 2-й — конец")
+            self._show_status(tr("status.linear_caliper_tool", label=label))
         else:
             self._show_status("Load a frame first")
 
@@ -1353,8 +1352,8 @@ class MainWindow(QMainWindow):
         if self._user_preferences.confirm_reset:
             answer = QMessageBox.question(
                 self,
-                "Сброс измерений",
-                "Сбросить все измерения, контуры и калибровку текущей сессии?",
+                tr("status.reset_session_title"),
+                tr("status.reset_session_body"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -1375,7 +1374,7 @@ class MainWindow(QMainWindow):
         self._viewer.set_results_overlay("")
         self._last_overlay_state = None
         if self._viewer._current_frame is None:
-            self._show_status("Измерения и калибровка сброшены")
+            self._show_status(tr("status.measurements_reset"))
             return
         if self._controller.needs_manual_calibration():
             self._viewer._auto_calibration_succeeded = False
@@ -1387,9 +1386,9 @@ class MainWindow(QMainWindow):
             if self._viewer.start_doppler_scale_calibration():
                 self._show_status(self._viewer.doppler_calibration_prompt())
             else:
-                self._show_status("Сначала загрузите кадр Doppler")
+                self._show_status(tr("status.load_first_frame_doppler"))
         self._sync_doppler_tool_availability()
-        self._show_status("Измерения и калибровка сброшены")
+        self._show_status(tr("status.measurements_reset"))
 
     def _on_calibration_requested(self) -> None:
         if self._viewer._current_frame is None:
@@ -1398,10 +1397,10 @@ class MainWindow(QMainWindow):
         self._viewer.toggle_calibration_caliper()
         if self._viewer.is_calibration_active:
             self._show_status(
-                "Калибровка B-режима: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
+                tr("status.calibration_bmode_click")
             )
         else:
-            self._show_status("Калибровка отменена")
+            self._show_status(tr("status.calibration_cancelled"))
 
     def _get_current_frame_index(self) -> int | None:
         snapshot = self._controller.state_manager.snapshot
@@ -1415,7 +1414,7 @@ class MainWindow(QMainWindow):
             self._show_status("Load a frame first")
             return
         self._manual_ed_frame = idx
-        self._show_status(f"ED = кадр {idx}")
+        self._show_status(tr("status.ed_frame", idx=idx))
 
     def _mark_current_frame_as_es(self) -> None:
         idx = self._get_current_frame_index()
@@ -1423,7 +1422,7 @@ class MainWindow(QMainWindow):
             self._show_status("Load a frame first")
             return
         self._manual_es_frame = idx
-        self._show_status(f"ES = кадр {idx}")
+        self._show_status(tr("status.es_frame", idx=idx))
 
     def _on_speckle_tracking_requested(self) -> None:
         if self._viewer._current_frame is None:
@@ -1431,7 +1430,7 @@ class MainWindow(QMainWindow):
             return
         contour = self._viewer.get_lv_contour()
         if contour is None:
-            self._show_status("Сначала нарисуйте контур LV")
+            self._show_status(tr("status.speckle_no_contour"))
             return
         current_idx = self._get_current_frame_index() or 0
         cache = self._controller._frame_cache
@@ -1444,7 +1443,7 @@ class MainWindow(QMainWindow):
             n_frames=n_frames,
         )
         if settings.exec() != QDialog.DialogCode.Accepted:
-            self._show_status("speckle tracking: отменено")
+            self._show_status(tr("status.speckle_cancelled"))
             return
         config = settings.get_config()
         config_preset = settings.selected_preset_name()
@@ -1454,8 +1453,8 @@ class MainWindow(QMainWindow):
         if self._manual_ed_frame is not None and self._manual_es_frame is not None:
             phase_hint = f"ED={self._manual_ed_frame}, ES={self._manual_es_frame}"
         else:
-            phase_hint = "ED/ES: авто"
-        self._show_status(f"speckle tracking: вычисление… ({phase_hint})")
+            phase_hint = tr("status.speckle_phase_hint")
+        self._show_status(tr("status.speckle_compute", phase_hint=phase_hint))
         self._controller.run_speckle_tracking(
             contour,
             config=config,
@@ -1511,7 +1510,7 @@ class MainWindow(QMainWindow):
         if self._viewer.start_doppler_scale_calibration():
             self._show_status(self._viewer.doppler_calibration_prompt())
         else:
-            self._show_status("Сначала загрузите кадр")
+            self._show_status(tr("status.load_first_frame"))
 
     def _on_manual_simpson_requested(self, view: str, phase: str) -> None:
         if self._viewer.start_contour(phase=phase, view=view, chamber="LV"):
@@ -1525,11 +1524,11 @@ class MainWindow(QMainWindow):
 
     def _on_mbs_simpson_requested(self, view: str, phase: str) -> None:
         if view.upper() != "A4C":
-            self._show_status("A2C auto — в следующей версии")
+            self._show_status(tr("status.a2c_auto_next"))
             return
         self._controller.set_simpson_workflow_context(phase=phase, view=view, chamber="LV")
         self._viewer.clear_frame_overlay()
-        self._viewer.append_frame_overlay(f"LV Auto {view} {phase}: сегментация…")
+        self._viewer.append_frame_overlay(tr("status.lv_auto_segmenting", view=view, phase=phase))
         self._controller.request_auto_segment(phase=phase, view=view, chamber="LV")
 
     def _maybe_prompt_es_auto(
@@ -1543,9 +1542,9 @@ class MainWindow(QMainWindow):
             return
         view_label = "4C" if view.upper() == "A4C" else "2C"
         es_name = "ESV Auto" if mode == "mbs" else "Systole"
-        status = f"Перейдите на кадр систолы и нажмите {es_name} ({view_label})"
+        status = tr("status.lv_go_systole", es_name=es_name, view_label=view_label)
         if self._controller.state_manager.snapshot.effective_pixel_spacing is None:
-            status += " · нет PixelSpacing (K — калибровка, px / px³)"
+            status += tr("status.lv_no_pixel_spacing")
         self._show_status(status)
         self._viewer.append_frame_overlay(status)
 
@@ -1556,20 +1555,20 @@ class MainWindow(QMainWindow):
         self._tool_panel.measure.clear_action_highlight()
         if self._viewer.start_linear_caliper_sequence(("IVSd", "LVEDD", "LVPWd")):
             self._viewer.clear_frame_overlay()
-            self._viewer.append_frame_overlay("Диастола ЛЖ: МЖП → КДР ЛЖ → ЗСЛЖ")
-            self._show_status("МЖП (2 клика) → КДР ЛЖ (2 клика) → ЗСЛЖ (2 клика)")
+            self._viewer.append_frame_overlay(tr("status.lv_diastole_overlay"))
+            self._show_status(tr("status.lv_diastole_sequence"))
         else:
-            self._show_status("Загрузите кадр")
+            self._show_status(tr("status.load_frame"))
 
     def _on_linear_caliper_sequence_completed(self) -> None:
         self._tool_panel.measure.highlight_action(MeasurementAction.LV2D_ES)
-        self._show_status("Диастола ЛЖ завершена — нажмите КСР (2D)")
+        self._show_status(tr("status.lv_diastole_done"))
 
     def _on_lv2d_es(self) -> None:
         if self._viewer.start_linear_caliper_for("LVESD"):
-            self._show_status("Систола ЛЖ: разместите КСР ЛЖ")
+            self._show_status(tr("status.lv_systole_place"))
         else:
-            self._show_status("Загрузите кадр")
+            self._show_status(tr("status.load_frame"))
 
     def _has_chamber_contour(self, chamber: str, view: str, phase: str) -> bool:
         for contour in self._controller.state_manager.snapshot.contours:
@@ -1611,8 +1610,8 @@ class MainWindow(QMainWindow):
             "LA",
             "ES",
             "A4C",
-            overlay="LAV 4C: МК septal → lateral → apex",
-            status="LAV 4C: МК septal → lateral → apex (овальный контур)",
+            overlay=tr("status.lav4c_overlay"),
+            status=tr("status.lav4c_status"),
         ):
             pass
         else:
@@ -1627,8 +1626,8 @@ class MainWindow(QMainWindow):
                 "LA",
                 "ES",
                 "A2C",
-                overlay="LAV 2C: МК septal → lateral → apex",
-                status="LAV 2C: МК septal → lateral → apex (овальный контур)",
+                overlay=tr("status.lav2c_overlay"),
+                status=tr("status.lav2c_status"),
             ):
                 pass
             else:
@@ -1639,8 +1638,8 @@ class MainWindow(QMainWindow):
             "LA",
             "ES",
             "A4C",
-            overlay="LAV Bi: шаг 1 — LA 4C Simpson",
-            status="LAV Bi: шаг 1 — МК septal → lateral → apex",
+            overlay=tr("status.lavbi_overlay"),
+            status=tr("status.lavbi_status"),
         ):
             pass
         else:
@@ -1657,8 +1656,8 @@ class MainWindow(QMainWindow):
             "RA",
             "ES",
             "A4C",
-            overlay="S ПП: RA A4C ES — annulus septal → lateral → apex",
-            status="S ПП: annulus septal → lateral → apex",
+            overlay=tr("status.ra_s_overlay"),
+            status=tr("status.ra_s_status"),
         ):
             self._show_status("Load a frame first or cancel the active tool (Esc)")
 
@@ -1668,7 +1667,7 @@ class MainWindow(QMainWindow):
             "ES",
             "A4C",
             overlay="RAV 4C: TV septal → lateral → apex",
-            status="RAV 4C: TV septal → lateral → apex (овальный контур)",
+            status=tr("status.rav4c_status"),
         ):
             pass
         else:
@@ -1694,7 +1693,7 @@ class MainWindow(QMainWindow):
                 spacing_calibrated=calibrated,
             )
             if line:
-                self._show_status(f"Готово: {line}")
+                self._show_status(tr("status.ready_done", line=line))
             self._viewer._refresh_frame_overlays()
             self._sync_results_overlay(self._controller.state_manager.snapshot)
             return
@@ -1710,10 +1709,10 @@ class MainWindow(QMainWindow):
             self._tool_panel.measure.highlight_action(es_action, view=view, phase="ES")
             view_label = "4C" if view == "A4C" else "2C"
             es_name = "ESV Auto" if mode == "mbs" else "LVEF Simpson ESV"
-            extra_lines = (f"Нажмите {es_name} ({view_label})",)
-            status = f"Нажмите {es_name} ({view_label})"
+            extra_lines = (tr("status.press_es", es_name=es_name, view_label=view_label),)
+            status = tr("status.press_es", es_name=es_name, view_label=view_label)
             if self._controller.state_manager.snapshot.effective_pixel_spacing is None:
-                status += " · нет PixelSpacing (K — калибровка, px / px³)"
+                status += tr("status.lv_no_pixel_spacing")
             self._show_status(status)
         elif chamber == "LV" and contour.phase.upper() == "ES":
             self._tool_panel.measure.clear_action_highlight()
@@ -1722,7 +1721,7 @@ class MainWindow(QMainWindow):
                 self._tool_panel.measure.highlight_action(MeasurementAction.LAV_BI)
                 extra_lines = (
                     *extra_lines,
-                    "LAV Bi: перейдите на 2C ES и нажмите LAV 2C",
+                    tr("status.lavbi_go_2c"),
                 )
             elif contour.view.upper() == "A2C":
                 self._lav_bi_active = False
@@ -1793,7 +1792,7 @@ class MainWindow(QMainWindow):
             if phase == "ED":
                 self._rv_fac_awaiting_es = True
                 self._tool_panel.measure.highlight_action(MeasurementAction.RV_FAC)
-                extra_lines = (*extra_lines, "Перейдите на кадр систолы и нажмите FAC")
+                extra_lines = (*extra_lines, tr("status.press_fac"))
             elif phase == "ES":
                 self._rv_fac_awaiting_es = False
                 self._tool_panel.measure.clear_action_highlight()
@@ -1817,7 +1816,7 @@ class MainWindow(QMainWindow):
         if not self._ensure_mmode_ready_for_tapse():
             return
         if self._viewer.start_linear_caliper_for("TAPSE"):
-            self._show_status("RV TAPSE: вертикальный калипер в полосе M-режима")
+            self._show_status(tr("status.rv_tapse_tool"))
         else:
             self._show_status("Load a frame first")
 
@@ -1868,7 +1867,7 @@ class MainWindow(QMainWindow):
             self._viewer.toggle_calibration_caliper()
             if self._viewer.is_calibration_active:
                 self._show_status(
-                    "Калибровка: 1-й клик — верхняя метка, 2-й — нижняя (Escape — отмена)"
+                    tr("status.calibration_click")
                 )
             event.accept()
             return True
@@ -1919,7 +1918,7 @@ class MainWindow(QMainWindow):
                 else:
                     self._show_status("Geometry smooth (R)")
             else:
-                self._show_status("Нет LV open-arc контура на текущем кадре")
+                self._show_status(tr("status.no_lv_open_arc"))
             event.accept()
             return True
         if (

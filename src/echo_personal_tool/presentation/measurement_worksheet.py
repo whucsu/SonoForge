@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
 from echo_personal_tool.domain.models import Contour
 from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.presentation.measurement_action import MeasurementAction
 
 RowState = Literal["pending", "in_progress", "done"]
@@ -36,9 +37,9 @@ _WORKSHEET_TREE: tuple[WorksheetRow, ...] = (
         None,
         "Setup",
         children=(
-            WorksheetRow(MeasurementAction.CALIBRATION, "Калибровка"),
+            WorksheetRow(MeasurementAction.CALIBRATION, tr("worksheet.calibration")),
             WorksheetRow(MeasurementAction.CALIPER, "Caliper"),
-            WorksheetRow(MeasurementAction.RESET, "Сброс"),
+            WorksheetRow(MeasurementAction.RESET, tr("worksheet.reset")),
         ),
     ),
     WorksheetRow(
@@ -69,11 +70,11 @@ _WORKSHEET_TREE: tuple[WorksheetRow, ...] = (
         None,
         "LA / RA",
         children=(
-            WorksheetRow(MeasurementAction.LA_DIAMETER, "ЛП ПЗР", "la_dim"),
+            WorksheetRow(MeasurementAction.LA_DIAMETER, tr("worksheet.la_dim"), "la_dim"),
             WorksheetRow(MeasurementAction.LAV_4C, "LAV 4C", "lav_4c"),
             WorksheetRow(MeasurementAction.LAV_BI, "LAV Bi", "lav_bi"),
-            WorksheetRow(MeasurementAction.RA_DIAMETER, "ПП", "ra_dim"),
-            WorksheetRow(MeasurementAction.RA_AREA, "S ПП", "ra_area"),
+            WorksheetRow(MeasurementAction.RA_DIAMETER, tr("worksheet.ra_dim"), "ra_dim"),
+            WorksheetRow(MeasurementAction.RA_AREA, tr("worksheet.ra_area"), "ra_area"),
             WorksheetRow(MeasurementAction.RAV_VOLUME, "RAV", "rav"),
         ),
     ),

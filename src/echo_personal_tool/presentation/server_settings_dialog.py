@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.server_settings import (
     ServerSettings,
     load_server_settings,
@@ -30,8 +31,8 @@ class ServerSettingsForm(QWidget):
         self._url_edit = QLineEdit()
         self._url_edit.setPlaceholderText("http://192.168.1.111:8042/dicom-web")
         self._auth_mode = QComboBox()
-        self._auth_mode.addItem("Без аутентификации", "none")
-        self._auth_mode.addItem("Basic (логин / пароль)", "basic")
+        self._auth_mode.addItem(tr("server_settings.auth_mode_none"), "none")
+        self._auth_mode.addItem(tr("server_settings.auth_mode_basic"), "basic")
         self._auth_mode.currentIndexChanged.connect(self._sync_auth_fields)
         self._username_edit = QLineEdit()
         self._password_edit = QLineEdit()
@@ -41,15 +42,15 @@ class ServerSettingsForm(QWidget):
             "Authorization: Basic cGFjczpwYcIBTU2NBRERS\nX-Custom-Header: value"
         )
         self._headers_edit.setFixedHeight(72)
-        self._mock_check = QCheckBox("Mock (без сервера)")
+        self._mock_check = QCheckBox(tr("server_settings.mock"))
 
         form = QFormLayout(self)
-        form.addRow("Описание:", self._description_edit)
+        form.addRow(tr("server_settings.description"), self._description_edit)
         form.addRow("DICOMweb URL:", self._url_edit)
-        form.addRow("Аутентификация:", self._auth_mode)
-        form.addRow("Имя пользователя:", self._username_edit)
-        form.addRow("Пароль:", self._password_edit)
-        form.addRow("HTTP-заголовки:", self._headers_edit)
+        form.addRow(tr("server_settings.auth"), self._auth_mode)
+        form.addRow(tr("server_settings.username"), self._username_edit)
+        form.addRow(tr("server_settings.password"), self._password_edit)
+        form.addRow(tr("server_settings.http_headers"), self._headers_edit)
         form.addRow("", self._mock_check)
 
         self.set_settings(load_server_settings())
@@ -90,7 +91,7 @@ def show_server_settings_dialog(parent: QWidget | None = None) -> bool:
 class ServerSettingsDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Настройки сервера")
+        self.setWindowTitle(tr("server_settings.title"))
 
         self._form = ServerSettingsForm(self)
 

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from echo_personal_tool.application.thumbnail_scheduler import ThumbnailPriority
 from echo_personal_tool.domain.models import InstanceMetadata, StudyMetadata
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.presentation.echopac_theme import ACCENT_BRIGHT, BG_DARK, TEXT
 
 _ITEM_ROLE = Qt.ItemDataRole.UserRole
@@ -354,16 +355,16 @@ class ThumbnailGalleryWidget(QListWidget):
         menu = QMenu(self)
         if instance.media_format == "dicom":
             menu.addAction(
-                "Скопировать DICOM-файл...",
+                tr("gallery.copy_dicom"),
                 lambda: self._copy_source_file(instance),
             )
             menu.addAction(
-                "Экспорт в MP4...",
+                tr("gallery.export_mp4"),
                 lambda: self.export_mp4_requested.emit(instance),
             )
         elif instance.media_format == "mp4":
             menu.addAction(
-                "Скопировать MP4-файл...",
+                tr("gallery.copy_mp4"),
                 lambda: self._copy_source_file(instance),
             )
         menu.exec(self.viewport().mapToGlobal(pos))
@@ -373,7 +374,7 @@ class ThumbnailGalleryWidget(QListWidget):
             return
         default_name = instance.path.name
         dest, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить файл", default_name,
+            self, tr("gallery.save_file"), default_name,
         )
         if dest:
             shutil.copy2(str(instance.path), dest)

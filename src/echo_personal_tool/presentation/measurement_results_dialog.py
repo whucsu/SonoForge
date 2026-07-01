@@ -20,6 +20,7 @@ from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
 from echo_personal_tool.domain.services.measurement_report_formatter import (
     format_measurement_report,
 )
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.measurement_report_pdf import (
     PdfExportError,
     export_measurement_report_pdf,
@@ -39,7 +40,7 @@ class MeasurementResultsDialog(QDialog):
         pdf_font_size: int = 10,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Результаты измерений")
+        self.setWindowTitle(tr("measurement_results.title"))
         self.resize(520, 640)
         self._report_text = format_measurement_report(
             snapshot,
@@ -51,7 +52,7 @@ class MeasurementResultsDialog(QDialog):
         self._text = QPlainTextEdit(self._report_text)
         self._text.setReadOnly(True)
 
-        export_button = QPushButton("Экспорт в PDF")
+        export_button = QPushButton(tr("measurement_results.export_pdf"))
         export_button.clicked.connect(self._export_pdf)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -66,7 +67,7 @@ class MeasurementResultsDialog(QDialog):
     def _export_pdf(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Сохранить PDF",
+            tr("measurement_results.save_pdf"),
             self._default_pdf_name,
             "PDF (*.pdf)",
         )
@@ -82,6 +83,6 @@ class MeasurementResultsDialog(QDialog):
                 font_size=self._pdf_font_size,
             )
         except PdfExportError as exc:
-            QMessageBox.warning(self, "Экспорт PDF", str(exc))
+            QMessageBox.warning(self, tr("measurement_results.pdf_error.title"), str(exc))
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(output_path.resolve())))
