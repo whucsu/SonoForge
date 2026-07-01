@@ -132,6 +132,7 @@ class AppController(QObject):
         self._pending_load_id = 0
         self._decode_request_id = 0
         self._pending_decode_id = 0
+        self._pending_emit_after_decode = False
         self._thumbnail_max_in_flight = thumbnail_max_in_flight
         self._playback_speed_multiplier = 1.0
         self._thumbnail_scheduler = (
@@ -303,7 +304,10 @@ class AppController(QObject):
         if instance.media_format in ("dicom", "mp4"):
             self._decode_request_id += 1
             self._pending_decode_id = self._decode_request_id
-        self._state_manager.emit_state()
+            self._pending_emit_after_decode = True
+        else:
+            self._state_manager.emit_state()
+            self._pending_emit_after_decode = False
         if frame_index != 0:
             self._state_manager.set_frame(frame_index)
         self._current_study_uid = self._resolve_study_uid(instance)
@@ -1522,8 +1526,10 @@ class AppController(QObject):
         self._loaded_frame_index = 0
         self._pending_decode_id = 0
         self._state_manager.set_decode_in_progress(False)
+        if self._pending_emit_after_decode:
+            self._pending_emit_after_decode = False
+            self._state_manager.emit_state()
         self.frame_loaded.emit(first_frame)
-        self.status_message.emit("First frame ready")
 
     def _on_dicom_decoded(self, request_id: int, path: Path, frames: object) -> None:
         if request_id != self._pending_decode_id:
@@ -1576,6 +1582,9 @@ class AppController(QObject):
         self._loaded_frame_index = None
         self._current_frame_pixels = None
         self._state_manager.set_decode_in_progress(False)
+        if self._pending_emit_after_decode:
+            self._pending_emit_after_decode = False
+            self._state_manager.emit_state()
         self.status_message.emit(f"Load failed: {message}")
         self.frame_load_failed.emit(message)
 

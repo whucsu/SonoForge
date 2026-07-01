@@ -18,8 +18,8 @@ _DARK = {
     "bg_button": "#2e4054",
     "bg_button_hover": "#3a5068",
     "bg_button_pressed": "#1e2a38",
-    "accent": "#60a5fa",
-    "accent_bright": "#93bbfc",
+    "accent": "#9ca3b0",
+    "accent_bright": "#b0b8c0",
     "accent_tab": "#3b82f6",
     "text": "#f1f5f9",
     "text_dim": "#94a3b8",
@@ -33,6 +33,8 @@ _DARK = {
     "reset_pressed": "#7f1d1d",
     "reset_border": "#ef4444",
     "reset_border_hov": "#f87171",
+    "reset_text": "#f1f5f9",
+    "progress_text": "#f1f5f9",
     "hover_btn1": "#3a5068",
     "success": "#34d399",
     "warning": "#fb923c",
@@ -47,8 +49,8 @@ _LIGHT = {
     "bg_button": "#e2e8f0",
     "bg_button_hover": "#cbd5e1",
     "bg_button_pressed": "#94a3b8",
-    "accent": "#3b82f6",
-    "accent_bright": "#2563eb",
+    "accent": "#8896a4",
+    "accent_bright": "#6b7a8c",
     "accent_tab": "#1d4ed8",
     "text": "#0f172a",
     "text_dim": "#64748b",
@@ -62,6 +64,8 @@ _LIGHT = {
     "reset_pressed": "#b91c1c",
     "reset_border": "#ef4444",
     "reset_border_hov": "#f87171",
+    "reset_text": "#ffffff",
+    "progress_text": "#ffffff",
     "hover_btn1": "#cbd5e1",
     "success": "#22c55e",
     "warning": "#f59e0b",
@@ -91,6 +95,8 @@ _VS_CODE_DARK = {
     "reset_pressed": "#8b1a10",
     "reset_border": "#e04030",
     "reset_border_hov": "#f05545",
+    "reset_text": "#cccccc",
+    "progress_text": "#cccccc",
     "hover_btn1": "#505050",
     "success": "#4ec9b0",
     "warning": "#cca700",
@@ -120,6 +126,8 @@ _VS_CODE_LIGHT = {
     "reset_pressed": "#8b1a10",
     "reset_border": "#c42b1c",
     "reset_border_hov": "#e04030",
+    "reset_text": "#ffffff",
+    "progress_text": "#ffffff",
     "hover_btn1": "#c0c0c0",
     "success": "#16825d",
     "warning": "#bf8803",
@@ -216,7 +224,7 @@ QScrollBar:vertical {{
     margin: 0;
 }}
 QScrollBar::handle:vertical {{
-    background: {p["border"]};
+    background: {p["accent_tab"]};
     min-height: 30px;
     border-radius: 5px;
 }}
@@ -232,7 +240,7 @@ QScrollBar:horizontal {{
     margin: 0;
 }}
 QScrollBar::handle:horizontal {{
-    background: {p["border"]};
+    background: {p["accent_tab"]};
     min-width: 30px;
     border-radius: 5px;
 }}
@@ -269,7 +277,7 @@ QTabBar::tab {{
     font-weight: 500;
 }}
 QTabBar::tab:selected {{
-    background: {p["accent_tab"]};
+    background: {p["bg_control"]};
     color: {p["text"]};
     font-weight: 600;
     border-radius: 8px 8px 0 0;
@@ -298,7 +306,7 @@ QPushButton:pressed, QToolButton:pressed {{
     background: {p["bg_button_pressed"]};
 }}
 QPushButton:checked, QToolButton:checked {{
-    background: {p["accent_tab"]};
+    background: {p["bg_control"]};
     border-color: {p["accent"]};
     color: {p["text"]};
 }}
@@ -313,7 +321,7 @@ QGroupBox {{
     margin-top: 10px;
     padding-top: 8px;
     font-weight: 600;
-    color: {p["accent"]};
+    color: {p["text"]};
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
@@ -329,7 +337,7 @@ QTreeWidget, QListWidget {{
     alternate-background-color: {p["bg_control"]};
 }}
 QTreeWidget::item:selected, QListWidget::item:selected {{
-    background: {p["accent_tab"]};
+    background: {p["bg_control"]};
     color: {p["text"]};
 }}
 
@@ -339,7 +347,7 @@ QScrollBar:vertical {{
     width: 10px;
 }}
 QScrollBar::handle:vertical {{
-    background: {p["bg_button_hover"]};
+    background: {p["accent_tab"]};
     border-radius: 6px;
     min-height: 24px;
 }}
@@ -351,7 +359,7 @@ QScrollBar:horizontal {{
     height: 10px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {p["bg_button_hover"]};
+    background: {p["accent_tab"]};
     border-radius: 6px;
     min-width: 24px;
 }}
@@ -362,7 +370,7 @@ QSplitter::handle {{
     width: 2px;
 }}
 QSplitter::handle:hover {{
-    background: {p["accent"]};
+    background: {p["accent_tab"]};
 }}
 
 /* ── Slider ─────────────────────────────────────────────────── */
@@ -373,7 +381,7 @@ QSlider::groove:horizontal {{
     border-radius: 3px;
 }}
 QSlider::handle:horizontal {{
-    background: {p["accent"]};
+    background: {p["text"]};
     width: 16px;
     height: 16px;
     margin: -5px 0;
@@ -393,11 +401,11 @@ QProgressBar {{
     border-radius: 4px;
     background: {p["bg_control"]};
     text-align: center;
-    color: {p["text"]};
+    color: {p["progress_text"]};
     height: 16px;
 }}
 QProgressBar::chunk {{
-    background: {p["accent"]};
+    background: {p["accent_tab"]};
     border-radius: 3px;
 }}
 
@@ -409,7 +417,7 @@ QSpinBox {{
     padding: 2px 6px;
 }}
 QSpinBox:focus {{
-    border-color: {p["accent"]};
+    border-color: {p["accent_tab"]};
 }}
 
 /* ── CheckBox ───────────────────────────────────────────────── */
@@ -424,8 +432,8 @@ QCheckBox::indicator {{
     background: {p["bg_control"]};
 }}
 QCheckBox::indicator:checked {{
-    background: {p["accent"]};
-    border-color: {p["accent"]};
+    background: {p["text"]};
+    border-color: {p["text"]};
 }}
 
 /* ── SystemBar ──────────────────────────────────────────────── */
@@ -444,7 +452,7 @@ QCheckBox::indicator:checked {{
 #systemBar QPushButton#resetButton {{
     background: {p["reset_bg1"]};
     border-color: {p["reset_border"]};
-    color: {p["text"]};
+    color: {p["reset_text"]};
 }}
 #systemBar QPushButton#resetButton:hover {{
     background: {p["reset_hov1"]};
@@ -496,7 +504,7 @@ QCheckBox::indicator:checked {{
 }}
 #activityBar QPushButton:checked {{
     background: {p["bg_control"]};
-    border-left: 2px solid {p["accent"]};
+    border-left: 2px solid {p["accent_tab"]};
 }}
 
 /* ── Layout Menu ──────────────────────────────────────────────── */
@@ -523,7 +531,7 @@ QCheckBox::indicator:checked {{
     font-weight: 500;
 }}
 #toolPanel QPushButton#measuresSectionTitle {{
-    color: {p["accent"]};
+    color: {p["text"]};
     font-weight: 600;
     text-align: left;
     padding: 6px 8px;
@@ -556,7 +564,7 @@ QCheckBox::indicator:checked {{
 
 /* ── Focus ring ─────────────────────────────────────────────── */
 QPushButton:focus, QToolButton:focus, QTabBar::tab:focus {{
-    border-color: {p["accent"]};
+    border-color: {p["accent_tab"]};
 }}
 QSpinBox:focus, QCheckBox:focus {{
     border-color: {p["accent"]};

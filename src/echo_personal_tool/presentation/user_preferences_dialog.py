@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -12,10 +14,12 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -77,9 +81,34 @@ class UserPreferencesDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._on_apply = on_apply
-        self.setWindowTitle("Настройки")
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Dialog
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.resize(780, 560)
+        self._drag_pos = None
         current = load_user_preferences()
+
+        # Custom title bar
+        title_bar = QWidget()
+        title_bar.setObjectName("systemBar")
+        title_bar.setFixedHeight(34)
+        title_bar_layout = QHBoxLayout(title_bar)
+        title_bar_layout.setContentsMargins(6, 0, 0, 0)
+        title_bar_layout.setSpacing(8)
+        title_label = QLabel("Настройки")
+        title_label.setStyleSheet("font-weight: 500;")
+        title_bar_layout.addWidget(title_label)
+        title_bar_layout.addStretch(1)
+
+        btn_close = QPushButton()
+        from echo_personal_tool.presentation.system_bar import _load_icon
+        btn_close.setIcon(_load_icon("close"))
+        btn_close.setObjectName("closeButton")
+        btn_close.setFixedSize(28, 23)
+        btn_close.clicked.connect(self.reject)
+        title_bar_layout.addWidget(btn_close)
 
         tabs = QTabWidget()
 
@@ -92,6 +121,11 @@ class UserPreferencesDialog(QDialog):
         self._theme_combo.addItem("Системная", "system")
         theme_index = self._theme_combo.findData(current.theme_mode)
         self._theme_combo.setCurrentIndex(max(theme_index, 0))
+        self._language_combo = QComboBox()
+        self._language_combo.addItem("Русский", "ru")
+        self._language_combo.addItem("English", "en")
+        lang_index = self._language_combo.findData(current.language)
+        self._language_combo.setCurrentIndex(max(lang_index, 0))
         self._font_spin = QSpinBox()
         self._font_spin.setRange(MIN_UI_FONT_SIZE, MAX_UI_FONT_SIZE)
         self._font_spin.setSuffix(" pt")
@@ -112,6 +146,7 @@ class UserPreferencesDialog(QDialog):
         self._caliper_spin.setSuffix(" px")
         self._caliper_spin.setValue(current.caliper_line_width)
         interface_form.addRow("Цветовая тема:", self._theme_combo)
+        interface_form.addRow("Язык:", self._language_combo)
         interface_form.addRow("Размер шрифта UI:", self._font_spin)
         interface_form.addRow("Шрифт оверлея результатов:", self._overlay_font_spin)
         interface_form.addRow("Прозрачность оверлея:", self._overlay_opacity_spin)
@@ -143,12 +178,15 @@ class UserPreferencesDialog(QDialog):
         self._show_panel_frames.setChecked(current.show_panel_frames)
         self._show_caliper_labels = QCheckBox()
         self._show_caliper_labels.setChecked(current.show_caliper_labels_on_frame)
+        self._show_caliper_inline_labels = QCheckBox()
+        self._show_caliper_inline_labels.setChecked(current.show_caliper_inline_labels)
         display_form.addRow("Скорость cine:", self._playback_spin)
         display_form.addRow("Пресет W/L:", self._wl_preset)
         display_form.addRow("Размер миниатюр:", self._thumbnail_scale)
         display_form.addRow("Перекрестие:", self._show_crosshair)
         display_form.addRow("Рамки панелей:", self._show_panel_frames)
         display_form.addRow("Подписи калиперов:", self._show_caliper_labels)
+        display_form.addRow("Подписи на изображении:", self._show_caliper_inline_labels)
         tabs.addTab(_scrollable_tab(display_form), "Отображение")
 
         measure_form = QFormLayout()
@@ -261,6 +299,9 @@ class UserPreferencesDialog(QDialog):
         reset_row.addStretch(1)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(title_bar)
         layout.addWidget(tabs)
         layout.addLayout(reset_row)
         layout.addWidget(buttons)
@@ -305,6 +346,7 @@ class UserPreferencesDialog(QDialog):
             show_crosshair=self._show_crosshair.isChecked(),
             show_panel_frames=self._show_panel_frames.isChecked(),
             show_caliper_labels_on_frame=self._show_caliper_labels.isChecked(),
+            show_caliper_inline_labels=self._show_caliper_inline_labels.isChecked(),
             thumbnail_scale=str(self._thumbnail_scale.currentData()),
             magnetic_snap_weight_threshold=float(self._magnetic_weight_spin.value()),
             magnetic_snap_release_strength=float(self._magnetic_release_spin.value()),
@@ -320,9 +362,21 @@ class UserPreferencesDialog(QDialog):
             startup_mode=str(self._startup_mode.currentData()),
             last_opened_folder=stored.last_opened_folder,
             theme_mode=str(self._theme_combo.currentData()),
+            language=str(self._language_combo.currentData()),
         )
         save_user_preferences(preferences)
         save_server_settings(self._server_form.settings())
         if self._on_apply is not None:
             self._on_apply(preferences)
         self.accept()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.pos()
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if self._drag_pos is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        self._drag_pos = None

@@ -288,6 +288,9 @@ class MainWindow(QMainWindow):
         self._viewer.cancel_active_tool()
 
     def _delete_current_contour(self) -> None:
+        if self._viewer._delete_selected_caliper():
+            self._show_status("Caliper deleted")
+            return
         if self._viewer.delete_contour_for_current_phase():
             self._controller.on_contours_changed(self._viewer.contours())
             self._show_status("Contour deleted")
@@ -604,6 +607,8 @@ class MainWindow(QMainWindow):
         self._user_preferences = preferences
         if not preferences.results_overlay_custom_position:
             self._instance_overlay_positions.clear()
+        from echo_personal_tool.infrastructure.i18n import set_language
+        set_language(preferences.language)
         app = QApplication.instance()
         if app is not None:
             app.setFont(ui_font(point_size=preferences.ui_font_size))
@@ -611,6 +616,10 @@ class MainWindow(QMainWindow):
             font_size=preferences.ui_font_size,
             theme=preferences.theme_mode,
         )
+        self._system_bar.reload_icons()
+        self._system_bar.reload_text()
+        if self._activity_bar is not None:
+            self._activity_bar.reload_text()
         with QSignalBlocker(self._tool_panel.controls._magnetic_snap_check):
             self._tool_panel.controls._magnetic_snap_check.setChecked(
                 preferences.magnetic_snap_enabled
@@ -874,7 +883,12 @@ class MainWindow(QMainWindow):
         if is_playing or scroll_active:
             self._viewer.show_frame_fast(image)
         else:
-            self._viewer.show_frame(image)
+            self._content_widget.setUpdatesEnabled(False)
+            try:
+                self._viewer.show_frame(image)
+            finally:
+                self._content_widget.setUpdatesEnabled(True)
+            self._viewer.reposition_overlays()
             self._viewer.reposition_overlays()
             self._viewer.refresh_dicom_tags_overlay()
             self._restore_doppler_for_current_instance()

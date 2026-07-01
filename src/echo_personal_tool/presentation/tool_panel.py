@@ -182,11 +182,9 @@ class ToolPanel(QWidget):
         self._tabs = QTabWidget()
         self.measure = MeasureTab()
         self.controls = ControlsTab()
-        self.dicom_inspector = DicomTagInspectorWidget()
 
         self._tabs.addTab(self.measure, "Measures")
         self._tabs.addTab(self.controls, "Controls")
-        self._dicom_tab_index = self._tabs.addTab(self.dicom_inspector, "DICOM")
 
         self.measure.action_requested.connect(self.action_requested.emit)
         self.measure.patient_metrics_changed.connect(self.patient_metrics_changed.emit)
@@ -201,15 +199,10 @@ class ToolPanel(QWidget):
         self.measure.set_patient_metrics(height_cm, weight_kg)
 
     def set_dicom_inspector_visible(self, visible: bool) -> None:
-        self._tabs.setTabVisible(self._dicom_tab_index, visible)
+        pass
 
     def load_dicom_inspector(self, path) -> None:
-        from pathlib import Path
-
-        if path is None:
-            self.dicom_inspector.load_instance(None)
-            return
-        self.dicom_inspector.load_instance(Path(path) if not isinstance(path, Path) else path)
+        pass
 
     def set_doppler_tool_availability(self, *, time_ok: bool) -> None:
         self.measure.set_doppler_tool_availability(time_ok=time_ok)

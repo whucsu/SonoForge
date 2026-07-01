@@ -20,9 +20,14 @@ _ICON_DIR = Path(__file__).resolve().parent.parent / "resources" / "icons"
 
 
 def _load_icon(name: str) -> QIcon:
+    from echo_personal_tool.presentation.echopac_theme import get_theme_palette
     svg_path = _ICON_DIR / f"{name}.svg"
     if svg_path.is_file():
-        pixmap = QPixmap(str(svg_path))
+        svg_text = svg_path.read_text(encoding="utf-8")
+        color = get_theme_palette().get("text", "#f1f5f9")
+        svg_text = svg_text.replace("currentColor", color)
+        pixmap = QPixmap()
+        pixmap.loadFromData(svg_text.encode("utf-8"))
         if not pixmap.isNull():
             return QIcon(pixmap)
     return QIcon()
@@ -110,10 +115,12 @@ class SystemBar(QWidget):
         btn_open = QPushButton("Open folder…")
         btn_open.setIcon(_load_icon("folder_open"))
         btn_open.clicked.connect(self.open_folder_requested.emit)
+        self._btn_open = btn_open
 
         btn_load_server = QPushButton("Загрузить с сервера…")
         btn_load_server.setIcon(_load_icon("cloud_download"))
         btn_load_server.clicked.connect(self.load_from_server_requested.emit)
+        self._btn_load_server = btn_load_server
 
         self._btn_settings = QPushButton("Настройки")
         self._btn_settings.setIcon(_load_icon("settings"))
@@ -124,11 +131,13 @@ class SystemBar(QWidget):
         btn_caliper.setIcon(_load_icon("straighten"))
         btn_caliper.setToolTip("Linear distance (Dist1, Dist2, …)")
         btn_caliper.clicked.connect(self.caliper_requested.emit)
+        self._btn_caliper = btn_caliper
 
         btn_calibration = QPushButton("Calibration B-mode")
         btn_calibration.setIcon(_load_icon("tune"))
         btn_calibration.setToolTip("B-mode pixel spacing: depth scale line")
         btn_calibration.clicked.connect(self.calibration_requested.emit)
+        self._btn_calibration = btn_calibration
 
         btn_doppler_calibration = QPushButton("Calibration Doppler")
         btn_doppler_calibration.setIcon(_load_icon("show_chart"))
@@ -136,6 +145,7 @@ class SystemBar(QWidget):
             "Doppler spectrogram: ROI → baseline → velocity scale"
         )
         btn_doppler_calibration.clicked.connect(self.doppler_calibration_requested.emit)
+        self._btn_doppler_calibration = btn_doppler_calibration
 
         self._btn_references = QPushButton("Нормативы")
         self._btn_references.setIcon(_load_icon("description"))
@@ -146,6 +156,7 @@ class SystemBar(QWidget):
         btn_reset.setIcon(_load_icon("refresh"))
         btn_reset.setObjectName("resetButton")
         btn_reset.clicked.connect(self.reset_session_requested.emit)
+        self._btn_reset = btn_reset
 
         self._btn_layout = QPushButton()
         self._btn_layout.setIcon(_load_icon("layout"))
@@ -235,6 +246,39 @@ class SystemBar(QWidget):
     def clear_study_context(self) -> None:
         self._study_label.setText("No study loaded")
         self._study_label.setToolTip("")
+
+    def reload_icons(self) -> None:
+        """Reload all icons with current theme colors."""
+        self._btn_open.setIcon(_load_icon("folder_open"))
+        self._btn_load_server.setIcon(_load_icon("cloud_download"))
+        self._btn_settings.setIcon(_load_icon("settings"))
+        self._btn_caliper.setIcon(_load_icon("straighten"))
+        self._btn_calibration.setIcon(_load_icon("tune"))
+        self._btn_doppler_calibration.setIcon(_load_icon("show_chart"))
+        self._btn_references.setIcon(_load_icon("description"))
+        self._btn_reset.setIcon(_load_icon("refresh"))
+        self._btn_layout.setIcon(_load_icon("layout"))
+        self._btn_minimize.setIcon(_load_icon("minimize"))
+        self._btn_maximize.setIcon(_load_icon("maximize"))
+        self._btn_close.setIcon(_load_icon("close"))
+
+    def reload_text(self) -> None:
+        """Update all button text and tooltips for current language."""
+        from echo_personal_tool.infrastructure.i18n import tr
+        self._btn_open.setText(tr("open_folder"))
+        self._btn_load_server.setText(tr("load_from_server"))
+        self._btn_settings.setText(tr("settings"))
+        self._btn_settings.setToolTip(tr("settings"))
+        self._btn_caliper.setText(tr("caliper"))
+        self._btn_calibration.setText(tr("calibration_bmode"))
+        self._btn_doppler_calibration.setText(tr("calibration_doppler"))
+        self._btn_references.setText(tr("references"))
+        self._btn_references.setToolTip(tr("references"))
+        self._btn_reset.setText(tr("reset"))
+        self._btn_minimize.setToolTip(tr("minimize"))
+        self._btn_maximize.setToolTip(tr("maximize"))
+        self._btn_close.setToolTip(tr("close"))
+        self._study_label.setText(tr("no_study_loaded"))
 
     def set_status_message(self, message: str) -> None:
         self._status_label.set_full_text(message)

@@ -110,15 +110,6 @@ def _append_abnormal_indexed(
         ):
             _append_line(lines, "  иКСО 2C", indexed.simpson_a2c_esvi_ml_m2, "mL/m²")
 
-    if indexed.simpson_edvi_ml_m2 is not None and is_outside_norm(
-        indexed.simpson_edvi_ml_m2, LVEDVI_MLM2
-    ):
-        _append_line(lines, "  иКДО ср.", indexed.simpson_edvi_ml_m2, "mL/m²")
-    if indexed.simpson_esvi_ml_m2 is not None and is_outside_norm(
-        indexed.simpson_esvi_ml_m2, LVESVI_MLM2
-    ):
-        _append_line(lines, "  иКСО ср.", indexed.simpson_esvi_ml_m2, "mL/m²")
-
     teich = snapshot.teichholz
     if teich is not None:
         if indexed.teichholz_edvi_ml_m2 is not None and (

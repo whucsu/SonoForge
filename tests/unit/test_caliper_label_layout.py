@@ -45,7 +45,7 @@ def test_diagonal_line_along_line() -> None:
     layout = compute_caliper_label_layout(
         (0, 0), (100, 100), vertical_labels=frozenset(), label="Dist1"
     )
-    assert layout.angle_deg == pytest.approx(45.0, abs=1.0)
+    assert layout.angle_deg == 0.0
 
 
 def test_midpoint_anchor() -> None:

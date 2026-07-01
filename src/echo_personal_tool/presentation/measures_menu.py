@@ -134,7 +134,7 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
         ),
     ),
     (
-        "МТ/АТ",
+        "МК/АК",
         (
             _btn("Trace MV", doppler_trace="VTI MV"),
             _btn("Trace MR", doppler_trace="VTI MR"),
@@ -147,7 +147,7 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
         ),
     ),
     (
-        "ТТ/ЛТ",
+        "ТК/ЛК",
         (
             _btn("TRpeak", doppler_peak="TR Vmax"),
             _btn("Trace TR", doppler_trace="VTI TR"),
