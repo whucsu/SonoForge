@@ -554,6 +554,7 @@ class ViewerWidget(QWidget):
             scene.sigMouseMoved.connect(self._on_scene_mouse_moved)
         self._image_item = pg.ImageItem(axisOrder="row-major")
         self._image_item.setAutoDownsample(False)
+        self._image_item.setOpts(smooth=True)
         self._view.addItem(self._image_item)
         self._doppler = DopplerOverlayTools(self._view, self)
         self._doppler.markers_changed.connect(self.doppler_markers_changed.emit)
@@ -659,6 +660,7 @@ class ViewerWidget(QWidget):
         self._caliper_drag_persistent_items: list | None = None
         self._selected_caliper_key: tuple[str, int] | None = None
         self._syncing_state = False
+        self._zoom_mode: str = "fit"
         self._is_color_frame = False
         self._color_source_rgb: np.ndarray | None = None
         self._window_level_enabled = True
@@ -715,6 +717,20 @@ class ViewerWidget(QWidget):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
         )
         self._dicom_tags_overlay_label.hide()
+
+        self._debug_overlay_visible = False
+        self._debug_overlay_label = QLabel(self)
+        self._debug_overlay_label.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents
+        )
+        self._debug_overlay_label.setStyleSheet(
+            "background-color: rgba(0, 0, 0, 180); color: #0f0; "
+            "font-family: monospace; font-size: 11px; padding: 4px;"
+        )
+        self._debug_overlay_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
+        self._debug_overlay_label.hide()
 
         self._timeline_slider = QSlider(Qt.Orientation.Horizontal)
         self._timeline_slider.setSingleStep(1)
@@ -782,6 +798,8 @@ class ViewerWidget(QWidget):
         self._graphics.setViewportUpdateMode(
             QGraphicsView.ViewportUpdateMode.SmartViewportUpdate,
         )
+        from PySide6.QtGui import QPainter
+        self._graphics.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         self._graphics.installEventFilter(self)
         viewport = self._graphics.viewport()
         if viewport is not None:
@@ -1149,6 +1167,44 @@ class ViewerWidget(QWidget):
     def refresh_dicom_tags_overlay(self) -> None:
         self._refresh_dicom_tags_overlay()
 
+    def toggle_debug_overlay(self) -> None:
+        self._debug_overlay_visible = not self._debug_overlay_visible
+        if self._debug_overlay_visible:
+            self._update_debug_overlay()
+            self._debug_overlay_label.show()
+        else:
+            self._debug_overlay_label.hide()
+
+    def _update_debug_overlay(self) -> None:
+        if not self._debug_overlay_visible:
+            return
+        lines: list[str] = []
+        if self._current_frame is not None:
+            h, w = self._current_frame.shape[:2]
+            lines.append(f"Native: {w}x{h}")
+        geo = self._graphics.geometry()
+        vw, vh = geo.width(), geo.height()
+        lines.append(f"Viewport: {vw}x{vh}")
+        if self._current_frame is not None:
+            h, w = self._current_frame.shape[:2]
+            if w > 0 and h > 0:
+                scale = max(vw / w, vh / h)
+                lines.append(f"Scale: {scale:.2f}x")
+        dpr = self._graphics.devicePixelRatioF()
+        lines.append(f"DPR: {dpr:.1f}")
+        if self._current_state and self._current_state.instance:
+            inst = self._current_state.instance
+            lines.append(f"Format: {inst.media_format}")
+            lines.append(f"Frames: {inst.number_of_frames}")
+        self._debug_overlay_label.setText("\n".join(lines))
+        self._debug_overlay_label.adjustSize()
+        geo_viewer = self._graphics.geometry()
+        self._debug_overlay_label.move(
+            geo_viewer.x() + 4,
+            geo_viewer.y() + 4,
+        )
+        self._debug_overlay_label.raise_()
+
     def _mark_results_overlay_custom_position(self) -> None:
         self._results_overlay_custom_position = True
 
@@ -1260,6 +1316,54 @@ class ViewerWidget(QWidget):
             self._refresh_frame_panel_layout()
             self._configure_doppler_axis_for_frame()
             self._invalidate_edge_map_cache()
+        self._update_debug_overlay()
+        self._apply_zoom_mode()
+
+    def _apply_zoom_mode(self) -> None:
+        if self._current_frame is None:
+            return
+        h, w = self._current_frame.shape[:2]
+        if self._zoom_mode == "fit":
+            self._view.setRange(xRange=(0, w), yRange=(0, h), padding=0)
+        elif self._zoom_mode == "100%":
+            dpr = self._graphics.devicePixelRatioF()
+            view_w = self._graphics.viewport().width() / dpr
+            view_h = self._graphics.viewport().height() / dpr
+            cx, cy = w / 2.0, h / 2.0
+            half_w = view_w / 2.0
+            half_h = view_h / 2.0
+            self._view.setRange(
+                xRange=(cx - half_w, cx + half_w),
+                yRange=(cy - half_h, cy + half_h),
+                padding=0,
+            )
+        elif self._zoom_mode == "200%":
+            dpr = self._graphics.devicePixelRatioF()
+            view_w = self._graphics.viewport().width() / dpr
+            view_h = self._graphics.viewport().height() / dpr
+            cx, cy = w / 2.0, h / 2.0
+            half_w = view_w / 4.0
+            half_h = view_h / 4.0
+            self._view.setRange(
+                xRange=(cx - half_w, cx + half_w),
+                yRange=(cy - half_h, cy + half_h),
+                padding=0,
+            )
+
+    def cycle_zoom_mode(self) -> None:
+        modes = ["fit", "100%", "200%"]
+        idx = modes.index(self._zoom_mode) if self._zoom_mode in modes else 0
+        self._zoom_mode = modes[(idx + 1) % len(modes)]
+        self._apply_zoom_mode()
+
+    def set_zoom_mode(self, mode: str) -> None:
+        if mode in ("fit", "100%", "200%"):
+            self._zoom_mode = mode
+            self._apply_zoom_mode()
+
+    @property
+    def zoom_mode(self) -> str:
+        return self._zoom_mode
 
     def show_frame_fast(self, pixels: np.ndarray) -> None:
         """Fast render for playback: skip layout/doppler/panel detection."""
@@ -4334,6 +4438,32 @@ class ViewerWidget(QWidget):
                 return
         if event.key() == Qt.Key.Key_Delete:
             if self._delete_selected_caliper():
+                event.accept()
+                return
+        if (event.key() == Qt.Key.Key_D
+                and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+                and event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            self.toggle_debug_overlay()
+            event.accept()
+            return
+        if not event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if event.key() == Qt.Key.Key_Plus or event.key() == Qt.Key.Key_Equal:
+                modes = ["fit", "100%", "200%"]
+                idx = modes.index(self._zoom_mode) if self._zoom_mode in modes else 0
+                self._zoom_mode = modes[min(idx + 1, len(modes) - 1)]
+                self._apply_zoom_mode()
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_Minus:
+                modes = ["fit", "100%", "200%"]
+                idx = modes.index(self._zoom_mode) if self._zoom_mode in modes else 0
+                self._zoom_mode = modes[max(idx - 1, 0)]
+                self._apply_zoom_mode()
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_0:
+                self._zoom_mode = "fit"
+                self._apply_zoom_mode()
                 event.accept()
                 return
         super().keyPressEvent(event)
