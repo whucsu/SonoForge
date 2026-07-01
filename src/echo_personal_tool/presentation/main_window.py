@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
@@ -78,12 +79,17 @@ def _loaded_file_label(instance: InstanceMetadata) -> str:
 
 
 def apply_maximized_to_work_area(window: QMainWindow) -> None:
+    """Maximize within the screen work area (taskbar-safe on Windows)."""
     screen = window.screen() or QApplication.primaryScreen()
     if screen is None:
         window.showMaximized()
+        window._user_maximized = True  # type: ignore[attr-defined]
         return
     geo = screen.availableGeometry()
-    window.setGeometry(geo)
+    if sys.platform == "win32":
+        window.setGeometry(geo)
+        window._user_maximized = True  # type: ignore[attr-defined]
+        return
     window.showMaximized()
     window._user_maximized = True  # type: ignore[attr-defined]
 
@@ -226,7 +232,7 @@ class MainWindow(QMainWindow):
 
         status = QStatusBar()
         self.setStatusBar(status)
-        self._show_status("Ready — open a study; tools: Measures / Controls (right)")
+        self._show_status(tr("status.startup"))
         self._install_shortcuts()
         self._rebuild_layout()
 
@@ -260,18 +266,18 @@ class MainWindow(QMainWindow):
 
     def _start_manual_contour_shortcut(self) -> None:
         if self._viewer.start_contour():
-            self._show_status("Manual contour: click MA septal, lateral, then apex")
+            self._show_status(tr("status.manual_contour"))
         else:
-            self._show_status("Load a frame first (or finish the active contour)")
+            self._show_status(tr("status.load_frame_or_finish_contour"))
 
     def _start_model_contour_shortcut(self) -> None:
         start_mode = self._viewer.start_model_contour()
         if start_mode:
             self._viewer.clear_frame_overlay()
             self._viewer.append_frame_overlay("MBS-lite: MA septal → lateral → apex")
-            self._show_status("MBS-lite: click MA septal, lateral, apex")
+            self._show_status(tr("status.mbs_lite_contour"))
         else:
-            self._show_status("Load a frame first (or finish the active contour)")
+            self._show_status(tr("status.load_frame_or_finish_contour"))
 
     def _request_auto_segment_shortcut(self) -> None:
         if self._viewer.get_doppler_tool_mode() != "none":
@@ -304,11 +310,11 @@ class MainWindow(QMainWindow):
 
     def _delete_current_contour(self) -> None:
         if self._viewer._delete_selected_caliper():
-            self._show_status("Caliper deleted")
+            self._show_status(tr("status.caliper_deleted"))
             return
         if self._viewer.delete_contour_for_current_phase():
             self._controller.on_contours_changed(self._viewer.contours())
-            self._show_status("Contour deleted")
+            self._show_status(tr("status.contour_deleted"))
 
     def _toggle_gallery_shortcut(self) -> None:
         self._gallery.toggle_collapse()
@@ -1939,7 +1945,7 @@ class MainWindow(QMainWindow):
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             if self._viewer.delete_contour_for_current_phase():
                 self._controller.on_contours_changed(self._viewer.contours())
-                self._show_status("Contour deleted")
+                self._show_status(tr("status.contour_deleted"))
             event.accept()
             return True
         if event.key() == Qt.Key.Key_Escape:

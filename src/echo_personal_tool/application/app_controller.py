@@ -128,6 +128,7 @@ class AppController(QObject):
             self._timer.setTimerType(Qt.TimerType.PreciseTimer)
         self._last_frame_shown_at: float = 0.0
         self._playback_warmup_pending = False
+        self._playback_poll_interval_ms = 33
         self._studies: list[StudyMetadata] = []
         self._current_instance: InstanceMetadata | None = None
         self._loaded_source_path: Path | None = None
@@ -154,7 +155,6 @@ class AppController(QObject):
         self._batch_target_frame: int = 0
         self._prefetch_request_id: int = 0
         self._prefetch_load_id: int = 0
-        self._last_frame_shown_at: float = 0.0
         self._scroll_load_id: int = 0
         self._scroll_neighbor_load_id: int = 0
         self._scroll_active: bool = False
@@ -191,7 +191,7 @@ class AppController(QObject):
         self._first_preview_emitted = False
         self._study_metrics_auto_filled = False
         logger.info("scan_start root=%s", root)
-        self.status_message.emit(f"Scanning {root}…")
+        self.status_message.emit(tr("status.scanning_folder", path=str(root)))
         worker = ScanWorker(root, error_log_path=error_log_path, parent=self)
         worker.signals.finished.connect(self._on_studies_scanned)
         worker.signals.failed.connect(self._on_scan_failed)
@@ -208,7 +208,7 @@ class AppController(QObject):
         self._studies = studies
         count = len(self._studies)
         logger.info("pre_scanned_load studies=%d", count)
-        self.status_message.emit(f"Loaded {count} studies")
+        self.status_message.emit(tr("status.studies_loaded", count=str(count)))
         self.studies_loaded.emit(self._studies)
 
     def _on_studies_scanned(self, studies: object) -> None:
@@ -226,7 +226,7 @@ class AppController(QObject):
         else:
             logger.info("scan_done studies=%d duration_ms=%.2f", count, elapsed_ms)
         self._scan_started_at = None
-        self.status_message.emit(f"Loaded {count} studies")
+        self.status_message.emit(tr("status.studies_loaded", count=str(count)))
         self.studies_loaded.emit(self._studies)
 
     def _on_scan_failed(self, message: str) -> None:
@@ -240,7 +240,7 @@ class AppController(QObject):
         else:
             logger.warning("scan_failed duration_ms=%.2f reason=%s", elapsed_ms, message)
         self._scan_started_at = None
-        self.status_message.emit(f"Scan failed: {message}")
+        self.status_message.emit(tr("status.scan_failed", message=message))
         self.scan_failed.emit(message)
 
     def load_instance(self, instance: InstanceMetadata, frame_index: int = 0) -> None:
@@ -261,7 +261,7 @@ class AppController(QObject):
                     instance.patient_weight_kg,
                 )
                 self._study_metrics_auto_filled = True
-        self.status_message.emit(f"Loading {instance.path.name}…")
+        self.status_message.emit(tr("status.loading", name=instance.path.name))
         total_frames = instance.number_of_frames
         frame_time_ms = instance.frame_time_ms or 33.3
         if total_frames <= 0 and instance.media_format == "mp4" and instance.path is not None:
@@ -320,7 +320,9 @@ class AppController(QObject):
         self._recompute_measurements()
         if instance.media_format == "dicom":
             request_id = self._decode_request_id
-            self.status_message.emit(f"Decoding {instance.path.name}… ({total_frames} frames)")
+            self.status_message.emit(
+                tr("status.decoding", name=instance.path.name, total=str(total_frames))
+            )
             self._frame_cache.set_total_frames(instance.path, total_frames)
             worker = DicomDecodeWorker(instance.path, request_id, parent=self, first_frame_only=True)
             worker.signals.first_frame_ready.connect(self._on_first_frame_ready)
@@ -331,7 +333,9 @@ class AppController(QObject):
             return
         if instance.media_format == "mp4":
             request_id = self._decode_request_id
-            self.status_message.emit(f"Decoding video {instance.path.name}… ({total_frames} frames)")
+            self.status_message.emit(
+                tr("status.decoding_video", name=instance.path.name, total=str(total_frames))
+            )
             self._frame_cache.set_total_frames(instance.path, total_frames)
             worker = VideoDecodeWorker(instance.path, request_id, parent=self, first_frame_only=True)
             worker.signals.first_frame_ready.connect(self._on_first_frame_ready)
@@ -515,13 +519,8 @@ class AppController(QObject):
                         target = min(leading + 1, max(0, state.total_frames - 1))
                         if target > 0:
                             self._state_manager.set_frame(target)
-        else:
-            self._invalidate_prefetch()
-            self._playback_warmup_pending = False
-        self._state_manager.set_playing(is_playing)
-        if is_playing:
+            warmup_needed = False
             current = self._state_manager.snapshot.current_frame_index
-            self._prefetch_playback_buffer(current)
             cfg = self._playback_config
             if (
                 self._current_instance is not None
@@ -529,11 +528,20 @@ class AppController(QObject):
                 and self._frame_cache.is_ready(self._current_instance.path)
             ):
                 ahead = self._frame_cache.loaded_ahead(current)
-                if ahead < cfg.min_buffer:
-                    self._playback_warmup_pending = True
-                    return
+                warmup_needed = ahead < cfg.min_buffer
+            self._playback_warmup_pending = warmup_needed
+        else:
+            self._invalidate_prefetch()
+            self._playback_warmup_pending = False
+        self._state_manager.set_playing(is_playing)
+        if is_playing:
+            current = self._state_manager.snapshot.current_frame_index
+            self._prefetch_playback_buffer(current)
+            if self._playback_warmup_pending:
+                self._reschedule_playback_timer(poll=True)
+                return
             self._last_frame_shown_at = perf_counter()
-            self._timer.start()
+            self._reschedule_playback_timer()
 
     def toggle_playback(self) -> None:
         self.set_playing(not self._state_manager.snapshot.is_playing)
@@ -591,21 +599,19 @@ class AppController(QObject):
         chamber: str | None = None,
     ) -> None:
         if self._segment_in_progress:
-            self.status_message.emit("Segmentation already in progress")
+            self.status_message.emit(tr("status.segmentation_in_progress"))
             return
 
         state = self._state_manager.snapshot
         if state.is_playing:
-            self.status_message.emit("Pause playback before auto-segmentation")
+            self.status_message.emit(tr("status.pause_before_segmentation"))
             return
 
         phase = phase or self._auto_segment_phase
         view = view or self._auto_segment_view
         chamber = chamber or self._auto_segment_chamber
         if phase is None or phase not in {"ED", "ES"}:
-            self.status_message.emit(
-                "Auto-segmentation: select A4C/A2C ED or ES in worksheet first"
-            )
+            self.status_message.emit(tr("status.auto_segmentation_select_phase"))
             return
 
         if (view or "").upper() != "A4C":
@@ -616,7 +622,7 @@ class AppController(QObject):
             self._current_frame_pixels is None
             or self._loaded_frame_index != state.current_frame_index
         ):
-            self.status_message.emit("Current frame is not loaded yet")
+            self.status_message.emit(tr("status.frame_not_loaded"))
             return
 
         if not self._segmenter.is_available():
@@ -787,7 +793,9 @@ class AppController(QObject):
             raise TypeError("Expected numeric time_per_pixel_ms")
         study_uid = self._resolve_study_uid()
         self._measurement_session.set_mmode_time_per_pixel_ms(study_uid, float(time_per_pixel_ms))
-        self.status_message.emit(f"M-mode: {float(time_per_pixel_ms):.3f} ms/px")
+        self.status_message.emit(
+            tr("status.mmode_time", time=f"{float(time_per_pixel_ms):.3f}")
+        )
 
     def on_mmode_calibration_changed(self, calibration: object) -> None:
         from echo_personal_tool.domain.models.frame_panels import MmodeCalibrationState
@@ -943,17 +951,32 @@ class AppController(QObject):
         self._recompute_measurements()
         self.status_message.emit(tr("status.measurements_reset"))
 
+    def _playback_interval_ms(self, state: ViewerState | None = None) -> int:
+        snapshot = state if state is not None else self._state_manager.snapshot
+        return max(
+            1,
+            int(round((snapshot.frame_time_ms or 33.3) / self._playback_speed_multiplier)),
+        )
+
+    def _reschedule_playback_timer(self, *, poll: bool = False) -> None:
+        delay_ms = (
+            self._playback_poll_interval_ms
+            if poll or self._playback_warmup_pending
+            else self._playback_interval_ms()
+        )
+        if not poll and not self._playback_warmup_pending and self._last_frame_shown_at > 0:
+            elapsed_ms = (perf_counter() - self._last_frame_shown_at) * 1000.0
+            delay_ms = max(1, int(delay_ms - elapsed_ms))
+        self._timer.setInterval(delay_ms)
+        if not self._timer.isActive():
+            self._timer.start()
+
     def _on_state_changed(self, state: object) -> None:
         if not isinstance(state, ViewerState):
             return
-        interval = max(
-            1,
-            int(round((state.frame_time_ms or 33.3) / self._playback_speed_multiplier)),
-        )
-        self._timer.setInterval(interval)
-        if state.is_playing and not self._pending_decode_id:
-            if not self._timer.isActive():
-                self._timer.start()
+        self._timer.setInterval(self._playback_interval_ms(state))
+        if state.is_playing and not self._pending_decode_id and not self._playback_warmup_pending:
+            self._reschedule_playback_timer()
         elif self._timer.isActive():
             self._timer.stop()
         self._request_frame_if_needed(state)
@@ -1373,7 +1396,7 @@ class AppController(QObject):
         if request_id != self._prefetch_load_id:
             return
         self._prefetch_load_id = 0
-        self.status_message.emit(f"Prefetch failed: {message}")
+        self.status_message.emit(tr("status.prefetch_failed", message=message))
 
     def _advance_playback(self) -> None:
         state = self._state_manager.snapshot
@@ -1393,9 +1416,16 @@ class AppController(QObject):
                 if ahead >= cfg.min_buffer:
                     self._playback_warmup_pending = False
                     self._last_frame_shown_at = perf_counter()
-                    self._timer.start()
-                return
+                    self._reschedule_playback_timer()
+                    return
+            self._reschedule_playback_timer(poll=True)
             return
+        if self._last_frame_shown_at > 0:
+            interval_ms = self._playback_interval_ms(state)
+            elapsed_ms = (perf_counter() - self._last_frame_shown_at) * 1000.0
+            if elapsed_ms < interval_ms - 1:
+                self._timer.setInterval(max(1, int(interval_ms - elapsed_ms)))
+                return
         if (
             self._current_instance is not None
             and self._current_instance.media_format in ("dicom", "mp4")
@@ -1411,6 +1441,7 @@ class AppController(QObject):
                 self.step_frame(1)
                 self._last_frame_shown_at = perf_counter()
                 self._prefetch_playback_buffer(next_idx)
+                self._reschedule_playback_timer()
                 return
 
             cfg = self._playback_config
@@ -1423,14 +1454,19 @@ class AppController(QObject):
                     self._emit_cached_frame(skip_to)
                     self._last_frame_shown_at = perf_counter()
                     self._prefetch_playback_buffer(skip_to)
+                    self._reschedule_playback_timer()
                     return
 
             self._prefetch_playback_buffer(current)
+            self._reschedule_playback_timer(poll=True)
             return
 
         if self._pending_load_id != 0:
+            self._reschedule_playback_timer(poll=True)
             return
         self.step_frame(1)
+        self._last_frame_shown_at = perf_counter()
+        self._reschedule_playback_timer()
 
     def _load_playback_frame(self, frame_index: int) -> None:
         self._prefetch_playback_buffer(frame_index - 1)
@@ -1544,7 +1580,7 @@ class AppController(QObject):
         if request_id == self._scroll_neighbor_load_id:
             self._scroll_neighbor_load_id = 0
         self._current_frame_pixels = None
-        self.status_message.emit(f"Load failed: {message}")
+        self.status_message.emit(tr("status.load_failed", message=message))
         self.frame_load_failed.emit(message)
 
     def _on_first_frame_ready(self, request_id: int, path: Path, first_frame: object) -> None:
@@ -1567,7 +1603,7 @@ class AppController(QObject):
             self._pending_emit_after_decode = False
             self._state_manager.emit_state()
         self.frame_loaded.emit(first_frame)
-        self.status_message.emit("First frame ready")
+        self.status_message.emit(tr("status.first_frame_ready"))
         self.decode_finished.emit()
 
     def _on_dicom_decoded(self, request_id: int, path: Path, frames: object) -> None:
@@ -1597,7 +1633,9 @@ class AppController(QObject):
         get_thread_dicom_session().release()
         if self._frame_cache.memory_bytes() > _FRAME_CACHE_WARN_BYTES:
             size_mb = self._frame_cache.memory_bytes() / (1024 * 1024)
-            self.status_message.emit(f"Warning: DICOM cache uses {size_mb:.1f} MB")
+            self.status_message.emit(
+                tr("status.dicom_cache_warning", size_mb=f"{size_mb:.1f}")
+            )
 
         frame_count = self._frame_cache.frame_count()
         if frame_count != self._state_manager.snapshot.total_frames:
@@ -1610,7 +1648,7 @@ class AppController(QObject):
         self._state_manager.set_decode_in_progress(False)
         self._emit_cached_frame(current_index)
         self.decode_finished.emit()
-        self.status_message.emit("Ready")
+        self.status_message.emit(tr("system_bar.ready"))
 
     def _on_dicom_decode_failed(self, request_id: int, message: str) -> None:
         if request_id != self._pending_decode_id:
@@ -1624,7 +1662,7 @@ class AppController(QObject):
         if self._pending_emit_after_decode:
             self._pending_emit_after_decode = False
             self._state_manager.emit_state()
-        self.status_message.emit(f"Load failed: {message}")
+        self.status_message.emit(tr("status.load_failed", message=message))
         self.frame_load_failed.emit(message)
 
     def _emit_cached_frame(self, frame_index: int) -> bool:

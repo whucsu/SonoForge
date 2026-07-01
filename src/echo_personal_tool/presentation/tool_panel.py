@@ -225,6 +225,8 @@ class ToolPanel(QWidget):
     def reload_text(self) -> None:
         from echo_personal_tool.infrastructure.i18n import tr
         self.measure.reload_text()
+        self._tabs.setTabText(0, tr("tool_panel.measures"))
+        self._tabs.setTabText(1, tr("tool_panel.controls"))
 
     def set_dicom_inspector_visible(self, visible: bool) -> None:
         pass

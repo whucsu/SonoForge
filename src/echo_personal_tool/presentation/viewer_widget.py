@@ -548,6 +548,7 @@ class ViewerWidget(QWidget):
         self._image_item = pg.ImageItem(axisOrder="row-major")
         self._image_item.setAutoDownsample(False)
         self._image_item.setOpts(smooth=True)
+        self._image_smooth = True
         self._view.addItem(self._image_item)
         self._doppler = DopplerOverlayTools(self._view, self)
         self._doppler.markers_changed.connect(self.doppler_markers_changed.emit)
@@ -1024,11 +1025,28 @@ class ViewerWidget(QWidget):
 
     def reload_text(self) -> None:
         from echo_personal_tool.infrastructure.i18n import tr
-        self._play_button.setText(tr("system_bar.reset"))
-        self._step_back_button.setToolTip(tr("viewer.caliper.click_start"))
-        self._step_forward_button.setToolTip(tr("viewer.caliper.click_end"))
-        self._timeline_slider.setToolTip(tr("tool_panel.controls"))
-        self._source_label.setText(tr("system_bar.no_study_loaded"))
+
+        self._step_back_button.setToolTip(tr("viewer.step_back"))
+        self._step_forward_button.setToolTip(tr("viewer.step_forward"))
+        self._timeline_slider.setToolTip(tr("viewer.timeline"))
+        if self._current_state is not None:
+            self._play_button.setText(
+                tr("viewer.pause") if self._current_state.is_playing else tr("viewer.play")
+            )
+            if self._current_state.total_frames > 0:
+                current = min(
+                    self._current_state.current_frame_index + 1,
+                    self._current_state.total_frames,
+                )
+                self._source_label.setText(
+                    tr(
+                        "viewer.frame_counter",
+                        current=str(current),
+                        total=str(self._current_state.total_frames),
+                    )
+                )
+            else:
+                self._source_label.setText(tr("viewer.frame_none"))
 
     def _rebuild_contour_pens(self, preferences: UserPreferences) -> None:
         manual_width = preferences.contour_pen_manual_width
@@ -1463,15 +1481,23 @@ class ViewerWidget(QWidget):
             self._timeline_slider.setEnabled(controls_enabled)
             self._play_button.setEnabled(controls_enabled and not viewer_state.decode_in_progress)
             self._timeline_slider.setValue(min(viewer_state.current_frame_index, maximum))
-            self._play_button.setText("Pause" if viewer_state.is_playing else "Play")
+            self._play_button.setText(
+                tr("viewer.pause") if viewer_state.is_playing else tr("viewer.play")
+            )
             self._fps_label.setText(
                 f"FPS: {viewer_state.fps:.1f}" if viewer_state.fps > 0 else "FPS: —"
             )
             if viewer_state.total_frames > 0:
                 current = min(viewer_state.current_frame_index + 1, viewer_state.total_frames)
-                self._source_label.setText(f"Frame: {current}/{viewer_state.total_frames}")
+                self._source_label.setText(
+                    tr(
+                        "viewer.frame_counter",
+                        current=str(current),
+                        total=str(viewer_state.total_frames),
+                    )
+                )
             else:
-                self._source_label.setText("Frame: —")
+                self._source_label.setText(tr("viewer.frame_none"))
             self._update_timeline_indicator(viewer_state)
             contours_updated = tuple(self._stored_contours) != viewer_state.contours
             if contours_updated:
@@ -1483,6 +1509,7 @@ class ViewerWidget(QWidget):
             if frame_changed or contours_updated:
                 self._refresh_frame_overlays()
             self._refresh_speckle_overlay_for_current_frame()
+            self._set_image_smooth(not viewer_state.is_playing)
             if not viewer_state.is_playing:
                 self._refresh_frame_panel_layout()
                 self._refresh_panel_frame_graphics()
@@ -1493,6 +1520,12 @@ class ViewerWidget(QWidget):
             self._pending_viewer_state = None
             if pending is not None:
                 self.set_state(pending)
+
+    def _set_image_smooth(self, enabled: bool) -> None:
+        if self._image_smooth == enabled:
+            return
+        self._image_smooth = enabled
+        self._image_item.setOpts(smooth=enabled)
 
     def toggle_linear_caliper(self) -> None:
         if self._linear_caliper_active:
@@ -4303,22 +4336,11 @@ class ViewerWidget(QWidget):
         for item in self._persistent_linear_graphics:
             if len(item) >= 4 and item[3] == caliper_key:
                 self._caliper_drag_persistent_items = item
+                line_item, start_node, end_node, _ = item
+                line_item.setPen(self._caliper_pen("#ffb300"))
+                start_node.setPen(self._caliper_pen("#ffb300"))
+                end_node.setPen(self._caliper_pen("#ffb300"))
                 break
-        self._ensure_linear_caliper_graphics()
-        assert self._linear_caliper_line_item is not None
-        assert self._linear_caliper_marker_item is not None
-        self._linear_caliper_line_item.setPen(self._caliper_pen("#ffb300"))
-        self._linear_caliper_marker_item.setPen(self._caliper_pen("#ffb300"))
-        self._linear_caliper_line_item.setData(
-            [measurement.start[0], measurement.end[0]],
-            [measurement.start[1], measurement.end[1]],
-        )
-        self._linear_caliper_marker_item.setData(
-            [measurement.start[0], measurement.end[0]],
-            [measurement.start[1], measurement.end[1]],
-        )
-        self._linear_caliper_line_item.show()
-        self._linear_caliper_marker_item.show()
 
     def _apply_caliper_node_drag(self, x: float, y: float) -> None:
         if not self._caliper_drag_active or self._caliper_drag_key is None:
@@ -4327,8 +4349,10 @@ class ViewerWidget(QWidget):
         if measurement is None:
             return
         if self._caliper_drag_node == 0:
-            new_start = (x, y)
             new_end = measurement.end
+            new_start = self._constrain_linear_endpoint(
+                new_end, (x, y), label=measurement.label,
+            )
         else:
             new_start = measurement.start
             new_end = self._constrain_linear_endpoint(
@@ -4338,16 +4362,6 @@ class ViewerWidget(QWidget):
             new_start, new_end, measurement.label,
         )
         self._stored_linear_measurements[self._caliper_drag_key] = updated
-        assert self._linear_caliper_line_item is not None
-        assert self._linear_caliper_marker_item is not None
-        self._linear_caliper_line_item.setData(
-            [new_start[0], new_end[0]],
-            [new_start[1], new_end[1]],
-        )
-        self._linear_caliper_marker_item.setData(
-            [new_start[0], new_end[0]],
-            [new_start[1], new_end[1]],
-        )
         if self._caliper_drag_persistent_items is not None:
             line_item, start_node, end_node, _ = self._caliper_drag_persistent_items
             line_item.setData(

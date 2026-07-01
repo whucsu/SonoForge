@@ -304,7 +304,7 @@ class SystemBar(QWidget):
         from echo_personal_tool.infrastructure.i18n import tr
         if is_maximized:
             self._btn_maximize.setIcon(_load_icon("restore"))
-            self._btn_maximize.setToolTip(tr("restore"))
+            self._btn_maximize.setToolTip(tr("system_bar.restore"))
         else:
             self._btn_maximize.setIcon(_load_icon("maximize"))
             self._btn_maximize.setToolTip(tr("maximize"))
