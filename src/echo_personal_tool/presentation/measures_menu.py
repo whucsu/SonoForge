@@ -23,7 +23,7 @@ _ACCORDION_ANIM_MS = 180
 
 @dataclass(frozen=True)
 class _MenuButton:
-    label: str
+    label_key: str
     action: MeasurementAction | None = None
     view: str = "A4C"
     phase: str = "ED"
@@ -33,9 +33,14 @@ class _MenuButton:
     doppler_trace: str = ""
     enabled: bool = True
 
+    @property
+    def label(self) -> str:
+        from echo_personal_tool.infrastructure.i18n import tr
+        return tr(self.label_key)
+
 
 def _btn(
-    label: str,
+    label_key: str,
     action: MeasurementAction | None = None,
     *,
     view: str = "A4C",
@@ -47,7 +52,7 @@ def _btn(
     enabled: bool = True,
 ) -> _MenuButton:
     return _MenuButton(
-        label=label,
+        label_key=label_key,
         action=action,
         view=view,
         phase=phase,
@@ -61,104 +66,104 @@ def _btn(
 
 _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
     (
-        tr("menu.general"),
+        "menu.general",
         (
-            _btn(tr("menu.caliper"), MeasurementAction.CALIPER),
-            _btn(tr("menu.spline_area"), MeasurementAction.SPLINE_AREA),
-            _btn(tr("menu.spline_volume"), MeasurementAction.SPLINE_VOLUME),
+            _btn("menu.caliper", MeasurementAction.CALIPER),
+            _btn("menu.spline_area", MeasurementAction.SPLINE_AREA),
+            _btn("menu.spline_volume", MeasurementAction.SPLINE_VOLUME),
         ),
     ),
     (
-        tr("menu.lv_diastole_group"),
+        "menu.lv_diastole_group",
         (
-            _btn(tr("menu.lv2d_all_diastole"), MeasurementAction.LV2D_ALL_DIASTOLE),
-            _btn(tr("menu.lv2d_es"), MeasurementAction.LV2D_ES),
-            _btn(tr("menu.simpson_ed_kdo"), MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ED"),
-            _btn(tr("menu.simpson_es_kso"), MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ES"),
-            _btn(tr("menu.simpson_biplane_kdo"), MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ED"),
-            _btn(tr("menu.simpson_biplane_kso"), MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ES"),
+            _btn("menu.lv2d_all_diastole", MeasurementAction.LV2D_ALL_DIASTOLE),
+            _btn("menu.lv2d_es", MeasurementAction.LV2D_ES),
+            _btn("menu.simpson_ed_kdo", MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ED"),
+            _btn("menu.simpson_es_kso", MeasurementAction.MANUAL_SIMPSON, view="A4C", phase="ES"),
+            _btn("menu.simpson_biplane_kdo", MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ED"),
+            _btn("menu.simpson_biplane_kso", MeasurementAction.MANUAL_SIMPSON, view="A2C", phase="ES"),
         ),
     ),
     (
-        tr("menu.lv_auto"),
+        "menu.lv_auto",
         (
-            _btn(tr("menu.simpson_ed_kdo"), MeasurementAction.MBS_SIMPSON, view="A4C", phase="ED"),
-            _btn(tr("menu.simpson_es_kso"), MeasurementAction.MBS_SIMPSON, view="A4C", phase="ES"),
+            _btn("menu.simpson_ed_kdo", MeasurementAction.MBS_SIMPSON, view="A4C", phase="ED"),
+            _btn("menu.simpson_es_kso", MeasurementAction.MBS_SIMPSON, view="A4C", phase="ES"),
         ),
     ),
     (
-        tr("menu.aorta"),
+        "menu.aorta",
         (
-            _btn(tr("menu.av"), caliper_label="AV"),
-            _btn(tr("menu.annulus"), caliper_label="Annulus"),
-            _btn(tr("menu.ao_sinus"), caliper_label="Ao Sinus"),
-            _btn(tr("menu.ao_junction"), caliper_label="Ao Junction"),
-            _btn(tr("menu.prox_ao"), caliper_label="Prox Ao"),
+            _btn("menu.av", caliper_label="AV"),
+            _btn("menu.annulus", caliper_label="Annulus"),
+            _btn("menu.ao_sinus", caliper_label="Ao Sinus"),
+            _btn("menu.ao_junction", caliper_label="Ao Junction"),
+            _btn("menu.prox_ao", caliper_label="Prox Ao"),
         ),
     ),
     (
-        tr("menu.la_group"),
+        "menu.la_group",
         (
-            _btn(tr("menu.la_lavir"), MeasurementAction.LA_DIAMETER),
-            _btn(tr("menu.lav_4c"), MeasurementAction.LAV_4C),
-            _btn(tr("menu.lav_bi"), MeasurementAction.LAV_BI),
+            _btn("menu.la_lavir", MeasurementAction.LA_DIAMETER),
+            _btn("menu.lav_4c", MeasurementAction.LAV_4C),
+            _btn("menu.lav_bi", MeasurementAction.LAV_BI),
         ),
     ),
     (
-        tr("menu.ra_group"),
+        "menu.ra_group",
         (
-            _btn(tr("menu.ra_diameter"), MeasurementAction.RA_DIAMETER),
-            _btn(tr("menu.rav_volume"), MeasurementAction.RAV_VOLUME),
+            _btn("menu.ra_diameter", MeasurementAction.RA_DIAMETER),
+            _btn("menu.rav_volume", MeasurementAction.RAV_VOLUME),
         ),
     ),
     (
-        tr("menu.rv_group"),
+        "menu.rv_group",
         (
-            _btn("RVOT", caliper_label="RVOT"),
-            _btn(tr("menu.rv_basal"), MeasurementAction.RV_BASAL),
-            _btn(tr("menu.rv_mid"), caliper_label="RV mid"),
-            _btn("TAPSE", MeasurementAction.RV_TAPSE),
-            _btn(tr("menu.s_prime_rv"), MeasurementAction.RV_S_PRIME),
-            _btn(tr("menu.rv_fac"), MeasurementAction.RV_FAC, view="A4C"),
+            _btn("menu.rv_rvot", caliper_label="RVOT"),
+            _btn("menu.rv_basal", MeasurementAction.RV_BASAL),
+            _btn("menu.rv_mid", caliper_label="RV mid"),
+            _btn("menu.rv_tapse", MeasurementAction.RV_TAPSE),
+            _btn("menu.s_prime_rv", MeasurementAction.RV_S_PRIME),
+            _btn("menu.rv_fac", MeasurementAction.RV_FAC, view="A4C"),
         ),
     ),
     (
-        tr("menu.diastolic_group"),
+        "menu.diastolic_group",
         (
-            _btn(tr("menu.mitral_inflow"), MeasurementAction.DOPPLER_MITRAL_INFLOW),
-            _btn(tr("menu.peak_e"), doppler_peak="E"),
-            _btn(tr("menu.peak_a"), doppler_peak="A"),
-            _btn("DT", doppler_interval="DT"),
-            _btn(tr("menu.e_sept"), doppler_peak="e_sept"),
-            _btn(tr("menu.e_lat"), doppler_peak="e_lat"),
-            _btn("IVRT", doppler_interval="IVRT"),
+            _btn("menu.mitral_inflow", MeasurementAction.DOPPLER_MITRAL_INFLOW),
+            _btn("menu.peak_e", doppler_peak="E"),
+            _btn("menu.peak_a", doppler_peak="A"),
+            _btn("menu.dt", doppler_interval="DT"),
+            _btn("menu.e_sept", doppler_peak="e_sept"),
+            _btn("menu.e_lat", doppler_peak="e_lat"),
+            _btn("menu.ivrt", doppler_interval="IVRT"),
         ),
     ),
     (
-        tr("menu.mv_group"),
+        "menu.mv_group",
         (
-            _btn("Trace MV", doppler_trace="VTI MV"),
-            _btn("Trace MR", doppler_trace="VTI MR"),
-            _btn("Vpeak MV", doppler_peak="Vmax"),
-            _btn("Trace AV", MeasurementAction.DOPPLER_TRACE),
-            _btn("Trace AR", doppler_trace="VTI AR"),
-            _btn("Vpeak AV", doppler_peak="Vmax"),
-            _btn("LVOTd", caliper_label="LVOTd"),
-            _btn("MVd", caliper_label="MVd"),
+            _btn("menu.trace_mv", doppler_trace="VTI MV"),
+            _btn("menu.trace_mr", doppler_trace="VTI MR"),
+            _btn("menu.vpeak_mv", doppler_peak="Vmax"),
+            _btn("menu.trace_av", MeasurementAction.DOPPLER_TRACE),
+            _btn("menu.trace_ar", doppler_trace="VTI AR"),
+            _btn("menu.vpeak_av", doppler_peak="Vmax"),
+            _btn("menu.lvotd", caliper_label="LVOTd"),
+            _btn("menu.mvd", caliper_label="MVd"),
         ),
     ),
     (
-        tr("menu.tv_group"),
+        "menu.tv_group",
         (
-            _btn("TRpeak", doppler_peak="TR Vmax"),
-            _btn("Trace TR", doppler_trace="VTI TR"),
-            _btn("Trace PR", doppler_trace="VTI PR"),
+            _btn("menu.trpeak", doppler_peak="TR Vmax"),
+            _btn("menu.trace_tr", doppler_trace="VTI TR"),
+            _btn("menu.trace_pr", doppler_trace="VTI PR"),
         ),
     ),
     (
-        tr("menu.strain_group"),
+        "menu.strain_group",
         (
-            _btn(tr("menu.speckle_tracking"), MeasurementAction.SPECKLE_TRACKING, view="A4C"),
+            _btn("menu.speckle_tracking", MeasurementAction.SPECKLE_TRACKING, view="A4C"),
         ),
     ),
 )
@@ -176,7 +181,7 @@ class MeasuresAccordionSection(QWidget):
 
     def __init__(
         self,
-        title: str,
+        title_key: str,
         buttons: tuple[_MenuButton, ...],
         emit_handler: Callable[[_MenuButton], Callable[[], None]],
         *,
@@ -187,8 +192,10 @@ class MeasuresAccordionSection(QWidget):
         self.setObjectName("measuresSection")
         self._expanded = False
         self._content_height = 0
+        self._title_key = title_key
 
-        self._header = QPushButton(title)
+        from echo_personal_tool.infrastructure.i18n import tr
+        self._header = QPushButton(tr(title_key))
         self._header.setObjectName("measuresSectionTitle")
         self._header.setFlat(True)
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -196,6 +203,7 @@ class MeasuresAccordionSection(QWidget):
 
         self._body = QWidget()
         self._body.setObjectName("measuresSectionBody")
+        self._button_specs = list(buttons)
         body_layout = QVBoxLayout(self._body)
         body_layout.setContentsMargins(8, 0, 4, 4)
         body_layout.setSpacing(4)
@@ -254,6 +262,14 @@ class MeasuresAccordionSection(QWidget):
 
     def contains_button(self, button: QPushButton) -> bool:
         return button in self._body.findChildren(QPushButton)
+
+    def reload_text(self) -> None:
+        from echo_personal_tool.infrastructure.i18n import tr
+        self._header.setText(tr(self._title_key))
+        buttons = self._body.findChildren(QPushButton)
+        for i, button in enumerate(buttons):
+            if i < len(self._button_specs):
+                button.setText(self._button_specs[i].label)
 
     def _on_header_clicked(self) -> None:
         self.clicked.emit(self)
@@ -321,8 +337,8 @@ class MeasuresMenuWidget(QWidget):
             button.setEnabled(time_ok)
 
     def reload_text(self) -> None:
-        for button, spec in self._tool_buttons:
-            button.setText(tr(spec.label))
+        for section in self._sections:
+            section.reload_text()
 
     def highlight_action(
         self,

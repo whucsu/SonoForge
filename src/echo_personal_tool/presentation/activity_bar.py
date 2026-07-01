@@ -100,11 +100,11 @@ class ActivityBar(QWidget):
 
     def reload_text(self) -> None:
         from echo_personal_tool.infrastructure.i18n import tr
-        tab_names = {"measures": tr("measures"), "controls": tr("controls")}
+        tab_names = {"measures": tr("tool_panel.measures"), "controls": tr("tool_panel.controls")}
         for name, btn in self._buttons.items():
             btn.setToolTip(tab_names.get(name, name.capitalize()))
         action_names = {
-            "caliper": tr("tools.caliper"),
+            "caliper": tr("tool_panel.linear_caliper"),
             "lv2d": tr("tools.lv2d_all_diastole"),
             "esv": tr("tools.lv2d_es"),
             "simpson_manual_ed": tr("tools.ed_auto"),
