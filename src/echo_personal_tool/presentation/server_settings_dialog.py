@@ -88,6 +88,14 @@ class ServerSettingsForm(QWidget):
         self._stow_url_edit.setPlaceholderText(tr("server_settings.stow_url"))
         form.addRow(tr("server_settings.stow_url"), self._stow_url_edit)
 
+        # Profiles button
+        profiles_row = QHBoxLayout()
+        self._profiles_btn = QPushButton(tr("server_settings.profiles_button"))
+        self._profiles_btn.clicked.connect(self._on_profiles)
+        profiles_row.addWidget(self._profiles_btn)
+        profiles_row.addStretch()
+        form.addRow(tr("server_settings.profiles_label"), profiles_row)
+
         self.set_settings(load_server_settings())
 
     def _sync_auth_fields(self) -> None:
@@ -102,6 +110,13 @@ class ServerSettingsForm(QWidget):
         self._dimse_host_edit.setEnabled(enabled)
         self._dimse_port_edit.setEnabled(enabled)
         self._dimse_echo_btn.setEnabled(enabled)
+
+    def _on_profiles(self) -> None:
+        from echo_personal_tool.presentation.server_profile_dialog import ServerProfileDialog
+
+        dlg = ServerProfileDialog(self.settings(), self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.set_settings(dlg.selected_settings)
 
     def _on_dimse_echo(self) -> None:
         from echo_personal_tool.infrastructure.dimse_client import PynetdimseClient

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass, fields
+from typing import Any
 
 from PySide6.QtCore import QSettings
 
@@ -34,6 +36,67 @@ class ServerSettings:
     stow_dicom_web_url: str = ""
     # Query source preference
     query_source: str = "dicomweb"
+
+
+# ── Profile management ──────────────────────────────────────────────
+
+def _profile_store() -> QSettings:
+    return QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+
+
+def _settings_to_dict(s: ServerSettings) -> dict[str, Any]:
+    return {f.name: getattr(s, f.name) for f in fields(s)}
+
+
+def _dict_to_settings(d: dict[str, Any]) -> ServerSettings:
+    valid = {f.name for f in fields(ServerSettings)}
+    return ServerSettings(**{k: v for k, v in d.items() if k in valid})
+
+
+def list_profiles() -> dict[str, ServerSettings]:
+    """Return all saved profiles {name: ServerSettings}."""
+    store = _profile_store()
+    raw = str(store.value("profiles", "{}"))
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    return {name: _dict_to_settings(d) for name, d in data.items()}
+
+
+def save_profile(name: str, settings: ServerSettings) -> None:
+    """Save a named profile."""
+    store = _profile_store()
+    raw = str(store.value("profiles", "{}"))
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    data[name] = _settings_to_dict(settings)
+    store.setValue("profiles", json.dumps(data, ensure_ascii=False))
+    store.sync()
+
+
+def load_profile(name: str) -> ServerSettings | None:
+    """Load a named profile. Returns None if not found."""
+    profiles = list_profiles()
+    return profiles.get(name)
+
+
+def delete_profile(name: str) -> bool:
+    """Delete a named profile. Returns True if deleted."""
+    store = _profile_store()
+    raw = str(store.value("profiles", "{}"))
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    if name not in data:
+        return False
+    del data[name]
+    store.setValue("profiles", json.dumps(data, ensure_ascii=False))
+    store.sync()
+    return True
 
 
 def _settings_store() -> QSettings:
