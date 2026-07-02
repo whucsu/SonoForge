@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,8 @@ from echo_personal_tool.infrastructure.image_reader import ImageReader
 from echo_personal_tool.infrastructure.video_reader import get_thread_video_reader
 
 logger = logging.getLogger(__name__)
+
+_DECODE_WORKERS = 4
 
 
 class FrameLoaderSignals(QObject):
@@ -82,10 +85,19 @@ class FrameLoaderWorker(QRunnable):
                 pixels = reader.read_frame(i)
                 results.append((i, np.ascontiguousarray(pixels)))
         elif self._media_format == "dicom":
-            session = get_thread_dicom_session()
-            session.open(self._path)
-            for i in range(self._frame_index, end):
-                pixels = session.decode_single_frame(i)
-                results.append((i, np.ascontiguousarray(pixels)))
+            # Parallel decode: each thread opens its own session (thread-local),
+            # _raw_bytes is immutable so concurrent reads are safe.
+            indices = list(range(self._frame_index, end))
+
+            def _decode_frame(idx: int) -> tuple[int, np.ndarray]:
+                session = get_thread_dicom_session()
+                session.open(self._path)
+                return idx, np.ascontiguousarray(session.decode_single_frame(idx))
+
+            with ThreadPoolExecutor(max_workers=_DECODE_WORKERS) as pool:
+                futures = {pool.submit(_decode_frame, i): i for i in indices}
+                for future in as_completed(futures):
+                    idx, pixels = future.result()
+                    results.append((idx, pixels))
 
         self.signals.batch_finished.emit(results)

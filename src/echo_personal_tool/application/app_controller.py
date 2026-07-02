@@ -157,6 +157,9 @@ class AppController(QObject):
         self._batch_target_frame: int = 0
         self._prefetch_request_id: int = 0
         self._prefetch_load_id: int = 0
+        self._prefetch_batch_start: float = 0.0
+        self._prefetch_ema_latency_ms: float = 0.0
+        self._adaptive_batch_size: int = self._playback_config.batch_size
         self._scroll_load_id: int = 0
         self._scroll_neighbor_load_id: int = 0
         self._scroll_active: bool = False
@@ -1360,9 +1363,10 @@ class AppController(QObject):
         self._prefetch_request_id += 1
         request_id = self._prefetch_request_id
         self._prefetch_load_id = request_id
+        self._prefetch_batch_start = perf_counter()
 
         slots_remaining = cfg.prefetch_radius - ahead
-        batch = min(cfg.batch_size, slots_remaining, total)
+        batch = min(self._adaptive_batch_size, slots_remaining, total)
         if batch <= 0:
             self._prefetch_load_id = 0
             return
@@ -1388,6 +1392,19 @@ class AppController(QObject):
         self._prefetch_load_id = 0
         if self._current_instance is None or self._current_instance.path != path:
             return
+        # Adaptive batch sizing: EMA of batch latency
+        if self._prefetch_batch_start > 0:
+            elapsed_ms = (perf_counter() - self._prefetch_batch_start) * 1000.0
+            self._prefetch_batch_start = 0.0
+            alpha = 0.3
+            self._prefetch_ema_latency_ms = (
+                alpha * elapsed_ms + (1 - alpha) * self._prefetch_ema_latency_ms
+            )
+            cfg = self._playback_config
+            if self._prefetch_ema_latency_ms < 10 and self._adaptive_batch_size < 16:
+                self._adaptive_batch_size += 2
+            elif self._prefetch_ema_latency_ms > 60 and self._adaptive_batch_size > 2:
+                self._adaptive_batch_size -= 1
         for idx, pixels in frames:
             self._frame_cache.put(idx, pixels)
         if self._state_manager.snapshot.is_playing:
