@@ -1285,24 +1285,47 @@ class AppController(QObject):
             return
 
         cfg = self._playback_config
-        ahead = self._frame_cache.loaded_ahead(center)
-        if ahead >= cfg.scroll_batch_size:
-            return
-
         total = self._frame_cache.frame_count()
-        start = center + 1
-        while start < total and self._frame_cache.is_loaded(start):
-            start += 1
-        if start >= total:
-            return
 
-        target_ahead = (
-            cfg.scroll_batch_size
-            if ahead >= cfg.min_buffer
-            else min(cfg.min_buffer, cfg.scroll_batch_size)
-        )
-        slots_needed = target_ahead - ahead
-        batch_size = min(slots_needed, total - start)
+        # Detect scroll direction: compare with previous scroll frame
+        prev = getattr(self, "_prev_scroll_frame", center)
+        scroll_forward = center >= prev
+        self._prev_scroll_frame = center
+
+        if scroll_forward:
+            ahead = self._frame_cache.loaded_ahead(center)
+            if ahead >= cfg.scroll_batch_size:
+                return
+            start = center + 1
+            while start < total and self._frame_cache.is_loaded(start):
+                start += 1
+            if start >= total:
+                return
+            target_ahead = (
+                cfg.scroll_batch_size
+                if ahead >= cfg.min_buffer
+                else min(cfg.min_buffer, cfg.scroll_batch_size)
+            )
+            slots_needed = target_ahead - ahead
+            batch_size = min(slots_needed, total - start)
+        else:
+            behind = self._frame_cache.loaded_before(center)
+            if behind >= cfg.scroll_batch_size:
+                return
+            start = center - 1
+            while start >= 0 and self._frame_cache.is_loaded(start):
+                start -= 1
+            if start < 0:
+                return
+            target_behind = (
+                cfg.scroll_batch_size
+                if behind >= cfg.min_buffer
+                else min(cfg.min_buffer, cfg.scroll_batch_size)
+            )
+            slots_needed = target_behind - behind
+            batch_size = min(slots_needed, start + 1)
+            start = start - batch_size + 1
+
         if batch_size <= 0:
             return
 
@@ -1356,20 +1379,27 @@ class AppController(QObject):
         if total <= 0:
             return
 
-        start = (center + 1 + ahead) % total
-        if start == center:
-            return
+        # Small-loop optimization: if cine is <= 60 frames, prefetch all unloaded
+        if total <= 60:
+            unloaded = [i for i in range(total) if not self._frame_cache.is_loaded(i)]
+            if not unloaded:
+                return
+            batch = len(unloaded)
+            start = unloaded[0]
+        else:
+            start = (center + 1 + ahead) % total
+            if start == center:
+                return
+            slots_remaining = cfg.prefetch_radius - ahead
+            batch = min(self._adaptive_batch_size, slots_remaining, total)
+            if batch <= 0:
+                return
 
         self._prefetch_request_id += 1
         request_id = self._prefetch_request_id
         self._prefetch_load_id = request_id
         self._prefetch_batch_start = perf_counter()
 
-        slots_remaining = cfg.prefetch_radius - ahead
-        batch = min(self._adaptive_batch_size, slots_remaining, total)
-        if batch <= 0:
-            self._prefetch_load_id = 0
-            return
         worker = FrameLoaderWorker(
             self._current_instance.path,
             frame_index=start,
