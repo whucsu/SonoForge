@@ -50,6 +50,7 @@ class OrthancStudyDialog(QDialog):
         password: str | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self._client = client
         self._cache = cache
         self._server_settings = server_settings
@@ -108,7 +109,32 @@ class OrthancStudyDialog(QDialog):
         buttons_row.addWidget(self._load_btn)
         buttons_row.addWidget(self._cancel_btn)
 
+        # Custom title bar for frameless dialog
+        from PySide6.QtWidgets import QSizePolicy
+        self._drag_pos: QPoint | None = None
+        title_bar = QWidget()
+        title_bar.setFixedHeight(32)
+        title_bar.setStyleSheet("background: #1a2332;")
+        tb_layout = QHBoxLayout(title_bar)
+        tb_layout.setContentsMargins(8, 0, 4, 0)
+        tb_layout.setSpacing(0)
+        title_label = QLabel(tr("dialog.orthanc.title"))
+        title_label.setStyleSheet("color: #f1f5f9; font-weight: bold; border: none;")
+        tb_layout.addWidget(title_label)
+        tb_layout.addStretch(1)
+        btn_close = QPushButton("\u2715")
+        btn_close.setFixedSize(28, 24)
+        btn_close.setStyleSheet(
+            "QPushButton { color: #94a3b8; border: none; font-size: 14px; }"
+            "QPushButton:hover { color: #f1f5f9; background: #e74c3c; border-radius: 3px; }"
+        )
+        btn_close.clicked.connect(self.reject)
+        tb_layout.addWidget(btn_close)
+
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(title_bar)
         layout.addLayout(search_row)
         layout.addWidget(self._tree, stretch=1)
         layout.addWidget(self._status_label)
@@ -123,6 +149,20 @@ class OrthancStudyDialog(QDialog):
         log.info("[DLG] _check_ping done, loading studies")
         self._load_studies()
         log.info("[DLG] _load_studies done, tree items=%d", self._tree.topLevelItemCount())
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and event.position().y() < 32:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_pos is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_pos = None
+        super().mouseReleaseEvent(event)
 
     def result_data(self) -> tuple[str, str] | None:
         """Return (session_id, study_uid) after successful download, else None."""
