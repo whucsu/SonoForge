@@ -1,6 +1,6 @@
 # ROADMAP — ECHO Personal Tool
 
-**Обновлено:** 2026-06-23 (сессия: DICOMweb + RV FAC)  
+**Обновлено:** 2026-07-02 (сессия: DIMSE/STOW-RS + Benchmarks)  
 **Источник истины по коду:** этот файл + `CHANGELOG_SESSION.md` (последние записи).  
 **Детальные спеки:** `docs/superpowers/specs/`, планы — `docs/superpowers/plans/`.
 
@@ -127,6 +127,30 @@
 - [ ] Workplace: реальные JSON-фикстуры с Orthanc (см. spec footer)
 
 **Спека:** `docs/superpowers/specs/2026-06-23-dicomweb-orthanc-design.md` · **Замечания:** `DICOM_parsing.md`
+
+---
+
+## DIMSE / STOW-RS (план 2026-07-02)
+
+- [x] pynetdicom dep + DimseClient / DicomUploadClient ports
+- [x] PynetdimseClient: c_echo, c_find (study/series/instances), c_store
+- [x] FakeDimseClient для offline dev
+- [x] ServerSettings: dimse_enabled, ae_title, called_ae, host, port, stow_dicom_web_url, query_source
+- [x] UI: DIMSE section + Test C-ECHO кнопка
+- [x] UI: Query source selector (DICOMweb / DIMSE / Auto)
+- [x] STOW-RS: stow_instances() в OrthancDicomWebClient
+- [x] DicomUploadWorker: STOW-RS batch + DIMSE sequential C-STORE
+- [ ] UI: кнопка "Send to Server" в SystemBar / context menu (worker есть, UI не подключён)
+- [x] Unit + integration tests (ECHO_ORTHANC=1 / ECHO_ORTHANC_DIMSE=1)
+
+---
+
+## Performance Benchmarks (2026-07-02)
+
+- [x] test_pipeline_bench.py — full end-to-end scan→decode→cache
+- [x] test_decode_bench.py — DicomSession (uncompressed, JPEG, JPEG-2000, single-frame, fallback)
+- [x] test_network_bench.py — C-ECHO, C-FIND, C-STORE, STOW multipart, QueryService
+- [x] pytest-benchmark autosave + compare workflow (.benchmarks/ history)
 
 ---
 

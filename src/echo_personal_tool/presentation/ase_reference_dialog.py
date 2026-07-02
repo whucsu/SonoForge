@@ -101,6 +101,7 @@ class _DocTab(QPushButton):
             self.setStyleSheet(
                 f"QPushButton {{ background: {p['accent_tab']}; color: {p['text']}; "
                 f"border: none; padding: 4px 10px; border-radius: 3px; font-weight: bold; }}"
+                f"QPushButton:hover {{ background: {p['bg_button_hover']}; color: {p['text']}; }}"
             )
         else:
             self.setStyleSheet(
@@ -340,18 +341,30 @@ class AseReferenceDialog(QDialog):
         self._btn_minimize.setIcon(QIcon(_load_icon("minimize")))
         self._btn_minimize.setToolTip(tr("ase_refs.minimize"))
         self._btn_minimize.clicked.connect(self.showMinimized)
+        self._btn_minimize.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; padding: 0; }}"
+            f"QPushButton:hover {{ background: {p['bg_button']}; }}"
+        )
 
         self._btn_maximize = QPushButton()
         self._btn_maximize.setObjectName("maximizeButton")
         self._btn_maximize.setIcon(QIcon(_load_icon("maximize")))
         self._btn_maximize.setToolTip(tr("ase_refs.maximize"))
         self._btn_maximize.clicked.connect(self._toggle_maximize)
+        self._btn_maximize.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; padding: 0; }}"
+            f"QPushButton:hover {{ background: {p['bg_button']}; }}"
+        )
 
         btn_close = QPushButton()
         btn_close.setObjectName("closeButton")
         btn_close.setIcon(QIcon(_load_icon("close")))
         btn_close.setToolTip(tr("ase_refs.close"))
         btn_close.clicked.connect(self.reject)
+        btn_close.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; padding: 0; }}"
+            f"QPushButton:hover {{ background: #e81123; color: white; }}"
+        )
 
         wc_layout.addWidget(self._btn_minimize)
         wc_layout.addWidget(self._btn_maximize)

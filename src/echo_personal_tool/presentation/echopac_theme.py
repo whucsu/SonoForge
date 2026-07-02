@@ -492,12 +492,13 @@ QCheckBox::indicator:checked {{
 #activityBar QPushButton {{
     min-width: 92px;
     max-width: 92px;
-    min-height: 48px;
-    max-height: 48px;
+    min-height: 52px;
+    max-height: 52px;
     border: none;
     border-radius: 0;
     background: transparent;
     padding: 2px;
+    font-size: 13px;
 }}
 #activityBar QPushButton:hover {{
     background: {p["bg_button"]};

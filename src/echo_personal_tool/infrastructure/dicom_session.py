@@ -260,9 +260,15 @@ class DicomSession:
 
     def _compute_frame_slices(self) -> None:
         ds = self._metadata
-        rows, cols = int(ds.Rows), int(ds.Columns)
+        rows = getattr(ds, "Rows", None)
+        cols = getattr(ds, "Columns", None)
+        if rows is None or cols is None:
+            # Missing pixel geometry — cannot compute slices, fall back to pydicom decode
+            self._is_uncompressed = False
+            return
+        rows, cols = int(rows), int(cols)
         samples = int(getattr(ds, "SamplesPerPixel", 1))
-        bytes_per_pixel = (int(ds.BitsAllocated) // 8) * samples
+        bytes_per_pixel = (int(getattr(ds, "BitsAllocated", 8)) // 8) * samples
         frame_size = rows * cols * bytes_per_pixel
         self._frame_slices = [
             (i * frame_size, frame_size) for i in range(self._frame_count)

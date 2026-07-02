@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
+    QLabel,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -44,6 +45,36 @@ def _load_icon(name: str, size: int = 48) -> QIcon:
     return QIcon()
 
 
+class _TextButton(QPushButton):
+    """Two-line text button for the activity bar (large + small)."""
+
+    def __init__(self, big: str, small: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._big = big
+        self._small = small
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 4, 2, 4)
+        layout.setSpacing(0)
+        self._label = QLabel()
+        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._label.setStyleSheet("background: transparent; border: none;")
+        self._update_label()
+        layout.addWidget(self._label)
+
+    def _update_label(self) -> None:
+        self._label.setText(
+            f"<center>"
+            f"<span style='font-size:15px;font-weight:bold;'>{self._big}</span><br/>"
+            f"<span style='font-size:12px;'>{self._small}</span>"
+            f"</center>"
+        )
+
+    def set_labels(self, big: str, small: str) -> None:
+        self._big = big
+        self._small = small
+        self._update_label()
+
+
 class ActivityBar(QWidget):
     """Vertical icon bar with tool shortcuts."""
 
@@ -73,17 +104,22 @@ class ActivityBar(QWidget):
         layout.addSpacing(8)
 
         self._action_buttons: dict[str, QPushButton] = {}
-        for name, icon_file in [
-            ("caliper", "activity_caliper"),
-            ("lv2d", "activity_lv2d"),
-            ("esv", "activity_esv"),
-            ("simpson_manual_ed", "activity_simpd"),
-            ("simpson_manual_es", "activity_simps"),
-            ("auto_ed", "activity_auto_d"),
-            ("auto_es", "activity_auto_s"),
+        _labels = {
+            "caliper": ("\u2220", "caliper"),
+            "lv2d": ("ЛЖ", "2D"),
+            "esv": ("КСР", "2D"),
+            "simpson_manual_ed": ("\u041A\u0414\u041E", "auto"),
+            "simpson_manual_es": ("\u041A\u0421\u041E", "auto"),
+            "auto_ed": ("\u041A\u0414\u041E", "AI"),
+            "auto_es": ("\u041A\u0421\u041E", "AI"),
+        }
+        for name in [
+            "caliper", "lv2d", "esv",
+            "simpson_manual_ed", "simpson_manual_es",
+            "auto_ed", "auto_es",
         ]:
-            btn = QPushButton()
-            btn.setIcon(_load_icon(icon_file))
+            big, small = _labels.get(name, (name, ""))
+            btn = _TextButton(big, small)
             btn.clicked.connect(lambda _, n=name: self.action_requested.emit(n))
             layout.addWidget(btn)
             self._action_buttons[name] = btn
@@ -109,7 +145,7 @@ class ActivityBar(QWidget):
         tab_names = {"measures": tr("tool_panel.measures"), "controls": tr("tool_panel.controls")}
         for name, btn in self._buttons.items():
             btn.setToolTip(tab_names.get(name, name.capitalize()))
-        action_names = {
+        action_tooltips = {
             "caliper": tr("tool_panel.linear_caliper"),
             "lv2d": tr("tools.lv2d_all_diastole"),
             "esv": tr("tools.lv2d_es"),
@@ -118,5 +154,17 @@ class ActivityBar(QWidget):
             "auto_ed": tr("tools.ed_auto"),
             "auto_es": tr("tools.es_auto"),
         }
+        action_labels = {
+            "caliper": (tr("activity.caliper_big"), tr("activity.caliper_small")),
+            "lv2d": (tr("activity.lv2d_big"), tr("activity.lv2d_small")),
+            "esv": (tr("activity.esv_big"), tr("activity.esv_small")),
+            "simpson_manual_ed": (tr("activity.simpson_ed_big"), tr("activity.simpson_ed_small")),
+            "simpson_manual_es": (tr("activity.simpson_es_big"), tr("activity.simpson_es_small")),
+            "auto_ed": (tr("activity.auto_ed_big"), tr("activity.auto_ed_small")),
+            "auto_es": (tr("activity.auto_es_big"), tr("activity.auto_es_small")),
+        }
         for name, btn in self._action_buttons.items():
-            btn.setToolTip(action_names.get(name, name))
+            btn.setToolTip(action_tooltips.get(name, name))
+            if name in action_labels:
+                big, small = action_labels[name]
+                btn.set_labels(big, small)

@@ -327,10 +327,9 @@ class OrthancStudyDialog(QDialog):
             child = QTreeWidgetItem(["", "", self._series_label(series)])
             child.setData(0, _SERIES_UID_ROLE, series.series_uid)
             child.setFlags(child.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            child.setCheckState(0, Qt.CheckState.Checked)
+            child.setCheckState(0, Qt.CheckState.Unchecked)
             item.addChild(child)
         self._tree.blockSignals(False)
-        self._update_load_button()
 
     def _on_item_changed(self, item: QTreeWidgetItem, column: int) -> None:
         if column != 0 or not item.data(0, _SERIES_UID_ROLE):

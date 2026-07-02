@@ -60,6 +60,17 @@ filterwarnings = [
     "ignore::DeprecationWarning",
 ]
 
+[tool.pytest-benchmark]
+autosave = true
+min_rounds = 5
+calibration_precision = 100
+save = "bench"
+sort = "mean"
+compare = "mean"
+name = "ECHO2026"
+group_by = "group"
+timer = "time.perf_counter"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

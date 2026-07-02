@@ -220,8 +220,8 @@ def write_synthetic_jpeg_multiframe_dicom(
 
     jpeg_frames: list[bytes] = []
     for frame_index in range(frame_count):
-        frame = np.full((rows, cols), frame_index * 10 + 20, dtype=np.uint8)
-        frame[0, 0] = frame_index
+        frame = np.full((rows, cols), frame_index * 5 + 20, dtype=np.uint8)
+        frame[0, 0] = frame_index * 5 + 20
         ok, encoded = cv2.imencode(".jpg", frame)
         if not ok:
             raise RuntimeError(f"Failed to encode JPEG frame {frame_index}")
@@ -283,7 +283,7 @@ def write_synthetic_jpeg2000_multiframe_dicom(
 
     j2k_frames: list[bytes] = []
     for frame_index in range(frame_count):
-        frame = np.full((rows, cols), frame_index * 10 + 20, dtype=np.uint8)
+        frame = np.full((rows, cols), min(frame_index * 5 + 20, 255), dtype=np.uint8)
         encoded = openjpeg.encode(frame)
         j2k_frames.append(encoded)
 
