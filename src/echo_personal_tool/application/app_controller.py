@@ -1446,6 +1446,17 @@ class AppController(QObject):
                 self._reschedule_playback_timer()
                 return
 
+            # Double-next skip: if next frame is missing but next+1 is loaded, skip forward
+            next_next = (next_idx + 1) % total
+            if self._frame_cache.is_loaded(next_next):
+                self._frame_cache.set_current(next_next)
+                self._state_manager.set_frame(next_next)
+                self._emit_cached_frame(next_next)
+                self._last_frame_shown_at = perf_counter()
+                self._prefetch_playback_buffer(next_next)
+                self._reschedule_playback_timer()
+                return
+
             cfg = self._playback_config
             ahead = self._frame_cache.loaded_ahead(current)
             if ahead > cfg.max_lag_frames:

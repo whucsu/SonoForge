@@ -667,6 +667,7 @@ class ViewerWidget(QWidget):
         self._color_source_rgb: np.ndarray | None = None
         self._window_level_enabled = True
         self._cached_levels_key: tuple[int, int, int] | None = None
+        self._last_color_frame_ptr: int | None = None
         self._drag_session: tuple[int, float, float, int, int] | None = None
         self._hover_contour_index: int | None = None
         self._hover_tier: int | None = None
@@ -1437,7 +1438,10 @@ class ViewerWidget(QWidget):
         self._cached_levels_key = levels_key
 
         if self._is_color_frame:
-            self._color_source_rgb = to_display_rgb(frame, channel_order=channel_order)
+            frame_data_ptr = frame.ctypes.data if hasattr(frame, 'ctypes') else id(frame)
+            if frame_data_ptr != self._last_color_frame_ptr:
+                self._color_source_rgb = to_display_rgb(frame, channel_order=channel_order)
+                self._last_color_frame_ptr = frame_data_ptr
             self._current_frame = to_grayscale_array(frame)
             self._image_item.setImage(self._color_source_rgb, autoLevels=False)
             if self._window_level_enabled and levels_changed:
