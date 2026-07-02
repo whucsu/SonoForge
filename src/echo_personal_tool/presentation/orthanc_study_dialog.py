@@ -7,7 +7,9 @@ import logging
 from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
+    QDialogButtonBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -24,7 +26,7 @@ from echo_personal_tool.application.workers.orthanc_download_worker import Ortha
 from echo_personal_tool.domain.models import StudyMetadata
 from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.domain.models.orthanc import SeriesInfo, StudyInfo
-from echo_personal_tool.domain.ports import DicomWebClient
+from echo_personal_tool.domain.ports import DicomWebClient, QuerySource
 from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
 from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClient
 from echo_personal_tool.infrastructure.server_settings import ServerSettings, load_server_settings
@@ -48,6 +50,7 @@ class OrthancStudyDialog(QDialog):
         base_url: str | None = None,
         username: str | None = None,
         password: str | None = None,
+        query_service=None,  # DicomQueryService | None
     ) -> None:
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
@@ -57,6 +60,7 @@ class OrthancStudyDialog(QDialog):
         self._base_url = base_url
         self._username = username
         self._password = password
+        self._query_service = query_service
         self._result: tuple[str, str] | None = None
         self._downloading = False
         self._worker: OrthancDownloadWorker | None = None
@@ -79,8 +83,19 @@ class OrthancStudyDialog(QDialog):
         self._find_btn = QPushButton(tr("orthanc.find"))
         self._find_btn.clicked.connect(self._on_find)
 
+        # Source selector (DICOMweb / DIMSE / Auto)
+        self._source_combo = QComboBox()
+        self._source_combo.addItem(tr("server_settings.query_source_dicomweb"), "dicomweb")
+        self._source_combo.addItem(tr("server_settings.query_source_dimse"), "dimse")
+        self._source_combo.addItem(tr("server_settings.query_source_auto"), "auto")
+        if self._query_service is not None:
+            source_idx = self._source_combo.findData(self._query_service.source.value)
+            self._source_combo.setCurrentIndex(max(source_idx, 0))
+        self._source_combo.currentIndexChanged.connect(self._on_source_changed)
+
         search_row = QHBoxLayout()
         search_row.addWidget(self._search_edit, stretch=1)
+        search_row.addWidget(self._source_combo)
         search_row.addWidget(self._find_btn)
 
         self._tree = QTreeWidget()
@@ -217,11 +232,25 @@ class OrthancStudyDialog(QDialog):
             tr("orthanc.connect_error.body"),
         )
 
+    def _on_source_changed(self) -> None:
+        source_val = self._source_combo.currentData()
+        if self._query_service is not None and source_val:
+            self._query_service.source = QuerySource(source_val)
+        # Show warning if DIMSE selected but no DICOMweb for download
+        if source_val == "dimse" and self._server_settings:
+            if not self._server_settings.url or self._server_settings.use_mock:
+                self._status_label.setText(
+                    tr("orthanc.dimse_needs_wado_warning")
+                )
+
     def _load_studies(self) -> None:
         text = self._search_edit.text().strip()
         patient_name = text or None
         try:
-            studies = self._client.query_studies(patient_name=patient_name)
+            if self._query_service is not None:
+                studies = self._query_service.query_studies(patient_name=patient_name)
+            else:
+                studies = self._client.query_studies(patient_name=patient_name)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, tr("orthanc.find"), tr("orthanc.find_error", message=str(exc)))
             return
@@ -267,7 +296,10 @@ class OrthancStudyDialog(QDialog):
             return
 
         try:
-            series_list = self._client.query_series(str(study_uid))
+            if self._query_service is not None:
+                series_list = self._query_service.query_series(str(study_uid))
+            else:
+                series_list = self._client.query_series(str(study_uid))
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, tr("orthanc.series"), tr("orthanc.series_error", message=str(exc)))
             return

@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import QRunnable, QThreadPool, Signal, QObject
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -53,12 +58,69 @@ class ServerSettingsForm(QWidget):
         form.addRow(tr("server_settings.http_headers"), self._headers_edit)
         form.addRow("", self._mock_check)
 
+        # DIMSE section
+        dimse_group = QGroupBox("DIMSE (Native DICOM)")
+        dimse_form = QFormLayout(dimse_group)
+        self._dimse_enabled = QCheckBox(tr("server_settings.dimse_enabled"))
+        self._dimse_enabled.toggled.connect(self._sync_dimse_fields)
+        dimse_form.addRow("", self._dimse_enabled)
+        self._dimse_ae_edit = QLineEdit()
+        self._dimse_ae_edit.setPlaceholderText("ECHO2026")
+        dimse_form.addRow(tr("server_settings.dimse_ae_title"), self._dimse_ae_edit)
+        self._dimse_called_ae_edit = QLineEdit()
+        self._dimse_called_ae_edit.setPlaceholderText("ORTHANC")
+        dimse_form.addRow(tr("server_settings.dimse_called_ae"), self._dimse_called_ae_edit)
+        self._dimse_host_edit = QLineEdit()
+        self._dimse_host_edit.setPlaceholderText("127.0.0.1")
+        dimse_form.addRow(tr("server_settings.dimse_host"), self._dimse_host_edit)
+        self._dimse_port_edit = QLineEdit()
+        self._dimse_port_edit.setPlaceholderText("4242")
+        dimse_form.addRow(tr("server_settings.dimse_port"), self._dimse_port_edit)
+        self._dimse_echo_btn = QPushButton(tr("server_settings.dimse_test_echo"))
+        self._dimse_echo_btn.clicked.connect(self._on_dimse_echo)
+        dimse_form.addRow("", self._dimse_echo_btn)
+        self._dimse_echo_label = QLabel()
+        dimse_form.addRow("", self._dimse_echo_label)
+        form.addRow(dimse_group)
+
+        # STOW-RS URL
+        self._stow_url_edit = QLineEdit()
+        self._stow_url_edit.setPlaceholderText(tr("server_settings.stow_url"))
+        form.addRow(tr("server_settings.stow_url"), self._stow_url_edit)
+
         self.set_settings(load_server_settings())
 
     def _sync_auth_fields(self) -> None:
         basic = self._auth_mode.currentData() == "basic"
         self._username_edit.setEnabled(basic)
         self._password_edit.setEnabled(basic)
+
+    def _sync_dimse_fields(self) -> None:
+        enabled = self._dimse_enabled.isChecked()
+        self._dimse_ae_edit.setEnabled(enabled)
+        self._dimse_called_ae_edit.setEnabled(enabled)
+        self._dimse_host_edit.setEnabled(enabled)
+        self._dimse_port_edit.setEnabled(enabled)
+        self._dimse_echo_btn.setEnabled(enabled)
+
+    def _on_dimse_echo(self) -> None:
+        from echo_personal_tool.infrastructure.dimse_client import PynetdimseClient
+
+        settings = self.settings()
+        client = PynetdimseClient.from_settings(settings)
+        self._dimse_echo_btn.setEnabled(False)
+        self._dimse_echo_label.setText("...")
+        signals = _DimseEchoSignals()
+        signals.result.connect(self._on_dimse_echo_result)
+        task = _DimseEchoTask(client, signals)
+        QThreadPool.globalInstance().start(task)
+
+    def _on_dimse_echo_result(self, ok: bool, message: str) -> None:
+        self._dimse_echo_btn.setEnabled(self._dimse_enabled.isChecked())
+        if ok:
+            self._dimse_echo_label.setText(tr("server_settings.dimse_echo_ok"))
+        else:
+            self._dimse_echo_label.setText(tr("server_settings.dimse_echo_fail", message=message))
 
     def settings(self) -> ServerSettings:
         return ServerSettings(
@@ -69,6 +131,12 @@ class ServerSettingsForm(QWidget):
             auth_mode=str(self._auth_mode.currentData()),
             http_headers=self._headers_edit.toPlainText().strip(),
             use_mock=self._mock_check.isChecked(),
+            dimse_enabled=self._dimse_enabled.isChecked(),
+            dimse_ae_title=self._dimse_ae_edit.text().strip() or "ECHO2026",
+            dimse_called_ae=self._dimse_called_ae_edit.text().strip() or "ORTHANC",
+            dimse_host=self._dimse_host_edit.text().strip() or "127.0.0.1",
+            dimse_port=int(self._dimse_port_edit.text().strip() or "4242"),
+            stow_dicom_web_url=self._stow_url_edit.text().strip(),
         )
 
     def set_settings(self, settings: ServerSettings) -> None:
@@ -80,7 +148,14 @@ class ServerSettingsForm(QWidget):
         self._password_edit.setText(settings.password)
         self._headers_edit.setPlainText(settings.http_headers)
         self._mock_check.setChecked(settings.use_mock)
+        self._dimse_enabled.setChecked(settings.dimse_enabled)
+        self._dimse_ae_edit.setText(settings.dimse_ae_title)
+        self._dimse_called_ae_edit.setText(settings.dimse_called_ae)
+        self._dimse_host_edit.setText(settings.dimse_host)
+        self._dimse_port_edit.setText(str(settings.dimse_port))
+        self._stow_url_edit.setText(settings.stow_dicom_web_url)
         self._sync_auth_fields()
+        self._sync_dimse_fields()
 
 
 def show_server_settings_dialog(parent: QWidget | None = None) -> bool:
@@ -108,3 +183,27 @@ class ServerSettingsDialog(QDialog):
     def _on_accept(self) -> None:
         save_server_settings(self._form.settings())
         self.accept()
+
+
+class _DimseEchoSignals(QObject):
+    result = Signal(bool, str)
+
+
+class _DimseEchoTask(QRunnable):
+    """Run C-ECHO on a worker thread."""
+
+    def __init__(self, client, signals: _DimseEchoSignals) -> None:  # noqa: ANN001
+        super().__init__()
+        self._client = client
+        self._signals = signals
+        self.setAutoDelete(True)
+
+    def run(self) -> None:
+        try:
+            ok = self._client.c_echo()
+            if ok:
+                self._signals.result.emit(True, "")
+            else:
+                self._signals.result.emit(False, "no response")
+        except Exception as exc:  # noqa: BLE001
+            self._signals.result.emit(False, str(exc))
