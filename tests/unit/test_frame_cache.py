@@ -244,3 +244,36 @@ def test_nearest_loaded_ahead_none_when_empty_ahead():
     cache.set_total_frames(Path("cine.mp4"), total=10)
     cache.put(3, np.zeros((4, 4), dtype=np.uint8))
     assert cache.nearest_loaded_ahead(3) is None
+
+
+def test_loaded_before_counts_backward_frames() -> None:
+    cache = FrameCache(evict_window=100)
+    cache.set_total_frames(Path("cine.mp4"), total=10)
+    cache.put(1, np.zeros((4, 4), dtype=np.uint8))
+    cache.put(3, np.ones((4, 4), dtype=np.uint8))
+    cache.put(4, np.full((4, 4), 2, dtype=np.uint8))
+    assert cache.loaded_before(5) == 3
+    assert cache.loaded_before(2) == 1
+
+
+def test_nearest_loaded_before() -> None:
+    cache = FrameCache(evict_window=100)
+    cache.set_total_frames(Path("cine.mp4"), total=10)
+    cache.put(1, np.zeros((4, 4), dtype=np.uint8))
+    cache.put(3, np.ones((4, 4), dtype=np.uint8))
+    assert cache.nearest_loaded_before(5) == 3
+    assert cache.nearest_loaded_before(2) == 1
+    assert cache.nearest_loaded_before(0) is None
+
+
+def test_frames_property_memoized_until_put() -> None:
+    path = Path("clip.dcm")
+    frames = np.arange(12, dtype=np.uint8).reshape(3, 2, 2)
+    cache = FrameCache()
+    cache.load(path, frames)
+    first = cache.frames
+    second = cache.frames
+    assert first is second
+    cache.put(0, frames[0])
+    third = cache.frames
+    assert third is not first

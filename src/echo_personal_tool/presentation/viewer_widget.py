@@ -4605,22 +4605,33 @@ class ViewerWidget(QWidget):
     def _update_levels(self) -> None:
         if self._current_frame is None or not self._window_level_enabled:
             return
-        frame = np.asarray(self._current_frame, dtype=float)
+        frame = np.asarray(self._current_frame)
         if frame.size == 0:
             return
         dr_low, dr_high = dr_percentiles_from_slider(self._dr_slider.value())
-        low, high = compute_display_levels(
-            frame,
-            dr_low_pct=dr_low,
-            dr_high_pct=dr_high,
-            window_scale=self._window_slider.value() / 100.0,
-            level_offset=(self._level_slider.value() - 50) / 50.0,
-        )
+        window_scale = self._window_slider.value() / 100.0
+        level_offset = (self._level_slider.value() - 50) / 50.0
         if self._is_color_frame and self._color_source_rgb is not None:
+            low, high = compute_display_levels(
+                np.asarray(frame, dtype=float),
+                dr_low_pct=dr_low,
+                dr_high_pct=dr_high,
+                window_scale=window_scale,
+                level_offset=level_offset,
+            )
             display = apply_window_level_rgb(self._color_source_rgb, low, high)
             self._image_item.setImage(display, autoLevels=False)
         else:
-            self._image_item.setLevels((low, high))
+            from echo_personal_tool.infrastructure.pixel_utils import apply_wl_lut
+
+            display = apply_wl_lut(
+                frame,
+                dr_low_pct=dr_low,
+                dr_high_pct=dr_high,
+                window_scale=window_scale,
+                level_offset=level_offset,
+            )
+            self._image_item.setImage(display, autoLevels=False)
         self._invalidate_edge_map_cache()
 
     def set_magnetic_snap_enabled(self, enabled: bool) -> None:

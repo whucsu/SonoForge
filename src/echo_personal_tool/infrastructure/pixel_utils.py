@@ -144,3 +144,76 @@ def compute_display_levels(
     window = span * max(window_scale, 0.01)
     center = low + span * (0.5 + 0.5 * level_offset)
     return center - window / 2.0, center + window / 2.0
+
+
+def _grayscale_source_array(frame: np.ndarray) -> np.ndarray:
+    """Return 2-D source values for LUT window/level (preserves dtype)."""
+    source = np.asarray(frame)
+    if source.ndim == 3:
+        if source.shape[2] >= 3:
+            if source.dtype == np.uint16:
+                return np.mean(source[..., :3], axis=2).astype(np.uint16)
+            return np.mean(source[..., :3], axis=2).astype(source.dtype)
+        return source[..., 0]
+    return source
+
+
+def apply_wl_lut(
+    frame: np.ndarray,
+    *,
+    dr_low_pct: float,
+    dr_high_pct: float,
+    window_scale: float,
+    level_offset: float,
+) -> np.ndarray:
+    """Apply window/level via precomputed LUT (OpenCV vectorized).
+
+    Matches ``compute_display_levels`` + linear map to uint8 display.
+    Returns grayscale uint8 (H, W).
+    """
+    gray_f = to_grayscale_array(frame)
+    low, high = compute_display_levels(
+        gray_f,
+        dr_low_pct=dr_low_pct,
+        dr_high_pct=dr_high_pct,
+        window_scale=window_scale,
+        level_offset=level_offset,
+    )
+    span = max(high - low, 1.0)
+    src = _grayscale_source_array(frame)
+    if src.dtype == np.uint16:
+        lut = np.clip(
+            (np.arange(65536, dtype=np.float64) - low) / span * 255.0,
+            0.0,
+            255.0,
+        ).astype(np.uint8)
+        return lut[src]
+    src_u8 = src if src.dtype == np.uint8 else np.clip(src, 0, 255).astype(np.uint8)
+    lut = np.clip(
+        (np.arange(256, dtype=np.float64) - low) / span * 255.0,
+        0.0,
+        255.0,
+    ).astype(np.uint8)
+    return cv2.LUT(src_u8, lut)
+
+
+def reference_wl_display_uint8(
+    frame: np.ndarray,
+    *,
+    dr_low_pct: float,
+    dr_high_pct: float,
+    window_scale: float,
+    level_offset: float,
+) -> np.ndarray:
+    """CPU reference for ``apply_wl_lut`` (percentile + linear map)."""
+    gray_f = to_grayscale_array(frame)
+    low, high = compute_display_levels(
+        gray_f,
+        dr_low_pct=dr_low_pct,
+        dr_high_pct=dr_high_pct,
+        window_scale=window_scale,
+        level_offset=level_offset,
+    )
+    span = max(high - low, 1.0)
+    out = np.clip((gray_f - low) / span * 255.0, 0.0, 255.0)
+    return out.astype(np.uint8)

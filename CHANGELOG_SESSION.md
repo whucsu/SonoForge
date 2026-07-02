@@ -168,6 +168,11 @@
 - **Суть:** Block-matching speckle tracking с NCC, пирамидальный подход, sub-pixel точность. Dual-contour (Philips/Samsung стиль): эндокард + эпикард с фиксированной толщиной. GLS + radial strain, авто-определение ED/ES через FFT. Offline batch режим. UI: кнопка "Speckle Tracking" в Measures → Strain, AppController.run_speckle_tracking(), SpeckleOverlay + StrainCurveWidget.
 
 
+## [2026-07-02 21:00] Viewer perf Phase 0/2 + Phase 3–4 unit tests
+- **Тип:** feature
+- **Файлы:** `infrastructure/pixel_utils.py`, `presentation/viewer_widget.py`, `tests/unit/test_wl_lut.py`, `tests/bench/test_viewer_perf.py`, `tests/unit/test_frame_cache.py`, `tests/unit/test_playback_prefetch.py`
+- **Суть:** LUT-based W/L (`apply_wl_lut`, uint16 через numpy indexing), benchmark suite с таблицей до/после, прямые тесты `loaded_before`, adaptive batch, small-loop prefetch и double-next skip.
+
 ## [2026-06-26 15:30] P0: Per-instance скачивание + parallel downloads + memory fixes
 - **Тип:** fix + refactor + feature
 - **Файлы:** `orthanc_client.py`, `orthanc_download_worker.py`, `frame_cache.py`, `dicom_decode_worker.py`, `domain/ports.py`, `fake_dicom_web_client.py`, `tests/unit/test_orthanc_download_worker.py`
