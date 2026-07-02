@@ -8,6 +8,7 @@ speckle tracking).
 
 from __future__ import annotations
 
+import bisect
 from pathlib import Path
 
 import numpy as np
@@ -25,14 +26,21 @@ class FrameCache:
         self._current_index: int = 0
         self._evict_window: int = evict_window
         self._pinned: set[int] = set()
+        self._sorted_keys: list[int] = []
+        self._cached_frames: np.ndarray | None = None
 
     @property
     def frames(self) -> np.ndarray | None:
+        if self._cached_frames is not None:
+            return self._cached_frames
         if not self._frame_store:
             return None
         if len(self._frame_store) == self._total_frames:
-            return np.stack([self._frame_store[i] for i in range(self._total_frames)])
-        return np.stack([self._frame_store[i] for i in sorted(self._frame_store)])
+            result = np.stack([self._frame_store[i] for i in range(self._total_frames)])
+        else:
+            result = np.stack([self._frame_store[i] for i in sorted(self._frame_store)])
+        self._cached_frames = result
+        return result
 
     def is_ready(self, path: Path) -> bool:
         return (
@@ -53,6 +61,8 @@ class FrameCache:
         self._frame_store = {i: arr[i] for i in range(arr.shape[0])}
         self._total_frames = arr.shape[0]
         self._current_index = 0
+        self._sorted_keys = sorted(self._frame_store.keys())
+        self._cached_frames = None
 
     def get(self, index: int) -> np.ndarray:
         if self._total_frames == 0:
@@ -71,7 +81,10 @@ class FrameCache:
         self._total_frames = total
 
     def put(self, index: int, frame: np.ndarray) -> None:
+        if index not in self._frame_store:
+            bisect.insort(self._sorted_keys, index)
         self._frame_store[index] = frame
+        self._cached_frames = None
 
     def clear(self) -> None:
         self.source_path = None
@@ -79,6 +92,8 @@ class FrameCache:
         self._total_frames = 0
         self._current_index = 0
         self._pinned.clear()
+        self._sorted_keys.clear()
+        self._cached_frames = None
 
     def frame_count(self) -> int:
         return self._total_frames
@@ -141,9 +156,17 @@ class FrameCache:
     def _evict(self) -> None:
         lo = self._current_index - self._evict_window
         hi = self._current_index + self._evict_window
-        to_drop = [
-            i for i in self._frame_store
-            if i not in self._pinned and (i < lo or i > hi)
-        ]
-        for i in to_drop:
-            del self._frame_store[i]
+        keys = self._sorted_keys
+        if not keys:
+            return
+        # Frames outside [lo, hi] are evicted
+        left_drop = keys[:bisect.bisect_left(keys, lo)]
+        right_drop = keys[bisect.bisect_right(keys, hi):]
+        to_drop = [k for k in left_drop + right_drop if k not in self._pinned]
+        if not to_drop:
+            return
+        to_drop_set = set(to_drop)
+        for k in to_drop:
+            del self._frame_store[k]
+        self._sorted_keys = [k for k in keys if k not in to_drop_set]
+        self._cached_frames = None

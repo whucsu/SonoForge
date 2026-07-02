@@ -68,8 +68,8 @@ class FrameLoaderWorker(QRunnable):
         else:
             session = get_thread_dicom_session()
             session.open(self._path)
-            pixels = session.read_frame(self._frame_index)
-        self.signals.finished.emit(np.ascontiguousarray(pixels).copy())
+            pixels = session.decode_single_frame(self._frame_index)
+        self.signals.finished.emit(np.ascontiguousarray(pixels))
 
     def _run_batch(self) -> None:
         end = min(self._frame_index + self._batch_size, self._total_frames)
@@ -80,12 +80,12 @@ class FrameLoaderWorker(QRunnable):
             reader.open(self._path)
             for i in range(self._frame_index, end):
                 pixels = reader.read_frame(i)
-                results.append((i, np.ascontiguousarray(pixels).copy()))
+                results.append((i, np.ascontiguousarray(pixels)))
         elif self._media_format == "dicom":
             session = get_thread_dicom_session()
             session.open(self._path)
             for i in range(self._frame_index, end):
-                pixels = session.read_frame(i)
-                results.append((i, np.ascontiguousarray(pixels).copy()))
+                pixels = session.decode_single_frame(i)
+                results.append((i, np.ascontiguousarray(pixels)))
 
         self.signals.batch_finished.emit(results)

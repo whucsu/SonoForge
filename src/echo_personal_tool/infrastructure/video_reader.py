@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import bisect
 import threading
+from collections import deque
 from pathlib import Path
 
 import cv2
@@ -31,7 +32,7 @@ class VideoReader:
     def __init__(self, buffer_size: int = RING_BUFFER_SIZE) -> None:
         self._buffer_size = buffer_size
         self._buffer: dict[int, np.ndarray] = {}
-        self._buffer_order: list[int] = []
+        self._buffer_order: deque[int] = deque()
         self._capture: cv2.VideoCapture | None = None
         self._open_path: Path | None = None
         self._frame_count = 0
@@ -191,5 +192,5 @@ class VideoReader:
         self._buffer[index] = frame
         self._buffer_order.append(index)
         if len(self._buffer_order) > self._buffer_size:
-            evict_idx = self._buffer_order.pop(0)
+            evict_idx = self._buffer_order.popleft()
             self._buffer.pop(evict_idx, None)
