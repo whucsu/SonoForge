@@ -203,13 +203,13 @@ def _decode_fragment_cv2(fragment: bytes, rows: int, cols: int) -> np.ndarray | 
 def _decode_uncompressed_frame(
     pixel_data: bytes, offset: int, size: int, rows: int, cols: int, bytes_per_pixel: int
 ) -> np.ndarray:
-    """Decode a single uncompressed frame by slicing raw bytes."""
+    """Decode a single uncompressed frame — zero-copy view into raw bytes."""
     raw = pixel_data[offset : offset + size]
     if bytes_per_pixel == 1:
-        return np.frombuffer(raw, dtype=np.uint8).reshape(rows, cols).copy()
+        return np.frombuffer(raw, dtype=np.uint8).reshape(rows, cols)
     if bytes_per_pixel == 2:
-        return np.frombuffer(raw, dtype=np.uint16).reshape(rows, cols).copy()
-    return np.frombuffer(raw, dtype=np.uint8).reshape(rows, cols, bytes_per_pixel).copy()
+        return np.frombuffer(raw, dtype=np.uint16).reshape(rows, cols)
+    return np.frombuffer(raw, dtype=np.uint8).reshape(rows, cols, bytes_per_pixel)
 
 
 class DicomSession:
