@@ -102,12 +102,16 @@ def test_bench_dicom_session_open(benchmark, tmp_path: Path) -> None:
 
 @_BENCH
 def test_bench_dicom_session_decode_uncompressed(benchmark, tmp_path: Path) -> None:
-    """DicomSession.decode_all_frames(): uncompressed, 60×256×256."""
+    """DicomSession.decode_all_frames(): uncompressed, 60×256×256.
+
+    Resets _frames before each call to avoid measuring cache-hit path.
+    """
     dcm = _make_test_dicom(tmp_path, use_jpeg=False, use_jpeg2000=False, rows=256, cols=256, frame_count=60)
     session = DicomSession()
     session.open(dcm)
 
     def _decode() -> None:
+        session._frames = None  # force full re-decode
         frames = session.decode_all_frames()
         assert frames.shape[0] == 60
 
@@ -116,12 +120,16 @@ def test_bench_dicom_session_decode_uncompressed(benchmark, tmp_path: Path) -> N
 
 @_BENCH
 def test_bench_dicom_session_decode_jpeg(benchmark, tmp_path: Path) -> None:
-    """DicomSession.decode_all_frames(): JPEG Baseline, 30×256×256."""
+    """DicomSession.decode_all_frames(): JPEG Baseline, 30×256×256.
+
+    Resets _frames before each call to avoid measuring cache-hit path.
+    """
     dcm = _make_test_dicom(tmp_path, use_jpeg=True, use_jpeg2000=False, rows=256, cols=256, frame_count=30)
     session = DicomSession()
     session.open(dcm)
 
     def _decode() -> None:
+        session._frames = None  # force full re-decode
         frames = session.decode_all_frames()
         assert frames.shape[0] == 30
 
@@ -141,6 +149,7 @@ def test_bench_dicom_session_decode_jpeg2000(benchmark, tmp_path: Path) -> None:
     session.open(dcm)
 
     def _decode() -> None:
+        session._frames = None  # force full re-decode
         frames = session.decode_all_frames()
         assert frames.shape[0] == 30
 

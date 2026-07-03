@@ -4,6 +4,11 @@
 **Hardware:** Windows dev machine (Python 3.11.9, pytest-benchmark 5.2.3)
 **Command:** `ECHO_BENCH=1 pytest tests/bench -v --benchmark-warmup=off --benchmark-min-rounds=3 --benchmark-only`
 
+**⚠️ Known issue (fixed 2026-07-03):** `dicom_session_decode_*` benchmarks previously
+measured the cached-return path (`session._frames` was set after first call). Values
+for those 3 tests are now corrected to measure actual decode. Old values were ~1 µs
+(cache hit); new values reflect real decode time.
+
 Use this file to compare performance across machines. Re-run benchmarks on the target system and update the "Target" column.
 
 ---
@@ -15,9 +20,9 @@ Use this file to compare performance across machines. Re-run benchmarks on the t
 | `decode_uncompressed_zero_copy` | 218 µs | 224 µs | 231 µs | 4,325 | 1,580 | np.frombuffer view, 10 frames 256×256 uint16 |
 | `decode_uncompressed_with_copy` | 424 µs | 436 µs | 454 µs | 2,202 | 1,159 | np.frombuffer + .copy(), same data |
 | `dicom_session_open` | 3.43 ms | 3.71 ms | 3.78 ms | 265 | 172 | DicomSession.open() full parse |
-| `dicom_session_decode_uncompressed` | 1.10 µs | 1.40 µs | 1.44 µs | 695K | 83 | Session decode uncompressed fragment |
-| `dicom_session_decode_jpeg` | 1.10 µs | 1.10 µs | 1.19 µs | 838K | 79 | Session decode JPEG fragment |
-| `dicom_session_decode_jpeg2000` | 1.10 µs | 1.10 µs | 1.32 µs | 758K | 32 | Session decode JPEG2000 fragment |
+| `dicom_session_decode_uncompressed` | ~~1.10 µs~~ **2.72 ms** | ~~1.40 µs~~ **3.28 ms** | ~~1.44 µs~~ **3.28 ms** | ~~695K~~ **305** | 195 | 60×256×256 uncompressed (was cache-hit, now real decode) |
+| `dicom_session_decode_jpeg` | ~~1.10 µs~~ **1.14 ms** | ~~1.10 µs~~ **1.52 ms** | ~~1.19 µs~~ **1.52 ms** | ~~838K~~ **659** | 528 | 30×256×256 JPEG (was cache-hit, now real decode) |
+| `dicom_session_decode_jpeg2000` | ~~1.10 µs~~ **15.8 ms** | ~~1.10 µs~~ **19.7 ms** | ~~1.32 µs~~ **19.7 ms** | ~~758K~~ **51** | 92 | 30×256×256 JPEG2000 (was cache-hit, now real decode) |
 | `dicom_session_single_frame_random_access` | 62.2 µs | 64.5 µs | 69.0 µs | 14,499 | 146 | Random access single frame |
 | `decode_fragment_jpeg_cv2` | 2.30 ms | 2.39 ms | 2.46 ms | 406 | 341 | OpenCV JPEG decode fragment |
 | `decode_fragment_jpeg2000_single` | 42.5 ms | 43.2 ms | 43.2 ms | 23.1 | 24 | JPEG2000 single fragment decode |
@@ -159,8 +164,9 @@ Use this file to compare performance across machines. Re-run benchmarks on the t
 4. **W/L LUT is ~10 ms** on 512×512 — higher than Linux baseline (~4 ms), likely platform-dependent.
 5. **STOW multipart scales linearly** — ~6.5 µs/file on average.
 6. **FakeDimseClient C-ECHO is ~148 ns** — negligible overhead.
-7. **JPEG2000 decode is the bottleneck** — 33–43 ms per call, dominates pipeline.
+7. **JPEG2000 decode is the bottleneck** — 17–43 ms per call, dominates pipeline.
 8. **color_frame_detection and grayscale_check are ~45 ms** each — candidates for optimization.
+9. **DicomSession full decode:** uncompressed 60×256×256 = ~2.5 ms, JPEG 30×256×256 = ~1.2 ms, JPEG2000 30×256×256 = ~17 ms.
 
 ## How to Re-run
 

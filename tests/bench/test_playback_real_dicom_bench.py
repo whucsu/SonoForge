@@ -21,7 +21,10 @@ _BENCH = pytest.mark.skipif(
     reason="Set ECHO_BENCH=1 to run benchmarks",
 )
 
-_REAL_DICOM = Path(r"C:\Users\user\Documents\demo mp4\DICOM_0018")
+_REAL_DICOM = Path(os.environ.get(
+    "ECHO_REAL_DICOM",
+    r"/home/areatu/1ECHO2026 src/US003500.dcm",
+))
 
 
 def _load_real_frames() -> tuple[np.ndarray, dict]:
