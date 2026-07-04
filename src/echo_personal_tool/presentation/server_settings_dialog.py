@@ -156,15 +156,16 @@ class ServerSettingsForm(QWidget):
 
     def _on_dimse_echo(self) -> None:
         from echo_personal_tool.infrastructure.dimse_client import PynetdimseClient
+        from echo_personal_tool.presentation.ui_animations import loading_button
 
         settings = self.settings()
         client = PynetdimseClient.from_settings(settings)
-        self._dimse_echo_btn.setEnabled(False)
         self._dimse_echo_label.setText("...")
         signals = _DimseEchoSignals()
         signals.result.connect(self._on_dimse_echo_result)
         task = _DimseEchoTask(client, signals)
-        QThreadPool.globalInstance().start(task)
+        with loading_button(self._dimse_echo_btn, "..."):
+            QThreadPool.globalInstance().start(task)
 
     def _on_dimse_echo_result(self, ok: bool, message: str) -> None:
         self._dimse_echo_btn.setEnabled(self._dimse_enabled.isChecked())

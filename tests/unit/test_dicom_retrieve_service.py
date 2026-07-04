@@ -81,8 +81,11 @@ class MockDimseClient:
         instance_uid: str,
         *,
         tls_args: tuple | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> bytes:
         self.c_get_calls.append((study_uid, series_uid, instance_uid))
+        if is_cancelled and is_cancelled():
+            raise DimseAssociationError("C-GET cancelled")
         return self._data
 
     def c_move_instances(
@@ -224,9 +227,53 @@ def test_make_retrieve_service_auto_with_wado() -> None:
 
     result = service.retrieve_instance(_STUDY_UID, _SERIES_UID, _INSTANCE_UID)
     assert result == _MOCK_BYTES
-    # WADO should be preferred in auto mode
+    # WADO should be preferred in auto mode when ping succeeds
     assert web_client.download_calls == [(_STUDY_UID, _SERIES_UID, _INSTANCE_UID)]
     assert dimse_client.c_get_calls == []
+
+
+def test_make_retrieve_service_auto_falls_back_to_dimse_when_wado_unreachable() -> None:
+    web_client = MockDicomWebClient()
+
+    class _NoPingWeb(MockDicomWebClient):
+        def ping(self) -> bool:
+            return False
+
+    web_client = _NoPingWeb()
+    dimse_client = MockDimseClient()
+    settings = ServerSettings(retrieval_source="auto")
+
+    service = make_retrieve_service(settings, web_client=web_client, dimse_client=dimse_client)
+
+    result = service.retrieve_instance(_STUDY_UID, _SERIES_UID, _INSTANCE_UID)
+    assert result == _MOCK_BYTES
+    assert web_client.download_calls == []
+    assert dimse_client.c_get_calls == [(_STUDY_UID, _SERIES_UID, _INSTANCE_UID)]
+
+
+def test_retrieve_service_cancel_check_propagates_to_cget() -> None:
+    dimse_client = MockDimseClient()
+    cancelled = {"v": False}
+
+    service = make_retrieve_service(
+        ServerSettings(retrieval_source="dimse"),
+        dimse_client=dimse_client,
+    )
+    service.set_cancel_check(lambda: cancelled["v"])
+    cancelled["v"] = True
+
+    with pytest.raises(RetrieveError, match="cancelled"):
+        service.retrieve_instance(_STUDY_UID, _SERIES_UID, _INSTANCE_UID)
+
+
+def test_stow_upload_available_requires_url() -> None:
+    from echo_personal_tool.infrastructure.server_client_factory import (
+        stow_upload_available,
+    )
+
+    assert stow_upload_available(ServerSettings(use_mock=True))
+    assert not stow_upload_available(ServerSettings(use_mock=False, url=""))
+    assert stow_upload_available(ServerSettings(use_mock=False, url="http://x/dicom-web"))
 
 
 def test_make_retrieve_service_cmove() -> None:

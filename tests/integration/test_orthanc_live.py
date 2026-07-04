@@ -151,9 +151,9 @@ def test_live_dimse_c_move_series(orthanc_dimse_settings: ServerSettings) -> Non
             received=received,
         )
         assert result.completed > 0 or result.failed > 0
-        # At least some instances should be received
+        # Instances arrive via embedded SCP (not the unused `received` param on client)
         if result.completed > 0:
-            assert len(received) > 0
+            assert len(scp.instances) > 0
 
 
 def test_live_dicom_retrieve_service_cget(orthanc_dimse_settings: ServerSettings) -> None:

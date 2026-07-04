@@ -35,6 +35,9 @@ from echo_personal_tool.infrastructure.server_settings import (
     load_server_settings,
     save_server_settings,
 )
+from echo_personal_tool.infrastructure.server_client_factory import (
+    make_dicom_retrieve_service,
+)
 
 _STUDY_UID_ROLE = Qt.ItemDataRole.UserRole
 _SERIES_UID_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -66,6 +69,11 @@ class OrthancStudyDialog(QDialog):
         self._username = username
         self._password = password
         self._query_service = query_service
+        self._retrieve_service = (
+            make_dicom_retrieve_service(server_settings)
+            if server_settings is not None
+            else None
+        )
         self._result: tuple[str, str] | None = None
         self._downloading = False
         self._worker: OrthancDownloadWorker | None = None
@@ -300,7 +308,9 @@ class OrthancStudyDialog(QDialog):
         return " — ".join(part for part in parts if part)
 
     def _on_find(self) -> None:
-        self._load_studies()
+        from echo_personal_tool.presentation.ui_animations import loading_button
+        with loading_button(self._find_btn, tr("orthanc.searching")):
+            self._load_studies()
 
     def _on_item_expanded(self, item: QTreeWidgetItem) -> None:
         if item.parent() is not None:
@@ -410,6 +420,7 @@ class OrthancStudyDialog(QDialog):
             base_url=self._base_url,
             username=self._username,
             password=self._password,
+            retrieve_service=self._retrieve_service,
         )
         self._worker = worker
         worker.signals.progress.connect(self._on_progress)

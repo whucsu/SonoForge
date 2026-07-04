@@ -23,6 +23,7 @@ from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.server_client_factory import (
     dimse_upload_available,
     make_upload_targets,
+    stow_upload_available,
 )
 from echo_personal_tool.infrastructure.server_settings import ServerSettings
 
@@ -50,9 +51,17 @@ def run_dicom_upload_dialog(
     )
 
     protocol_combo = QComboBox()
-    protocol_combo.addItem(tr("dialog.dicom_upload.protocol_stow"), "stow")
+    if stow_upload_available(settings):
+        protocol_combo.addItem(tr("dialog.dicom_upload.protocol_stow"), "stow")
     if dimse_upload_available(settings):
         protocol_combo.addItem(tr("dialog.dicom_upload.protocol_dimse"), "dimse")
+    if protocol_combo.count() == 0:
+        QMessageBox.warning(
+            parent,
+            tr("dialog.dicom_upload.title"),
+            tr("dialog.dicom_upload.no_protocol"),
+        )
+        return
     form = QFormLayout()
     form.addRow(tr("dialog.dicom_upload.protocol"), protocol_combo)
     layout.addLayout(form)

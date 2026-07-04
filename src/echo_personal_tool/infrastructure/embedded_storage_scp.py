@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import socket
 from typing import Any
 
 from pynetdicom import AE, StoragePresentationContexts, evt
@@ -30,17 +29,46 @@ class EmbeddedStorageSCP:
         self._ae: AE | None = None
         self._server: Any = None
         self.instances: dict[str, bytes] = {}
+        self._requested_port = port
+
+    @property
+    def bound_port(self) -> int:
+        if self._server is not None and hasattr(self._server, "server_address"):
+            return int(self._server.server_address[1])
+        return self._port
 
     def start(self) -> None:
         """Start the SCP server in background mode."""
         self._ae = AE(ae_title=self._ae_title)
         self._ae.supported_contexts = StoragePresentationContexts
 
-        self._server = self._ae.start_server(
-            (self._host, self._port),
-            block=False,
-            evt_handlers=[(evt.EVT_C_STORE, self._handle_store)],
-        )
+        for attempt_port in (self._port, 0) if self._port != 0 else (0,):
+            try:
+                self._server = self._ae.start_server(
+                    (self._host, attempt_port),
+                    block=False,
+                    evt_handlers=[(evt.EVT_C_STORE, self._handle_store)],
+                )
+                self._port = self.bound_port
+                if attempt_port != 0 and self._port != self._requested_port:
+                    logger.warning(
+                        "EmbeddedStorageSCP: port %d busy, bound to %d",
+                        self._requested_port,
+                        self._port,
+                    )
+                break
+            except OSError as exc:
+                if attempt_port == 0:
+                    raise
+                logger.warning(
+                    "EmbeddedStorageSCP: cannot bind %s:%d (%s), trying ephemeral port",
+                    self._host,
+                    attempt_port,
+                    exc,
+                )
+        else:
+            raise OSError(f"Cannot bind EmbeddedStorageSCP on {self._host}")
+
         logger.info(
             "EmbeddedStorageSCP started on %s:%d (AE: %s)",
             self._host,

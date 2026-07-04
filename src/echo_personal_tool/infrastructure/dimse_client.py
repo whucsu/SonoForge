@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from io import BytesIO
 
 import pydicom
@@ -26,9 +27,15 @@ from echo_personal_tool.infrastructure.server_settings import ServerSettings
 
 logger = logging.getLogger(__name__)
 
+_MOVE_DESTINATION_UNKNOWN = 0xA801
+
 
 class DimseAssociationError(Exception):
     """Raised when DIMSE association fails."""
+
+
+class DimseMoveDestinationError(DimseAssociationError):
+    """Raised when PACS does not know the C-MOVE destination AE."""
 
 
 class PynetdimseClient:
@@ -236,6 +243,7 @@ class PynetdimseClient:
         instance_uid: str,
         *,
         tls_args: tuple | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> bytes:
         """Download a single instance via C-GET."""
         received: dict[str, bytes] = {}
@@ -288,6 +296,9 @@ class PynetdimseClient:
             for status, _identifier in assoc.send_c_get(
                 ds, StudyRootQueryRetrieveInformationModelGet
             ):
+                if is_cancelled and is_cancelled():
+                    assoc.abort()
+                    raise DimseAssociationError("C-GET cancelled")
                 if status is None:
                     raise DimseAssociationError("C-GET: connection lost")
                 if status.Status == 0x0000:
@@ -370,6 +381,11 @@ class PynetdimseClient:
                         failed = status.NumberOfFailedSuboperations
                     if hasattr(status, "NumberOfWarningSuboperations"):
                         warning = status.NumberOfWarningSuboperations
+                elif status.Status == _MOVE_DESTINATION_UNKNOWN:
+                    raise DimseMoveDestinationError(
+                        "C-MOVE: unknown move destination AE — add an entry in Orthanc "
+                        "DicomModalities (Host/Port must match SCP bind address)."
+                    )
                 elif status.Status >= 0xA000:
                     failed += 1
 
@@ -437,6 +453,11 @@ class PynetdimseClient:
                         failed = status.NumberOfFailedSuboperations
                     if hasattr(status, "NumberOfWarningSuboperations"):
                         warning = status.NumberOfWarningSuboperations
+                elif status.Status == _MOVE_DESTINATION_UNKNOWN:
+                    raise DimseMoveDestinationError(
+                        "C-MOVE: unknown move destination AE — add an entry in Orthanc "
+                        "DicomModalities (Host/Port must match SCP bind address)."
+                    )
                 elif status.Status >= 0xA000:
                     failed += 1
 

@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from echo_personal_tool.presentation.ui_animations import HoverButtonMixin
+
 _ICON_DIR = Path(__file__).resolve().parent.parent / "resources" / "icons"
 
 
@@ -98,6 +100,7 @@ class ActivityBar(QWidget):
             btn.setIcon(_load_icon(icon_file))
             btn.setCheckable(True)
             btn.clicked.connect(lambda _, n=name: self._on_click(n))
+            HoverButtonMixin.install(btn)
             layout.addWidget(btn)
             self._buttons[name] = btn
 
@@ -121,6 +124,7 @@ class ActivityBar(QWidget):
             big, small = _labels.get(name, (name, ""))
             btn = _TextButton(big, small)
             btn.clicked.connect(lambda _, n=name: self.action_requested.emit(n))
+            HoverButtonMixin.install(btn)
             layout.addWidget(btn)
             self._action_buttons[name] = btn
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from io import BytesIO
 
 from pydicom.dataset import Dataset, FileMetaDataset
@@ -108,6 +109,7 @@ class FakeDimseClient:
         instance_uid: str,
         *,
         tls_args: tuple | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> bytes:
         """Return a mock DICOM instance."""
         ds = Dataset()

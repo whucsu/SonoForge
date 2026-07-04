@@ -46,6 +46,27 @@ def make_dicom_query_service(settings: ServerSettings) -> DicomQueryService:
     )
 
 
+def make_dicom_retrieve_service(settings: ServerSettings):
+    """Build DicomRetrieveService for OrthancDownloadWorker."""
+    from echo_personal_tool.application.services.dicom_retrieve_service import (
+        make_retrieve_service,
+    )
+
+    web: DicomWebClient | None
+    if settings.use_mock:
+        web = FakeDicomWebClient()
+    elif settings.url.strip():
+        web = OrthancDicomWebClient.from_settings(settings)
+    else:
+        web = None
+
+    return make_retrieve_service(
+        settings,
+        web_client=web,
+        dimse_client=make_dimse_client(settings),
+    )
+
+
 def make_upload_targets(
     settings: ServerSettings,
     protocol: str,
@@ -63,3 +84,9 @@ def make_upload_targets(
 
 def dimse_upload_available(settings: ServerSettings) -> bool:
     return settings.use_mock or settings.dimse_enabled
+
+
+def stow_upload_available(settings: ServerSettings) -> bool:
+    if settings.use_mock:
+        return True
+    return bool(settings.stow_dicom_web_url.strip() or settings.url.strip())

@@ -312,6 +312,11 @@ QPushButton:checked, QToolButton:checked {{
 }}
 QPushButton:disabled, QToolButton:disabled {{
     color: {p["text_dim"]};
+    opacity: 0.45;
+}}
+QPushButton:focus, QToolButton:focus {{
+    outline: 2px solid {p["accent_tab"]};
+    outline-offset: 2px;
 }}
 
 /* ── GroupBox ───────────────────────────────────────────────── */

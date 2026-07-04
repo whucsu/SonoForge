@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
 from typing import Protocol
@@ -123,6 +124,7 @@ class DimseClient(Protocol):
         instance_uid: str,
         *,
         tls_args: tuple | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> bytes:
         """Download a single instance via C-GET."""
         ...

@@ -102,6 +102,9 @@ class OrthancDownloadWorker(QRunnable):
         )
 
         try:
+            if self._retrieve_service is not None:
+                self._retrieve_service.set_cancel_check(lambda: self._cancelled)
+
             t_start = time.monotonic()
             all_instances: list[tuple[str, str]] = []
 
@@ -126,6 +129,28 @@ class OrthancDownloadWorker(QRunnable):
                 self.signals.studies_ready.emit([])
                 self.signals.done.emit(self._session_id, self._study_uid)
                 return
+
+            if (
+                self._retrieve_service is not None
+                and self._retrieve_service.default_source == "cmove"
+            ):
+                for series_uid in self._series_uids:
+                    if self._cancelled:
+                        self._finish_cancelled()
+                        return
+                    self.signals.status.emit(
+                        f"C-MOVE prefetch series {series_uid[:12]}…"
+                    )
+                    try:
+                        self._retrieve_service.prefetch_series(
+                            self._study_uid, series_uid
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "C-MOVE series prefetch failed series=%s: %s",
+                            series_uid[:16],
+                            exc,
+                        )
 
             logger.info(
                 "[DIAG] worker start download study=%s total_instances=%d concurrency=%d",

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Protocol
 
-from echo_personal_tool.domain.ports import (
-    DimseClient,
-    DicomWebClient,
-    RetrievalSource,
-)
+from echo_personal_tool.domain.ports import DimseClient, DicomWebClient
+from echo_personal_tool.infrastructure.dimse_client import DimseMoveDestinationError
 from echo_personal_tool.infrastructure.server_settings import ServerSettings
 
 logger = logging.getLogger(__name__)
@@ -40,9 +38,16 @@ class WadoRetrieveAdapter:
 class CGetRetrieveAdapter:
     """Adapter for C-GET retrieval via DIMSE."""
 
-    def __init__(self, client: DimseClient, settings: ServerSettings):
+    def __init__(
+        self,
+        client: DimseClient,
+        settings: ServerSettings,
+        *,
+        is_cancelled: Callable[[], bool] | None = None,
+    ):
         self._client = client
         self._settings = settings
+        self._is_cancelled = is_cancelled
 
     def retrieve_instance(
         self, study_uid: str, series_uid: str, instance_uid: str
@@ -53,6 +58,7 @@ class CGetRetrieveAdapter:
             series_uid,
             instance_uid,
             tls_args=tls_args,
+            is_cancelled=self._is_cancelled,
         )
 
     def _build_tls_args(self) -> tuple | None:
@@ -80,18 +86,16 @@ class CMoveRetrieveAdapter:
     def __init__(self, client: DimseClient, settings: ServerSettings):
         self._client = client
         self._settings = settings
-        self._series_cache: dict[str, dict[str, bytes]] = {}  # series_uid -> {instance_uid: bytes}
+        self._series_cache: dict[str, dict[str, bytes]] = {}
 
     def retrieve_instance(
         self, study_uid: str, series_uid: str, instance_uid: str
     ) -> bytes:
-        # Check series cache first
         if series_uid in self._series_cache:
             cached = self._series_cache[series_uid]
             if instance_uid in cached:
                 return cached[instance_uid]
 
-        # Single instance C-MOVE
         from echo_personal_tool.infrastructure.embedded_storage_scp import (
             EmbeddedStorageSCP,
         )
@@ -100,30 +104,43 @@ class CMoveRetrieveAdapter:
         scp_port = self._settings.dimse_scp_port
         scp_ae = self._settings.dimse_scp_ae_title or self._settings.dimse_ae_title
 
-        with EmbeddedStorageSCP(
-            host=scp_host,
-            port=scp_port,
-            ae_title=scp_ae,
-        ) as scp:
-            received: dict[str, bytes] = {}
-            tls_args = self._build_tls_args()
+        try:
+            with EmbeddedStorageSCP(
+                host=scp_host,
+                port=scp_port,
+                ae_title=scp_ae,
+            ) as scp:
+                received: dict[str, bytes] = {}
+                tls_args = self._build_tls_args()
+                bound_port = scp.bound_port
 
-            self._client.c_move_instances(
-                study_uid,
-                series_uid,
-                [instance_uid],
-                move_destination_ae=scp_ae,
-                scp_host=scp_host,
-                scp_port=scp_port,
-                received=received,
-                tls_args=tls_args,
-            )
-
-            if instance_uid not in received:
-                raise RetrieveError(
-                    f"C-MOVE: instance {instance_uid} not received"
+                self._client.c_move_instances(
+                    study_uid,
+                    series_uid,
+                    [instance_uid],
+                    move_destination_ae=scp_ae,
+                    scp_host=scp_host,
+                    scp_port=bound_port,
+                    received=received,
+                    tls_args=tls_args,
                 )
-            return received[instance_uid]
+                received.update(scp.instances)
+
+                if bound_port != scp_port:
+                    logger.warning(
+                        "C-MOVE used ephemeral SCP port %d (requested %d) — "
+                        "update Orthanc DicomModalities if retrieval fails",
+                        bound_port,
+                        scp_port,
+                    )
+
+                if instance_uid not in received:
+                    raise RetrieveError(
+                        f"C-MOVE: instance {instance_uid} not received"
+                    )
+                return received[instance_uid]
+        except DimseMoveDestinationError as exc:
+            raise RetrieveError(str(exc)) from exc
 
     def retrieve_series(
         self, study_uid: str, series_uid: str
@@ -140,27 +157,38 @@ class CMoveRetrieveAdapter:
         scp_port = self._settings.dimse_scp_port
         scp_ae = self._settings.dimse_scp_ae_title or self._settings.dimse_ae_title
 
-        with EmbeddedStorageSCP(
-            host=scp_host,
-            port=scp_port,
-            ae_title=scp_ae,
-        ) as scp:
-            received: dict[str, bytes] = {}
-            tls_args = self._build_tls_args()
+        try:
+            with EmbeddedStorageSCP(
+                host=scp_host,
+                port=scp_port,
+                ae_title=scp_ae,
+            ) as scp:
+                received: dict[str, bytes] = {}
+                tls_args = self._build_tls_args()
+                bound_port = scp.bound_port
 
-            self._client.c_move_series(
-                study_uid,
-                series_uid,
-                move_destination_ae=scp_ae,
-                scp_host=scp_host,
-                scp_port=scp_port,
-                received=received,
-                tls_args=tls_args,
-            )
+                self._client.c_move_series(
+                    study_uid,
+                    series_uid,
+                    move_destination_ae=scp_ae,
+                    scp_host=scp_host,
+                    scp_port=bound_port,
+                    received=received,
+                    tls_args=tls_args,
+                )
+                received.update(scp.instances)
 
-            # Cache the result
-            self._series_cache[series_uid] = received
-            return received
+                if bound_port != scp_port:
+                    logger.warning(
+                        "C-MOVE series used ephemeral SCP port %d (requested %d)",
+                        bound_port,
+                        scp_port,
+                    )
+
+                self._series_cache[series_uid] = received
+                return received
+        except DimseMoveDestinationError as exc:
+            raise RetrieveError(str(exc)) from exc
 
     def _build_tls_args(self) -> tuple | None:
         if not self._settings.dimse_use_tls:
@@ -188,9 +216,32 @@ class RetrieveError(Exception):
 class DicomRetrieveService:
     """Unified retrieval service that selects the appropriate adapter."""
 
-    def __init__(self, adapters: dict[str, RetrieveAdapter], default_source: str = "auto"):
+    def __init__(
+        self,
+        adapters: dict[str, RetrieveAdapter],
+        default_source: str = "auto",
+        *,
+        is_cancelled: Callable[[], bool] | None = None,
+    ):
         self._adapters = adapters
         self._default_source = default_source
+        self._is_cancelled = is_cancelled
+
+    @property
+    def default_source(self) -> str:
+        return self._default_source
+
+    def set_cancel_check(self, is_cancelled: Callable[[], bool] | None) -> None:
+        self._is_cancelled = is_cancelled
+        for adapter in self._adapters.values():
+            if isinstance(adapter, CGetRetrieveAdapter):
+                adapter._is_cancelled = is_cancelled
+
+    def prefetch_series(self, study_uid: str, series_uid: str) -> None:
+        """Pre-fetch a full series when using C-MOVE (batch retrieval)."""
+        adapter = self._adapters.get("cmove")
+        if isinstance(adapter, CMoveRetrieveAdapter):
+            adapter.retrieve_series(study_uid, series_uid)
 
     def retrieve_instance(
         self,
@@ -200,6 +251,8 @@ class DicomRetrieveService:
         source: str | None = None,
     ) -> bytes:
         """Download a single DICOM instance using the specified source."""
+        if self._is_cancelled and self._is_cancelled():
+            raise RetrieveError("Download cancelled")
         source = source or self._default_source
         adapter = self._resolve_adapter(source)
         return adapter.retrieve_instance(study_uid, series_uid, instance_uid)
@@ -210,32 +263,47 @@ class DicomRetrieveService:
         raise RetrieveError(f"No adapter for source: {source}")
 
 
+def _wado_reachable(web_client: DicomWebClient) -> bool:
+    try:
+        return web_client.ping()
+    except Exception:  # noqa: BLE001
+        logger.debug("WADO ping failed in auto retrieval mode", exc_info=True)
+        return False
+
+
 def make_retrieve_service(
     settings: ServerSettings,
     web_client: DicomWebClient | None = None,
     dimse_client: DimseClient | None = None,
+    *,
+    is_cancelled: Callable[[], bool] | None = None,
 ) -> DicomRetrieveService:
     """Factory function to create DicomRetrieveService with appropriate adapters."""
     adapters: dict[str, RetrieveAdapter] = {}
     default_source = settings.retrieval_source
 
-    # Always add WADO adapter if web_client is provided
     if web_client is not None:
         adapters["wado"] = WadoRetrieveAdapter(web_client)
 
-    # Add DIMSE adapters if dimse_client is provided
     if dimse_client is not None:
-        adapters["dimse"] = CGetRetrieveAdapter(dimse_client, settings)
+        adapters["dimse"] = CGetRetrieveAdapter(
+            dimse_client,
+            settings,
+            is_cancelled=is_cancelled,
+        )
         adapters["cmove"] = CMoveRetrieveAdapter(dimse_client, settings)
 
-    # Auto mode: prefer WADO if available, fallback to C-GET
-    if default_source == "auto":
-        if "wado" in adapters:
+    if "wado" in adapters or "dimse" in adapters:
+        if web_client is not None and _wado_reachable(web_client):
             adapters["auto"] = adapters["wado"]
         elif "dimse" in adapters:
             adapters["auto"] = adapters["dimse"]
+        elif "wado" in adapters:
+            adapters["auto"] = adapters["wado"]
+
+    if default_source == "auto" and "auto" not in adapters:
+        default_source = next(iter(adapters), default_source)
     elif default_source not in adapters:
-        # If configured source not available, fallback
         if "auto" in adapters:
             default_source = "auto"
         elif adapters:
@@ -243,4 +311,8 @@ def make_retrieve_service(
         else:
             raise RetrieveError("No retrieval adapters available")
 
-    return DicomRetrieveService(adapters, default_source)
+    return DicomRetrieveService(
+        adapters,
+        default_source,
+        is_cancelled=is_cancelled,
+    )

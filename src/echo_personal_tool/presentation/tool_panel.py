@@ -19,6 +19,7 @@ from echo_personal_tool.presentation.measurement_action import MeasurementAction
 from echo_personal_tool.presentation.dicom_tag_inspector_widget import DicomTagInspectorWidget
 from echo_personal_tool.presentation.ge_labeled_slider import TopLabeledSlider
 from echo_personal_tool.presentation.measures_menu import MeasuresMenuWidget
+from echo_personal_tool.presentation.ui_animations import HoverButtonMixin
 
 
 class _PatientMetricsRow(QWidget):
@@ -121,6 +122,7 @@ class MeasureTab(QWidget):
         self._results_button = QPushButton(tr("tool_panel.measures"))
         self._results_button.setMinimumHeight(32)
         self._results_button.clicked.connect(self.results_requested.emit)
+        HoverButtonMixin.install(self._results_button)
         results_wrap = QWidget()
         results_layout = QHBoxLayout(results_wrap)
         results_layout.setContentsMargins(8, 0, 8, 8)
