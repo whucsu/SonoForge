@@ -220,12 +220,13 @@ class OrthancStudyDialog(QDialog):
         super().reject()
 
     def accept(self) -> None:
+        from echo_personal_tool.presentation.ui_animations import hide_dialog_animated
         log.info("[DLG] accept: result=%s downloaded=%d", self._result, len(self._downloaded_studies))
         try:
             self._release_client()
         except Exception:  # noqa: BLE001
             pass
-        super().accept()
+        hide_dialog_animated(self, on_done=super().accept)
 
     def _release_client(self) -> None:
         if self._client_closed:

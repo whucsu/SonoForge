@@ -107,19 +107,16 @@ class ActivityBar(QWidget):
         layout.addSpacing(8)
 
         self._action_buttons: dict[str, QPushButton] = {}
+        from echo_personal_tool.infrastructure.i18n import tr
         _labels = {
-            "caliper": ("\u2220", "caliper"),
-            "lv2d": ("ЛЖ", "2D"),
-            "esv": ("КСР", "2D"),
-            "simpson_manual_ed": ("\u041A\u0414\u041E", "auto"),
-            "simpson_manual_es": ("\u041A\u0421\u041E", "auto"),
-            "auto_ed": ("\u041A\u0414\u041E", "AI"),
-            "auto_es": ("\u041A\u0421\u041E", "AI"),
+            "caliper": (tr("activity.caliper_big"), tr("activity.caliper_small")),
+            "lv2d": (tr("activity.lv2d_big"), tr("activity.lv2d_small")),
+            "esv": (tr("activity.esv_big"), tr("activity.esv_small")),
+            "edv": (tr("activity.edv_big"), tr("activity.edv_small")),
+            "es": (tr("activity.es_big"), tr("activity.es_small")),
         }
         for name in [
-            "caliper", "lv2d", "esv",
-            "simpson_manual_ed", "simpson_manual_es",
-            "auto_ed", "auto_es",
+            "caliper", "lv2d", "esv", "edv", "es",
         ]:
             big, small = _labels.get(name, (name, ""))
             btn = _TextButton(big, small)
@@ -153,19 +150,15 @@ class ActivityBar(QWidget):
             "caliper": tr("tool_panel.linear_caliper"),
             "lv2d": tr("tools.lv2d_all_diastole"),
             "esv": tr("tools.lv2d_es"),
-            "simpson_manual_ed": tr("tools.ed_auto"),
-            "simpson_manual_es": tr("tools.es_auto"),
-            "auto_ed": tr("tools.ed_auto"),
-            "auto_es": tr("tools.es_auto"),
+            "edv": tr("tools.ed_auto"),
+            "es": tr("tools.es_auto"),
         }
         action_labels = {
             "caliper": (tr("activity.caliper_big"), tr("activity.caliper_small")),
             "lv2d": (tr("activity.lv2d_big"), tr("activity.lv2d_small")),
             "esv": (tr("activity.esv_big"), tr("activity.esv_small")),
-            "simpson_manual_ed": (tr("activity.simpson_ed_big"), tr("activity.simpson_ed_small")),
-            "simpson_manual_es": (tr("activity.simpson_es_big"), tr("activity.simpson_es_small")),
-            "auto_ed": (tr("activity.auto_ed_big"), tr("activity.auto_ed_small")),
-            "auto_es": (tr("activity.auto_es_big"), tr("activity.auto_es_small")),
+            "edv": (tr("activity.edv_big"), tr("activity.edv_small")),
+            "es": (tr("activity.es_big"), tr("activity.es_small")),
         }
         for name, btn in self._action_buttons.items():
             btn.setToolTip(action_tooltips.get(name, name))

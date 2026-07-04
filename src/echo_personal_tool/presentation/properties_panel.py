@@ -29,48 +29,48 @@ class PropertiesPanel(QWidget):
         scroll.setWidget(self._content)
         layout.addWidget(scroll)
 
-        self._instance_group: QGroupBox | None = None
-        self._measurement_group: QGroupBox | None = None
-        self._contour_group: QGroupBox | None = None
+        # Create groups once, hide when empty
+        self._instance_group = QGroupBox("Instance")
+        self._instance_form = QFormLayout(self._instance_group)
+        self._instance_form.setSpacing(2)
+        self._form.addRow(self._instance_group)
+
+        self._measurement_group = QGroupBox("Measurement")
+        self._measurement_form = QFormLayout(self._measurement_group)
+        self._measurement_form.setSpacing(2)
+        self._form.addRow(self._measurement_group)
+
+        self._contour_group = QGroupBox("Contour")
+        self._contour_form = QFormLayout(self._contour_group)
+        self._contour_form.setSpacing(2)
+        self._form.addRow(self._contour_group)
+
+        self._instance_group.hide()
+        self._measurement_group.hide()
+        self._contour_group.hide()
 
     def update_instance_info(
         self,
         *,
-        patient_name: str = "",
-        patient_id: str = "",
-        study_date: str = "",
         modality: str = "",
         series_desc: str = "",
-        instance_number: int = 0,
         frame_rate: float | None = None,
-        rows: int = 0,
-        columns: int = 0,
         pixel_spacing: str = "",
     ) -> None:
         """Update the instance information section."""
-        self._clear_group(self._instance_group)
-        self._instance_group = QGroupBox("Instance")
-        form = QFormLayout(self._instance_group)
-        form.setSpacing(2)
-        if patient_name:
-            form.addRow("Patient:", QLabel(patient_name))
-        if patient_id:
-            form.addRow("ID:", QLabel(patient_id))
-        if study_date:
-            form.addRow("Date:", QLabel(study_date))
+        self._clear_form(self._instance_form)
+        if not modality and not series_desc:
+            self._instance_group.hide()
+            return
         if modality:
-            form.addRow("Modality:", QLabel(modality))
+            self._instance_form.addRow("Modality:", QLabel(modality))
         if series_desc:
-            form.addRow("Series:", QLabel(series_desc))
-        if instance_number:
-            form.addRow("Instance #:", QLabel(str(instance_number)))
+            self._instance_form.addRow("Series:", QLabel(series_desc))
         if frame_rate and frame_rate > 0:
-            form.addRow("Frame rate:", QLabel(f"{frame_rate:.1f} fps"))
-        if rows and columns:
-            form.addRow("Size:", QLabel(f"{columns}×{rows}"))
+            self._instance_form.addRow("Frame rate:", QLabel(f"{frame_rate:.1f} fps"))
         if pixel_spacing:
-            form.addRow("Spacing:", QLabel(pixel_spacing))
-        self._form.addRow(self._instance_group)
+            self._instance_form.addRow("Spacing:", QLabel(pixel_spacing))
+        self._instance_group.show()
 
     def update_measurement_info(
         self,
@@ -81,21 +81,19 @@ class PropertiesPanel(QWidget):
         end: tuple[float, float] | None = None,
     ) -> None:
         """Update the measurement information section."""
-        self._clear_group(self._measurement_group)
+        self._clear_form(self._measurement_form)
         if not label:
+            self._measurement_group.hide()
             return
-        self._measurement_group = QGroupBox("Measurement")
-        form = QFormLayout(self._measurement_group)
-        form.setSpacing(2)
-        form.addRow("Label:", QLabel(label))
+        self._measurement_form.addRow("Label:", QLabel(label))
         if value_mm is not None:
-            form.addRow("Value:", QLabel(f"{value_mm:.1f} mm"))
+            self._measurement_form.addRow("Value:", QLabel(f"{value_mm:.1f} mm"))
         if start and end:
             dx = end[0] - start[0]
             dy = end[1] - start[1]
             pixel_len = (dx**2 + dy**2) ** 0.5
-            form.addRow("Pixel length:", QLabel(f"{pixel_len:.1f} px"))
-        self._form.addRow(self._measurement_group)
+            self._measurement_form.addRow("Pixel length:", QLabel(f"{pixel_len:.1f} px"))
+        self._measurement_group.show()
 
     def update_contour_info(
         self,
@@ -106,34 +104,27 @@ class PropertiesPanel(QWidget):
         area_px: float | None = None,
     ) -> None:
         """Update the contour information section."""
-        self._clear_group(self._contour_group)
+        self._clear_form(self._contour_form)
         if not chamber and not phase:
+            self._contour_group.hide()
             return
-        self._contour_group = QGroupBox("Contour")
-        form = QFormLayout(self._contour_group)
-        form.setSpacing(2)
         if chamber:
-            form.addRow("Chamber:", QLabel(chamber))
+            self._contour_form.addRow("Chamber:", QLabel(chamber))
         if phase:
-            form.addRow("Phase:", QLabel(phase))
+            self._contour_form.addRow("Phase:", QLabel(phase))
         if point_count:
-            form.addRow("Points:", QLabel(str(point_count)))
+            self._contour_form.addRow("Points:", QLabel(str(point_count)))
         if area_px is not None:
-            form.addRow("Area:", QLabel(f"{area_px:.1f} px²"))
-        self._form.addRow(self._contour_group)
+            self._contour_form.addRow("Area:", QLabel(f"{area_px:.1f} px²"))
+        self._contour_group.show()
 
     def clear_all(self) -> None:
-        """Clear all sections."""
-        self._clear_group(self._instance_group)
-        self._clear_group(self._measurement_group)
-        self._clear_group(self._contour_group)
-        self._instance_group = None
-        self._measurement_group = None
-        self._contour_group = None
+        """Hide all sections."""
+        self._instance_group.hide()
+        self._measurement_group.hide()
+        self._contour_group.hide()
 
-    def _clear_group(self, group: QGroupBox | None) -> None:
-        if group is not None:
-            idx = self._form.indexOf(group)
-            if idx >= 0:
-                self._form.removeRow(idx)
-            group.deleteLater()
+    def _clear_form(self, form: QFormLayout) -> None:
+        """Remove all rows from a form layout."""
+        while form.rowCount() > 0:
+            form.removeRow(0)

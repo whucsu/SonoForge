@@ -63,7 +63,6 @@ class ServerSettingsForm(QWidget):
         dimse_form = QFormLayout(dimse_group)
         self._dimse_enabled = QCheckBox(tr("server_settings.dimse_enabled"))
         self._dimse_enabled.toggled.connect(self._sync_dimse_fields)
-        self._dimse_use_tls.toggled.connect(self._sync_dimse_fields)
         dimse_form.addRow("", self._dimse_enabled)
         self._dimse_ae_edit = QLineEdit()
         self._dimse_ae_edit.setPlaceholderText("ECHO2026")
@@ -88,6 +87,7 @@ class ServerSettingsForm(QWidget):
 
         # TLS settings
         self._dimse_use_tls = QCheckBox(tr("server_settings.use_tls"))
+        self._dimse_use_tls.toggled.connect(self._sync_dimse_fields)
         dimse_form.addRow("", self._dimse_use_tls)
         self._dimse_tls_verify = QCheckBox(tr("server_settings.verify_certificate"))
         dimse_form.addRow("", self._dimse_tls_verify)

@@ -247,7 +247,6 @@ class MainWindow(QMainWindow):
     def _install_shortcuts(self) -> None:
         """Window-level shortcuts that work when the viewer or browser has focus."""
         bindings: list[tuple[str, object]] = [
-            ("Space", self._toggle_playback_shortcut),
             ("L", self._viewer.toggle_linear_caliper),
             ("C", self._start_manual_contour_shortcut),
             ("M", self._start_model_contour_shortcut),
@@ -613,21 +612,13 @@ class MainWindow(QMainWindow):
             self._on_lv2d_all_diastole()
         elif action == "esv":
             self._on_lv2d_es()
-        elif action == "simpson_manual_ed":
+        elif action == "edv":
             self._on_measure_action(
                 MeasurementAction.MANUAL_SIMPSON, "A4C", "ED", ""
             )
-        elif action == "simpson_manual_es":
+        elif action == "es":
             self._on_measure_action(
                 MeasurementAction.MANUAL_SIMPSON, "A4C", "ES", ""
-            )
-        elif action == "auto_ed":
-            self._on_measure_action(
-                MeasurementAction.AUTO_SEGMENT, "A4C", "ED", ""
-            )
-        elif action == "auto_es":
-            self._on_measure_action(
-                MeasurementAction.AUTO_SEGMENT, "A4C", "ES", ""
             )
 
     def _remove_tool_panel_from_content_layout(self) -> None:
@@ -651,7 +642,7 @@ class MainWindow(QMainWindow):
                 return
 
     def _on_activity_tab_activated(self, tab: str) -> None:
-        tab_map = {"measures": 0, "controls": 1, "dicom": 2}
+        tab_map = {"measures": 0, "controls": 1, "properties": 2, "dicom": 3}
         if tab in tab_map:
             self._tool_panel._tabs.setCurrentIndex(tab_map[tab])
         self._tool_panel.setFixedWidth(_TOOL_PANEL_WIDTH)
@@ -1153,23 +1144,17 @@ class MainWindow(QMainWindow):
         inst = state.instance
         # Instance info
         panel.update_instance_info(
-            patient_name=inst.patient_name or "",
-            patient_id=inst.patient_id or "",
-            study_date=inst.study_date or "",
             modality=inst.modality or "",
             series_desc=inst.series_description or "",
-            instance_number=inst.instance_number or 0,
-            frame_rate=inst.frame_rate,
-            rows=inst.rows or 0,
-            columns=inst.columns or 0,
-            pixel_spacing=str(inst.pixel_spacing) if inst.pixel_spacing else "",
+            frame_rate=1000.0 / inst.frame_time_ms if inst.frame_time_ms else None,
+            pixel_spacing=f"{inst.pixel_spacing[0]:.2f}×{inst.pixel_spacing[1]:.2f} mm" if inst.pixel_spacing else "",
         )
         # Latest measurement
         if state.linear_measurements:
             m = state.linear_measurements[-1]
             panel.update_measurement_info(
                 label=m.label,
-                value_mm=m.mm_length,
+                value_mm=m.millimeter_length,
                 start=m.start,
                 end=m.end,
             )

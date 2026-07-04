@@ -18,7 +18,7 @@ from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.presentation.measurement_action import MeasurementAction
 from echo_personal_tool.presentation.ui_animations import HoverButtonMixin
 
-_MENU_BUTTON_HEIGHT_PX = 18
+_MENU_BUTTON_HEIGHT_PX = 24
 _ACCORDION_ANIM_MS = 180
 
 

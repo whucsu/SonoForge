@@ -179,7 +179,6 @@ def loading_button(btn: QPushButton, text: str = "...") -> Generator[None, None,
 
 def exec_animated(dialog: QDialog, duration_ms: int = 200) -> int:
     """Show dialog and return exec result. Animation is disabled for stability."""
-    dialog.show()
     return dialog.exec()
 
 

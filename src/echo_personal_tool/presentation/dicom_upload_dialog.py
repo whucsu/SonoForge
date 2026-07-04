@@ -69,6 +69,8 @@ def run_dicom_upload_dialog(
     buttons = QDialogButtonBox(
         QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
     )
+    ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+    ok_btn.setText(tr("dialog.dicom_upload.send"))
     buttons.accepted.connect(dialog.accept)
     buttons.rejected.connect(dialog.reject)
     layout.addWidget(buttons)
