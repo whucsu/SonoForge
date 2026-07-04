@@ -96,8 +96,9 @@ def test_all_diastole_sequence_auto_advances_without_enter(qtbot) -> None:
 
     viewer.start_linear_caliper_sequence(("IVSd", "LVEDD", "LVPWd"))
     _place_caliper(viewer, 5.0, 15.0)
-    _place_caliper(viewer, 10.0, 50.0)
-    _place_caliper(viewer, 52.0, 60.0)
+    # Chain: start already set from previous end, single click for end
+    _simulate_view_press(viewer, 50.0, 32.0)
+    _simulate_view_press(viewer, 60.0, 32.0)
 
     assert not viewer.is_linear_caliper_active
     labels = {item.label for item in viewer._stored_linear_measurements.values()}
