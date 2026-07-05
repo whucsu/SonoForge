@@ -1330,13 +1330,15 @@ class ViewerWidget(QWidget):
 
     def _add_gold_export_actions(self, menu: QMenu) -> None:
         """Add gold export menu items when conditions are met."""
+        import os
         from echo_personal_tool.infrastructure.user_preferences import (
             _read_bool,
             _settings_store,
         )
 
         store = _settings_store()
-        if not _read_bool(store.value("gold_annotation_enabled"), False):
+        gold_enabled = _read_bool(store.value("gold_annotation_enabled"), False)
+        if not gold_enabled and os.environ.get("ECHO_GOLD_EXPORT", "") != "1":
             return
         if self._current_state is None or self._current_state.instance is None:
             return

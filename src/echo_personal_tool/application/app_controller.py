@@ -643,12 +643,17 @@ class AppController(QObject):
         if instance is None or instance.media_format != "dicom":
             return
 
+        import os
         from echo_personal_tool.infrastructure.user_preferences import _read_bool, _settings_store
         store = _settings_store()
-        if not _read_bool(store.value("gold_annotation_enabled"), False):
+        gold_enabled = _read_bool(store.value("gold_annotation_enabled"), False)
+        if not gold_enabled and os.environ.get("ECHO_GOLD_EXPORT", "") != "1":
             return
 
-        gold_root = Path(str(store.value("gold_dataset_path", "")))
+        gold_path_str = str(store.value("gold_dataset_path", ""))
+        if not gold_path_str:
+            gold_path_str = os.environ.get("ECHO_GOLD_PATH", "")
+        gold_root = Path(gold_path_str)
         if not gold_root.is_dir():
             self.status_message.emit(tr("app.gold_path_invalid"))
             return

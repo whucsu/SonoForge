@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
@@ -270,6 +271,20 @@ class UserPreferencesDialog(QDialog):
         dicom_form.addRow(tr("preferences.tags_overlay"), self._interesting_tags)
         tabs.addTab(_scrollable_tab(dicom_form), "DICOM")
 
+        gold_form = QFormLayout()
+        self._gold_enabled = QCheckBox()
+        self._gold_enabled.setChecked(current.gold_annotation_enabled)
+        self._gold_path = QLineEdit(current.gold_dataset_path)
+        self._gold_path.setPlaceholderText(str(Path.home() / "ECHO2026-gold"))
+        self._gold_path_browse = QPushButton(tr("preferences.gold_browse"))
+        self._gold_path_browse.clicked.connect(self._browse_gold_path)
+        gold_path_row = QHBoxLayout()
+        gold_path_row.addWidget(self._gold_path)
+        gold_path_row.addWidget(self._gold_path_browse)
+        gold_form.addRow(tr("preferences.gold_enabled"), self._gold_enabled)
+        gold_form.addRow(tr("preferences.gold_path"), gold_path_row)
+        tabs.addTab(_scrollable_tab(gold_form), tr("preferences.tab_gold"))
+
         other_form = QFormLayout()
         self._confirm_reset = QCheckBox()
         self._confirm_reset.setChecked(current.confirm_reset)
@@ -328,6 +343,16 @@ class UserPreferencesDialog(QDialog):
             self._on_apply(defaults)
         self.accept()
 
+    def _browse_gold_path(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        path = QFileDialog.getExistingDirectory(
+            self,
+            tr("preferences.gold_browse_title"),
+            self._gold_path.text() or str(Path.home()),
+        )
+        if path:
+            self._gold_path.setText(path)
+
     def _on_accept(self) -> None:
         stored = load_user_preferences()
         preferences = UserPreferences(
@@ -368,6 +393,8 @@ class UserPreferencesDialog(QDialog):
             theme_mode=str(self._theme_combo.currentData()),
             language=str(self._language_combo.currentData()),
             reduce_motion=self._reduce_motion.isChecked(),
+            gold_annotation_enabled=self._gold_enabled.isChecked(),
+            gold_dataset_path=self._gold_path.text().strip(),
         )
         save_user_preferences(preferences)
         save_server_settings(self._server_form.settings())
