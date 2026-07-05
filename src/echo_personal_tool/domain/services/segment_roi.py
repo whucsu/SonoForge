@@ -147,7 +147,11 @@ def resolve_dicom_segment_roi_xyxy(
     frame: np.ndarray,
     instance_path: Path | None,
 ) -> tuple[float, float, float, float] | None:
-    """DICOM SequenceOfUltrasoundRegions first, then heuristic fallback."""
+    """DICOM SequenceOfUltrasoundRegions first, then heuristic fallback.
+
+    No sector trim applied — SequenceOfUltrasoundRegions bounds are already
+    correct for DICOM; trimming risks cutting the LV apex.
+    """
     if instance_path is not None:
         layout = try_parse_from_path(instance_path)
         if layout is not None and layout.b_mode is not None:

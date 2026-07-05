@@ -114,7 +114,7 @@ def embed_echonet_mask(mask: np.ndarray, transform: EchoNetCropTransform) -> np.
 
     zoom_y = transform.crop_height / array.shape[0]
     zoom_x = transform.crop_width / array.shape[1]
-    upscaled = ndimage.zoom(array.astype(np.float32), (zoom_y, zoom_x), order=0)
+    upscaled = ndimage.zoom(array.astype(np.float32), (zoom_y, zoom_x), order=1)
     upscaled = (upscaled >= 0.5).astype(np.uint8)
     paste_h = min(transform.crop_height, upscaled.shape[0])
     paste_w = min(transform.crop_width, upscaled.shape[1])
@@ -123,8 +123,14 @@ def embed_echonet_mask(mask: np.ndarray, transform: EchoNetCropTransform) -> np.
     return full
 
 
-def prepare_tensor(frame: np.ndarray, *, target_size: int = 112) -> np.ndarray:
-    """RGB/BGR or grayscale H×W → (1, 3, H, W) float32, per-frame mean/std norm."""
+def prepare_tensor(
+    frame: np.ndarray,
+    *,
+    target_size: int = 112,
+    fixed_mean: list[float] | None = None,
+    fixed_std: list[float] | None = None,
+) -> np.ndarray:
+    """RGB/BGR or grayscale H×W → (1, 3, H, W) float32, normalized."""
     array = np.asarray(frame, dtype=np.float32)
     if array.ndim == 2:
         resized = _resize_spatial(array, target_size=target_size)
@@ -136,13 +142,24 @@ def prepare_tensor(frame: np.ndarray, *, target_size: int = 112) -> np.ndarray:
         msg = "frame must be grayscale H×W or color H×W×3"
         raise ValueError(msg)
 
-    normalized = _normalize_per_frame(rgb)
+    if fixed_mean is not None and fixed_std is not None:
+        normalized = _normalize_fixed(rgb, fixed_mean, fixed_std)
+    else:
+        normalized = _normalize_per_frame(rgb)
     chw = np.transpose(normalized, (2, 0, 1))
     return np.expand_dims(chw, axis=0).astype(np.float32, copy=False)
 
 
-def logits_to_mask(logits: np.ndarray, threshold: float = 0.5) -> np.ndarray:
-    """(1,1,h,w) or (h,w) logits → binary mask (h,w) uint8 {0,1}."""
+def logits_to_mask(
+    logits: np.ndarray,
+    threshold: float | None = None,
+    *,
+    adaptive: bool = True,
+) -> np.ndarray:
+    """(1,1,h,w) or (h,w) logits → binary mask (h,w) uint8 {0,1}.
+
+    When adaptive=True and threshold is None, uses Otsu threshold clamped to [0.35, 0.65].
+    """
     array = np.asarray(logits, dtype=np.float32)
     if array.ndim == 4:
         array = array[0, 0]
@@ -155,15 +172,59 @@ def logits_to_mask(logits: np.ndarray, threshold: float = 0.5) -> np.ndarray:
     if array.min() < 0.0 or array.max() > 1.0:
         array = 1.0 / (1.0 + np.exp(-np.clip(array, -50.0, 50.0)))
 
-    return (array >= threshold).astype(np.uint8)
+    if threshold is not None:
+        return (array >= threshold).astype(np.uint8)
+
+    if adaptive and array.size > 0:
+        try:
+            effective = float(np.clip(_otsu_threshold(array), 0.35, 0.65))
+        except Exception:
+            effective = 0.5
+        return (array >= effective).astype(np.uint8)
+
+    return (array >= 0.5).astype(np.uint8)
+
+
+def _otsu_threshold(array: np.ndarray) -> float:
+    """Otsu threshold on float [0, 1] array (256-bin histogram)."""
+    hist, bin_edges = np.histogram(array.ravel(), bins=256, range=(0.0, 1.0))
+    total = hist.sum()
+    if total == 0:
+        return 0.5
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+    weight_bg = 0.0
+    mean_bg = 0.0
+    best_var = -1.0
+    best_thresh = 0.5
+    for i, count in enumerate(hist):
+        weight_bg += count
+        if weight_bg == 0:
+            continue
+        weight_fg = total - weight_bg
+        if weight_fg == 0:
+            break
+        mean_bg += count * bin_centers[i]
+        mean_bg_val = mean_bg / weight_bg
+        mean_fg_val = (np.dot(bin_centers, hist) - mean_bg) / weight_fg
+        var_between = weight_bg * weight_fg * (mean_bg_val - mean_fg_val) ** 2
+        if var_between > best_var:
+            best_var = var_between
+            best_thresh = bin_centers[i]
+    return best_thresh
 
 
 def papillary_mask_cleanup(
     mask: np.ndarray,
     *,
+    phase: str | None = None,
     long_axis_hint: tuple[tuple[float, float], tuple[float, float]] | None = None,
 ) -> np.ndarray:
-    """Morphological closing along LV long axis to remove papillary notches."""
+    """Morphological closing along LV long axis to remove papillary notches.
+
+    Phase-aware parameters (v1.5):
+      ED: se_length_ratio=0.04, clamp [5, 15]
+      ES: se_length_ratio=0.06, clamp [6, 18]
+    """
     del long_axis_hint  # v1: derive from mask bbox
     binary = np.asarray(mask) > 0
     if not binary.any():
@@ -172,7 +233,13 @@ def papillary_mask_cleanup(
     ys, xs = np.where(binary)
     top_y, bottom_y = int(ys.min()), int(ys.max())
     axis_length = float(bottom_y - top_y + 1)
-    se_len = int(np.clip(0.04 * axis_length, 5, 15))
+
+    if phase == "ES":
+        se_ratio, se_min, se_max = 0.06, 6, 18
+    else:
+        se_ratio, se_min, se_max = 0.04, 5, 15
+
+    se_len = int(np.clip(se_ratio * axis_length, se_min, se_max))
 
     cy, cx = se_len // 2, se_len // 2
     y, x = np.ogrid[:se_len, :se_len]
@@ -234,12 +301,21 @@ def exclude_papillary_concavities(
     annulus: tuple[tuple[float, float], tuple[float, float]],
     apex: tuple[float, float],
     *,
-    depth_threshold_ratio: float = 0.04,
+    depth_threshold_ratio: float | None = None,
     min_depth_px: float = 2.0,
+    phase: str | None = None,
 ) -> list[tuple[float, float]]:
-    """Push interior nodes outward when concave vs MA–apex chord (ASE papillary rule)."""
+    """Push interior nodes outward when concave vs MA–apex chord (ASE papillary rule).
+
+    Phase-aware defaults (v1.5):
+      ED: depth_threshold_ratio=0.04
+      ES: depth_threshold_ratio=0.05
+    """
     if len(open_points) < 3:
         return list(open_points)
+
+    if depth_threshold_ratio is None:
+        depth_threshold_ratio = 0.05 if phase == "ES" else 0.04
 
     septal, lateral = annulus
     ma_mid = (
@@ -360,6 +436,23 @@ def _normalize_per_frame(rgb: np.ndarray) -> np.ndarray:
             normalized[..., channel] = (values - mean) / std
         else:
             normalized[..., channel] = values - mean
+    return normalized
+
+
+def _normalize_fixed(
+    rgb: np.ndarray,
+    mean: list[float],
+    std: list[float],
+) -> np.ndarray:
+    """Normalize with fixed dataset mean/std (v1.1)."""
+    normalized = np.empty_like(rgb, dtype=np.float32)
+    for channel in range(3):
+        m = mean[channel] * 255.0 if max(mean) <= 1.0 else mean[channel]
+        s = std[channel] * 255.0 if max(std) <= 1.0 else std[channel]
+        if s > 0.0:
+            normalized[..., channel] = (rgb[..., channel] - m) / s
+        else:
+            normalized[..., channel] = rgb[..., channel] - m
     return normalized
 
 

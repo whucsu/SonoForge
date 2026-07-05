@@ -167,13 +167,47 @@ class OnnxInferenceEngine:
             roi_xyxy=roi_xyxy,
             crop_mode=crop_mode,
         )
-        tensor = prepare_tensor(cropped)
+
+        fixed_mean, fixed_std = self._resolve_normalization_params()
+        tensor = prepare_tensor(cropped, fixed_mean=fixed_mean, fixed_std=fixed_std)
         outputs = self._session.run(
             [self._output_name],
             {self._input_name: tensor},
         )
-        mask = logits_to_mask(outputs[0])
+
+        logit_threshold = self._resolve_logit_threshold()
+        mask = logits_to_mask(outputs[0], threshold=logit_threshold)
         embedded = embed_echonet_mask(mask, transform)
         if embedded.shape != original_shape:
             return _upscale_mask(embedded, original_shape)
         return embedded
+
+    def _resolve_normalization_params(
+        self,
+    ) -> tuple[list[float] | None, list[float] | None]:
+        """Resolve fixed mean/std from manifest preprocessing config."""
+        if self._manifest is None:
+            return None, None
+        preprocessing = self._manifest.get("preprocessing", {})
+        if not isinstance(preprocessing, dict):
+            return None, None
+        mode = preprocessing.get("normalization_mode", "per_frame")
+        if mode == "per_frame":
+            return None, None
+        fixed_mean = preprocessing.get("fixed_mean")
+        fixed_std = preprocessing.get("fixed_std")
+        if fixed_mean is None or fixed_std is None:
+            return None, None
+        return list(fixed_mean), list(fixed_std)
+
+    def _resolve_logit_threshold(self) -> float | None:
+        """Resolve logit threshold from manifest inference config."""
+        if self._manifest is None:
+            return None
+        inference = self._manifest.get("inference", {})
+        if not isinstance(inference, dict):
+            return None
+        threshold = inference.get("logit_threshold")
+        if threshold is None:
+            return None
+        return float(threshold)

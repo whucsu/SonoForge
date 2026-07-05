@@ -64,10 +64,10 @@
     "layout": "NCHW",
     "color_order": "RGB",
     "value_range_before_norm": "0-255",
-    "normalization_mode": "per_frame",
-    "normalization_note": "EchoNet training uses dataset mean/std from train split. For vendor DICOM exports use per_frame until fixed_mean/std are calibrated on Tier 1 data.",
-    "fixed_mean": null,
-    "fixed_std": null
+    "normalization_mode": "fixed_if_available",
+    "normalization_note": "v1.5: fixed_if_available uses calibrated mean/std when non-null, falls back to per_frame. Calibrate via scripts/calibrate_echonet_norm.py.",
+    "fixed_mean": [0.124, 0.124, 0.124],
+    "fixed_std": [0.116, 0.116, 0.116]
   },
   "inference": {
     "providers": [
@@ -79,7 +79,9 @@
       "ED",
       "ES"
     ],
-    "auto_refine_after_segment": false,
+    "crop_mode": "center_square",
+    "logit_threshold": null,
+    "auto_refine_after_segment": true,
     "refine_step_stride": 3,
     "refine_smooth_blend": 0.62,
     "refine_smooth_iterations": 6

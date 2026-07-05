@@ -6,6 +6,11 @@
 
 ---
 
+## [2026-07-05 18:00] LV Auto ONNX Quality v1.5 — Per-Frame Segmentation
+- **Тип:** feature + fix
+- **Файлы:** `app_controller.py`, `segmentation_service.py`, `segment_roi.py`, `onnx_engine.py`, `model_manifest.json`, `ROADMAP.md`, `scripts/calibrate_echonet_norm.py`, `tests/unit/test_segmentation_service.py`
+- **Суть:** MP4 ROI fix (_resolve_segment_roi_bounds делегирует resolve_segment_roi_xyxy для всех форматов); DICOM sector trim (SequenceOfUltrasoundRegions уже корректен, trim убран); adaptive Otsu threshold в logits_to_mask (clamp [0.35, 0.65]); embed upscale order=1; fixed norm v1.1 (fixed_if_available mode); phase-aware papillary (ED/ES se_length_ratio и depth_threshold_ratio); auto_refine manifest flag only (default true); calibrate_echonet_norm.py скрипт; 7 новых unit-тестов. FIX: DICOM trim убран (режет апекс), cine возврат None если frozen ROI не закэширован.
+
 ## [2026-07-01 16:00] Playback timing, overlay i18n, test_i18n
 - **Тип:** fix + feature
 - **Файлы:** `app_controller.py`, `measurement_results_formatter.py`, `indexed_results_formatter.py`, `viewer_widget.py`, `tool_panel.py`, `main_window.py`, `locales/*.json`, `tests/unit/test_i18n.py`

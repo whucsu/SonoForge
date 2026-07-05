@@ -139,7 +139,7 @@ def test_prepare_tensor_per_frame_normalization() -> None:
 def test_logits_to_mask_from_logits() -> None:
     logits = np.array([[[[-2.0, -0.1, 2.0]]]], dtype=np.float32)
 
-    mask = logits_to_mask(logits)
+    mask = logits_to_mask(logits, threshold=0.5)
 
     assert mask.shape == (1, 3)
     assert mask.dtype == np.uint8
@@ -324,4 +324,88 @@ def test_exclude_papillary_concavities_leaves_smooth_arc_unchanged() -> None:
     points = [annulus[0], (50.0, 70.0), annulus[1]]
     result = exclude_papillary_concavities(points, annulus, apex)
     assert result[1][1] == pytest.approx(70.0, abs=2.0)
+
+
+def test_logits_to_mask_adaptive_otsu_clamped() -> None:
+    """Adaptive threshold must clamp to [0.35, 0.65]."""
+    low = np.full((4, 4), 0.3, dtype=np.float32)
+    high = np.full((4, 4), 0.7, dtype=np.float32)
+
+    mask_low = logits_to_mask(low)
+    mask_high = logits_to_mask(high)
+
+    assert mask_low.min() == 0
+    assert mask_high.max() == 1
+
+
+def test_logits_to_mask_fixed_threshold_overrides_adaptive() -> None:
+    probs = np.array([[0.4, 0.6], [0.55, 0.45]], dtype=np.float32)
+    mask = logits_to_mask(probs, threshold=0.5)
+    assert mask.tolist() == [[0, 1], [1, 0]]
+
+
+def test_embed_echonet_mask_uses_linear_interpolation() -> None:
+    """embed_echonet_mask with order=1 produces smooth upscaled mask."""
+    from echo_personal_tool.domain.services.segmentation_service import (
+        EchoNetCropTransform,
+        embed_echonet_mask,
+    )
+
+    mask = np.zeros((112, 112), dtype=np.uint8)
+    mask[40:72, 40:72] = 1
+    transform = EchoNetCropTransform(
+        frame_height=224,
+        frame_width=224,
+        crop_y0=0,
+        crop_x0=0,
+        crop_height=224,
+        crop_width=224,
+    )
+
+    embedded = embed_echonet_mask(mask, transform)
+
+    assert embedded.shape == (224, 224)
+    assert embedded.dtype == np.uint8
+    assert set(np.unique(embedded)).issubset({0, 1})
+
+
+def test_papillary_mask_cleanup_es_stronger_closing() -> None:
+    """ES phase uses larger SE than ED."""
+    mask = _mask_with_mid_notch(height=100, width=80)
+    cleaned_ed = papillary_mask_cleanup(mask, phase="ED")
+    cleaned_es = papillary_mask_cleanup(mask, phase="ES")
+
+    assert cleaned_ed.sum() <= cleaned_es.sum() + 10
+
+
+def test_exclude_papillary_concavities_es_higher_depth_threshold() -> None:
+    """ES phase uses higher depth_threshold_ratio (0.05 vs 0.04)."""
+    points, annulus, apex = _arc_with_inward_bump()
+    result_ed = exclude_papillary_concavities(points, annulus, apex, phase="ED")
+    result_es = exclude_papillary_concavities(points, annulus, apex, phase="ES")
+
+    assert result_ed[0] == annulus[0]
+    assert result_es[0] == annulus[0]
+
+
+def test_prepare_tensor_fixed_normalization() -> None:
+    frame = np.full((32, 32, 3), 128, dtype=np.uint8)
+
+    tensor = prepare_tensor(
+        frame,
+        target_size=32,
+        fixed_mean=[0.124, 0.124, 0.124],
+        fixed_std=[0.116, 0.116, 0.116],
+    )
+
+    assert tensor.shape == (1, 3, 32, 32)
+    assert tensor.dtype == np.float32
+
+
+def test_prepare_tensor_fixed_norm_falls_back_to_per_frame_when_none() -> None:
+    frame = np.full((32, 32, 3), 128, dtype=np.uint8)
+
+    tensor = prepare_tensor(frame, target_size=32, fixed_mean=None, fixed_std=None)
+
+    assert tensor.shape == (1, 3, 32, 32)
 

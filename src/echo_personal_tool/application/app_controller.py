@@ -1788,13 +1788,17 @@ class AppController(QObject):
         media_format: str = "dicom",
         phase: str | None = None,
     ) -> tuple[float, float, float, float] | None:
-        """B-mode ROI for ONNX: DICOM tags for DICOM; full frame for cine."""
+        """B-mode ROI for ONNX: DICOM tags for DICOM; frozen ROI or None for cine."""
         if media_format == "dicom":
             return resolve_segment_roi_xyxy(
                 frame,
                 media_format=media_format,
                 instance_path=instance_path,
             )
+        # Cine: use frozen ROI from frame 0, or None (full frame)
+        frozen = self._frozen_cine_segment_roi()
+        if frozen is not None:
+            return frozen
         return None
 
     def _open_arc_from_cleaned_mask(
@@ -1852,7 +1856,7 @@ class AppController(QObject):
         if not isinstance(mask, np.ndarray):
             return
 
-        cleaned_mask = papillary_mask_cleanup(mask)
+        cleaned_mask = papillary_mask_cleanup(mask, phase=phase)
         if int(np.count_nonzero(cleaned_mask)) < 80:
             self.status_message.emit(
                 tr("app.segmentation_mask_too_small")
@@ -1885,11 +1889,9 @@ class AppController(QObject):
                 return
             apex = apex_point(open_points, annulus)
 
-        refined_points = exclude_papillary_concavities(open_points, annulus, apex)
+        refined_points = exclude_papillary_concavities(open_points, annulus, apex, phase=phase)
 
-        if self._current_frame_pixels is not None and (
-            is_cine or self._should_auto_refine_after_segment()
-        ):
+        if self._current_frame_pixels is not None and self._should_auto_refine_after_segment():
             from echo_personal_tool.domain.services.mbs_lite_service import refine_open_arc_contour
 
             instance_uid = (
