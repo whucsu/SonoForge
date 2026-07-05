@@ -115,6 +115,10 @@
     "apex_max_shift_ratio_es": 0.015,
     "annulus_max_shift_ratio_ed": 0.015,
     "annulus_max_shift_ratio_es": 0.012,
-    "apex_direction_lock": true
+    "apex_direction_lock": true,
+    "confidence_weighted": true,
+    "outlier_rejection": true,
+    "max_neighbor_shift_ratio": 0.15,
+    "min_confidence_score": 0.3
   }
 }

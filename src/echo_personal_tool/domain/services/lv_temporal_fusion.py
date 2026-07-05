@@ -167,6 +167,95 @@ def apply_apex_direction_lock(
     return fused_apex
 
 
+def compute_neighbor_confidence(
+    anchor_contour: Contour,
+    neighbor_contour: Contour,
+    *,
+    phase: str,
+) -> float:
+    """Score 0.0–1.0 based on landmark stability and shape consistency.
+
+    Higher score = neighbor is more similar to anchor = should contribute more.
+    """
+    if (
+        anchor_contour.mitral_annulus is None
+        or neighbor_contour.mitral_annulus is None
+        or len(anchor_contour.points) < 3
+        or len(neighbor_contour.points) < 3
+    ):
+        return 0.0
+
+    # Landmark stability: MA midpoint shift relative to MA length
+    a_septal, a_lateral = anchor_contour.mitral_annulus
+    n_septal, n_lateral = neighbor_contour.mitral_annulus
+    a_ma_mid = ((a_septal[0] + a_lateral[0]) / 2, (a_septal[1] + a_lateral[1]) / 2)
+    n_ma_mid = ((n_septal[0] + n_lateral[0]) / 2, (n_septal[1] + n_lateral[1]) / 2)
+    ma_len = _ma_length(anchor_contour.mitral_annulus)
+    if ma_len < 1e-6:
+        return 0.0
+    ma_shift = math.hypot(a_ma_mid[0] - n_ma_mid[0], a_ma_mid[1] - n_ma_mid[1])
+    landmark_score = max(0.0, 1.0 - (ma_shift / ma_len) * 2.0)
+
+    # Shape consistency: arc span ratio
+    a_span = _arc_span(anchor_contour.points)
+    n_span = _arc_span(neighbor_contour.points)
+    if a_span < 1e-6 or n_span < 1e-6:
+        return landmark_score
+    span_ratio = min(a_span, n_span) / max(a_span, n_span)
+    shape_score = span_ratio
+
+    return 0.6 * landmark_score + 0.4 * shape_score
+
+
+def _arc_span(points: list[tuple[float, float]]) -> float:
+    """Max pairwise distance in point list."""
+    if len(points) < 2:
+        return 0.0
+    max_span = 0.0
+    for i, first in enumerate(points):
+        for second in points[i + 1:]:
+            span = math.hypot(second[0] - first[0], second[1] - first[1])
+            max_span = max(max_span, span)
+    return max_span
+
+
+def reject_outlier_neighbors(
+    anchor_contour: Contour,
+    neighbor_contours: dict[int, Contour],
+    *,
+    max_shift_ratio: float = 0.15,
+) -> dict[int, Contour]:
+    """Remove neighbors whose landmarks deviate more than max_shift_ratio * long_axis."""
+    if anchor_contour.mitral_annulus is None:
+        return neighbor_contours
+    ma_len = _ma_length(anchor_contour.mitral_annulus)
+    if ma_len < 1e-6:
+        return neighbor_contours
+    max_shift = max_shift_ratio * ma_len
+    center_apex = anchor_contour.apex_landmark
+
+    accepted: dict[int, Contour] = {}
+    for idx, nc in neighbor_contours.items():
+        if nc.mitral_annulus is None:
+            continue
+        # Check MA midpoint shift
+        a_mid = _ma_centroid(anchor_contour.mitral_annulus)
+        n_mid = _ma_centroid(nc.mitral_annulus)
+        ma_shift = math.hypot(a_mid[0] - n_mid[0], a_mid[1] - n_mid[1])
+        if ma_shift > max_shift:
+            continue
+        # Check apex shift if both have apex landmarks
+        if center_apex is not None and nc.apex_landmark is not None:
+            apex_shift = math.hypot(
+                center_apex[0] - nc.apex_landmark[0],
+                center_apex[1] - nc.apex_landmark[1],
+            )
+            if apex_shift > max_shift:
+                continue
+        accepted[idx] = nc
+    return accepted
+
+
 def temporal_fuse(
     center_mask: np.ndarray,
     neighbor_masks: dict[int, np.ndarray],
@@ -245,6 +334,42 @@ def temporal_fuse(
             num_nodes=c.num_nodes, frame_index=c.frame_index,
             sop_instance_uid=c.sop_instance_uid,
         )
+
+    # --- 1b. Outlier rejection ---
+    if config.outlier_rejection:
+        aligned_neighbor_contours = reject_outlier_neighbors(
+            center_contour, aligned_neighbor_contours,
+            max_shift_ratio=config.max_neighbor_shift_ratio,
+        )
+        # Rebuild valid_neighbor_ids and aligned_masks after rejection
+        valid_neighbor_ids = sorted(aligned_neighbor_contours.keys())
+        aligned_masks = [center_mask]
+        alignment_deltas_filtered: dict[int, tuple[float, float]] = {}
+        for i in valid_neighbor_ids:
+            c = neighbor_contours[i]
+            if c.mitral_annulus is not None:
+                t_centroid = _ma_centroid(c.mitral_annulus)
+                dx = center_centroid[0] - t_centroid[0]
+                dy = center_centroid[1] - t_centroid[1]
+                alignment_deltas_filtered[i] = (dx, dy)
+                aligned_masks.append(align_mask_to_anchor(neighbor_masks[i], t_centroid, center_centroid))
+            else:
+                alignment_deltas_filtered[i] = (0.0, 0.0)
+                aligned_masks.append(neighbor_masks[i])
+
+    # --- 1c. Compute neighbor confidence scores ---
+    confidence_scores: dict[int, float] = {}
+    if config.confidence_weighted:
+        for i in valid_neighbor_ids:
+            nc = aligned_neighbor_contours.get(i, neighbor_contours[i])
+            confidence_scores[i] = compute_neighbor_confidence(
+                center_contour, nc, phase=phase,
+            )
+        # Filter by minimum confidence
+        valid_neighbor_ids = [
+            i for i in valid_neighbor_ids
+            if confidence_scores.get(i, 0.0) >= config.min_confidence_score
+        ]
 
     # --- 2. Mask vote fusion ---
     threshold = min(config.vote_threshold, len(aligned_masks))

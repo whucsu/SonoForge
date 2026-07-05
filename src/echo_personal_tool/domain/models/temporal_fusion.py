@@ -20,6 +20,10 @@ class TemporalFusionConfig:
     annulus_max_shift_ratio_ed: float = 0.015
     annulus_max_shift_ratio_es: float = 0.012
     apex_direction_lock: bool = True
+    confidence_weighted: bool = True
+    outlier_rejection: bool = True
+    max_neighbor_shift_ratio: float = 0.15
+    min_confidence_score: float = 0.3
 
     def max_node_shift_ratio(self, phase: str) -> float:
         return self.max_node_shift_ratio_es if phase == "ES" else self.max_node_shift_ratio_ed
