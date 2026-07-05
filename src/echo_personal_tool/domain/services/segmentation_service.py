@@ -224,8 +224,10 @@ def papillary_mask_cleanup(
     Phase-aware parameters (v1.5):
       ED: se_length_ratio=0.04, clamp [5, 15]
       ES: se_length_ratio=0.06, clamp [6, 18]
+
+    When long_axis_hint is provided, the SE ellipse is rotated to align
+    with the LV long axis (septal→apex or annulus→apex direction).
     """
-    del long_axis_hint  # v1: derive from mask bbox
     binary = np.asarray(mask) > 0
     if not binary.any():
         return np.zeros_like(binary, dtype=np.uint8)
@@ -241,13 +243,27 @@ def papillary_mask_cleanup(
 
     se_len = int(np.clip(se_ratio * axis_length, se_min, se_max))
 
-    cy, cx = se_len // 2, se_len // 2
-    y, x = np.ogrid[:se_len, :se_len]
+    # Compute rotation angle from long_axis_hint or mask bbox
+    angle = 0.0
+    if long_axis_hint is not None:
+        (ax0, ay0), (ax1, ay1) = long_axis_hint
+        angle = math.degrees(math.atan2(ay1 - ay0, ax1 - ax0))
+    else:
+        # Derive from mask bbox: top (narrow) → bottom (wide) = long axis
+        mid_x = float(xs.mean())
+        angle = 90.0  # default: vertical (top→bottom)
+
+    # Build rotated elliptical SE
     ry = max(se_len // 2, 1)
-    rx = max(se_len // 2, 1)
-    structure = (
-        ((y - cy) / ry) ** 2 + ((x - cx) / rx) ** 2 <= 1.0
-    ).astype(np.uint8)
+    rx = max(se_len // 3, 1)  # narrower along short axis
+    cy, cx = se_len // 2, se_len // 2
+    y_grid, x_grid = np.ogrid[:se_len, :se_len]
+    # Rotate grid points around center
+    rad = math.radians(angle)
+    cos_a, sin_a = math.cos(rad), math.sin(rad)
+    xr = (x_grid - cx) * cos_a + (y_grid - cy) * sin_a
+    yr = -(x_grid - cx) * sin_a + (y_grid - cy) * cos_a
+    structure = ((xr / rx) ** 2 + (yr / ry) ** 2 <= 1.0).astype(np.uint8)
 
     closed = ndimage.binary_closing(binary, structure=structure)
     filled = ndimage.binary_fill_holes(closed)

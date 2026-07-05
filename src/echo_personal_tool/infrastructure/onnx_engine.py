@@ -102,7 +102,7 @@ def _upscale_mask(mask: np.ndarray, target_shape: tuple[int, int]) -> np.ndarray
 
     zoom_y = target_height / mask.shape[0]
     zoom_x = target_width / mask.shape[1]
-    upscaled = ndimage.zoom(mask.astype(np.float32), (zoom_y, zoom_x), order=0)
+    upscaled = ndimage.zoom(mask.astype(np.float32), (zoom_y, zoom_x), order=1)
     return (upscaled >= 0.5).astype(np.uint8)
 
 

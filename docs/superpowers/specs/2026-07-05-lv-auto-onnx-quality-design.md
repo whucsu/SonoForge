@@ -115,6 +115,8 @@ After `SequenceOfUltrasoundRegions` bounds (or heuristic fallback), apply `_trim
 
 Parameters: `intensity_percentile=35`, `trim_bottom=True`, `pad_px=6` (existing defaults).
 
+> **v1.5 deviation (2026-07-05):** `_trim_sector_content_bounds` was implemented then **reverted** because it cut the LV apex on real DICOM data. `SequenceOfUltrasoundRegions` bounds are already correct for DICOM; the trim is only useful for cine/MP4 where `_trim_sector_content_bounds` is applied in `resolve_cine_segment_roi_xyxy`. **Decision: trim is NOT applied to DICOM.** Keep this note for future benchmark — re-enable if vendor data shows black margins in US regions.
+
 ### 1.3 Crop mode (manifest)
 
 **File:** `models/model_manifest.json`
@@ -133,6 +135,8 @@ Implement via existing `EchoNetCropMode` in `segmentation_service.crop_frame_for
 ### 1.4 Debug overlay (developer)
 
 When viewer debug overlay is visible (`toggle_debug_overlay`), draw ROI rectangle used for last auto-segment (store last `roi_xyxy` on controller). Not user-facing in production UI.
+
+> **v1.5 deviation (2026-07-05):** Not implemented — developer-only feature, low priority. Can be added in a follow-up if needed for visual ROI debugging.
 
 ---
 
