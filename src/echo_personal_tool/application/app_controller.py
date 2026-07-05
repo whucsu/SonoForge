@@ -2167,12 +2167,12 @@ class AppController(QObject):
         worker.signals.finished.connect(
             partial(
                 self._on_neighbor_segment_finished,
-                phase=phase,
                 view=view,
                 chamber=chamber,
                 instance_path=instance_path,
                 neighbor_idx=neighbor_idx,
                 original_shape=original_shape,
+                phase=phase,
             )
         )
         worker.signals.failed.connect(
@@ -2185,13 +2185,14 @@ class AppController(QObject):
 
     def _on_neighbor_segment_finished(
         self,
+        mask: object,
+        *,
         phase: str,
         view: str,
         chamber: str,
         instance_path: Path | None,
         neighbor_idx: int,
         original_shape: tuple[int, int],
-        mask: object,
     ) -> None:
         """Neighbor ONNX finished — store mask and contour, try fusion."""
         if not isinstance(mask, np.ndarray):
