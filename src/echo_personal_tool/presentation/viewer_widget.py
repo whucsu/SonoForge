@@ -1218,6 +1218,8 @@ class ViewerWidget(QWidget):
             self._debug_overlay_label.show()
         else:
             self._debug_overlay_label.hide()
+            self._draw_debug_roi_rect(None)
+        self._debug_roi_item: pg.PlotDataItem | None = None
 
     def _update_debug_overlay(self) -> None:
         if not self._debug_overlay_visible:
@@ -1240,6 +1242,11 @@ class ViewerWidget(QWidget):
             inst = self._current_state.instance
             lines.append(f"Format: {inst.media_format}")
             lines.append(f"Frames: {inst.number_of_frames}")
+        # ROI info
+        roi = self._get_last_segment_roi()
+        if roi is not None:
+            x0, y0, x1, y1 = roi
+            lines.append(f"ROI: {int(x0)},{int(y0)}-{int(x1)},{int(y1)}")
         self._debug_overlay_label.setText("\n".join(lines))
         self._debug_overlay_label.adjustSize()
         geo_viewer = self._graphics.geometry()
@@ -1248,6 +1255,39 @@ class ViewerWidget(QWidget):
             geo_viewer.y() + 4,
         )
         self._debug_overlay_label.raise_()
+        # Draw ROI rectangle on ViewBox
+        self._draw_debug_roi_rect(roi)
+
+    def _get_last_segment_roi(self) -> tuple[float, float, float, float] | None:
+        """Get last auto-segment ROI from controller (if available)."""
+        if hasattr(self, '_controller_ref') and self._controller_ref is not None:
+            return self._controller_ref.last_segment_roi_xyxy
+        return None
+
+    def _draw_debug_roi_rect(self, roi: tuple[float, float, float, float] | None) -> None:
+        """Draw ROI rectangle on ViewBox when debug overlay is visible."""
+        # Remove previous ROI rect
+        if hasattr(self, '_debug_roi_item') and self._debug_roi_item is not None:
+            self._view.removeItem(self._debug_roi_item)
+            self._debug_roi_item = None
+
+        if roi is None or not self._debug_overlay_visible:
+            return
+
+        x0, y0, x1, y1 = roi
+        pen = pg.mkPen("#ff0000", width=1, style=Qt.PenStyle.DashLine)
+        rect_item = pg.PlotDataItem(
+            pen=pen,
+            connect="all",
+        )
+        rect_item.setZValue(25)
+        # Draw rectangle as closed polygon
+        rect_item.setData(
+            [x0, x1, x1, x0, x0],
+            [y0, y0, y1, y1, y0],
+        )
+        self._view.addItem(rect_item)
+        self._debug_roi_item = rect_item
 
     def _mark_results_overlay_custom_position(self) -> None:
         self._results_overlay_custom_position = True

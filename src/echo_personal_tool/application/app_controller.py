@@ -175,6 +175,8 @@ class AppController(QObject):
         self._auto_segment_phase: str | None = None
         self._auto_segment_view: str = "A4C"
         self._auto_segment_chamber: str = "LV"
+        # Debug ROI overlay
+        self._last_segment_roi_xyxy: tuple[float, float, float, float] | None = None
         # Temporal fusion state
         self._fusion_in_progress = False
         self._fusion_config: object | None = None
@@ -208,6 +210,10 @@ class AppController(QObject):
     @property
     def fusion_result(self) -> TemporalFusionResult | None:
         return self._fusion_result
+
+    @property
+    def last_segment_roi_xyxy(self) -> tuple[float, float, float, float] | None:
+        return self._last_segment_roi_xyxy
 
     def is_scroll_active(self) -> bool:
         return self._scroll_active
@@ -687,6 +693,7 @@ class AppController(QObject):
             media_format=media_format,
             phase=phase,
         )
+        self._last_segment_roi_xyxy = roi_xyxy
         crop_mode = echonet_crop_mode_for_media(media_format)
 
         if media_format != "dicom" and frame.ndim == 3 and frame.shape[2] == 3:
