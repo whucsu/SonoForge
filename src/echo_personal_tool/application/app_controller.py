@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import sys
 from functools import partial
@@ -707,8 +708,57 @@ class AppController(QObject):
 
         gold_path.parent.mkdir(parents=True, exist_ok=True)
         save_gold(gold_path, merged)
+
+        # Auto-update manifest
+        self._update_gold_manifest(gold_root, study_uid, instance, frame_index, phase)
+
         self.status_message.emit(
             tr("app.gold_saved", phase=phase, frame=frame_index, path=str(gold_path))
+        )
+
+    def _update_gold_manifest(
+        self,
+        gold_root: Path,
+        study_uid: str,
+        instance,
+        frame_index: int,
+        phase: str,
+    ) -> None:
+        """Add/update study entry in bench/tier1/manifest.json."""
+        manifest_path = gold_root / "manifest.json"
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        else:
+            manifest = {"studies": []}
+
+        studies = manifest.get("studies", [])
+        existing = None
+        for s in studies:
+            if s.get("study_id") == study_uid:
+                existing = s
+                break
+
+        if existing is None:
+            entry = {
+                "study_id": study_uid,
+                "instance_path": str(instance.path),
+                "tags": {},
+            }
+            studies.append(entry)
+        else:
+            entry = existing
+
+        # Update ed_frame / es_frame
+        if phase == "ED":
+            entry["ed_frame"] = frame_index
+        elif phase == "ES":
+            entry["es_frame"] = frame_index
+
+        manifest["studies"] = studies
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False),
+            encoding="utf-8",
         )
 
     def _clear_fusion_state(self) -> None:
