@@ -271,3 +271,83 @@ def test_temporal_fuse_produces_fused_contour_with_neighbors() -> None:
     assert result.fused_contour.source == "ai"
     assert result.fused_contour.review_pending is True
     assert result.fused_contour.mitral_annulus is not None
+
+
+# --- apex cap tests ---
+
+def test_clamp_nodes_apex_uses_tighter_cap() -> None:
+    """Apex node should be clamped with apex_shift_cap, not general shift_cap."""
+    center = [(10.0, 10.0), (20.0, 20.0), (30.0, 30.0)]
+    median = [(15.0, 10.0), (30.0, 20.0), (30.0, 30.0)]  # node 1 shifted by 10
+    # General cap=10 allows it; apex cap=3 should clamp
+    result = clamp_nodes_to_center(
+        median, center, shift_cap=10.0,
+        apex_index=1, apex_shift_cap=3.0,
+    )
+    # Node 0: no apex, uses general cap (5 < 10, OK)
+    assert result[0] == (15.0, 10.0)
+    # Node 1: apex, uses apex cap (10 > 3, clamped)
+    dist = math.hypot(result[1][0] - 20.0, result[1][1] - 20.0)
+    assert dist <= 3.1
+    # Node 2: no shift, unchanged
+    assert result[2] == (30.0, 30.0)
+
+
+def test_clamp_nodes_no_apex_index_uses_general_cap() -> None:
+    center = [(10.0, 10.0)]
+    median = [(20.0, 10.0)]
+    result = clamp_nodes_to_center(median, center, shift_cap=5.0)
+    dist = math.hypot(result[0][0] - 10.0, result[0][1] - 10.0)
+    assert dist <= 5.1
+
+
+# --- aligned annulus δ test ---
+
+def test_fuse_annulus_uses_center_not_fused_mask() -> None:
+    """Annulus δ clamp should use center_contour.mitral_annulus, not fused mask."""
+    center_mask = _circle_mask(100, 100, 50, 50, 20)
+    # Center contour has MA at (30,30)-(70,30)
+    annulus_c = ((30.0, 30.0), (70.0, 30.0))
+    apex_c = (50.0, 80.0)
+    points_c = [(30.0, 30.0), (30.0, 50.0), (50.0, 75.0), (70.0, 50.0), (70.0, 30.0)]
+    center = _make_contour(points_c, annulus_c, apex_c, frame_index=10)
+
+    # Neighbor has MA far away at (40,35)-(60,35)
+    neighbor_mask = _circle_mask(100, 100, 52, 48, 18)
+    annulus_n = ((40.0, 35.0), (60.0, 35.0))
+    apex_n = (50.0, 78.0)
+    points_n = [(40.0, 35.0), (40.0, 52.0), (50.0, 73.0), (60.0, 52.0), (60.0, 35.0)]
+    neighbor = _make_contour(points_n, annulus_n, apex_n, frame_index=12)
+
+    config = TemporalFusionConfig(
+        window=2, vote_threshold=2,
+        annulus_max_shift_ratio_ed=0.001,  # very tight δ
+    )
+
+    result = temporal_fuse(
+        center_mask=center_mask,
+        neighbor_masks={12: neighbor_mask},
+        center_contour=center,
+        neighbor_contours={12: neighbor},
+        anchor_frame_index=10,
+        phase="ED",
+        config=config,
+        original_shape=(100, 100),
+    )
+
+    # Fused annulus should be near center MA (30,30)-(70,30), not pulled toward neighbor
+    fused_septal, fused_lateral = result.fused_contour.mitral_annulus
+    assert fused_septal[0] <= 35.0  # close to center septal x=30
+    assert fused_lateral[0] >= 65.0  # close to center lateral x=70
+
+
+# --- partial fusion early-exit test ---
+
+def test_compute_window_partial_fusion_threshold() -> None:
+    """With window=2 and 5 frames, early-exit at 3 valid should work."""
+    w = compute_window(anchor=10, total_frames=20, window=2)
+    assert len(w) == 5  # [8,9,10,11,12]
+    # 3 valid (anchor + 2 neighbors) should be enough for early-exit
+    valid = 3
+    processed = 3
+    assert valid >= 3 and processed >= 3

@@ -2263,13 +2263,25 @@ class AppController(QObject):
         self._try_complete_temporal_fusion()
 
     def _try_complete_temporal_fusion(self) -> None:
-        """If all window frames processed (or enough), run fusion."""
+        """If all window frames processed (or enough valid), run fusion.
+
+        Early-exit: if ≥3 valid frames (including anchor) have completed,
+        proceed without waiting for remaining frames (spec §1 partial fusion).
+        """
         if not self._fusion_in_progress:
             return
 
         expected = len(self._fusion_window)
         processed = len(self._fusion_processed)
-        if processed < expected:
+        valid = len(self._fusion_masks)  # successful segments
+
+        # Full completion
+        if processed >= expected:
+            pass
+        # Early-exit: ≥3 valid frames completed (anchor + ≥2 neighbors)
+        elif valid >= 3 and processed >= 3:
+            pass
+        else:
             return
 
         self._fusion_in_progress = False
@@ -2312,6 +2324,8 @@ class AppController(QObject):
                 self._current_frame_pixels, fused_contour, cine=is_cine,
             )
             fused_contour = refined
+            # Keep fusion_result in sync with refined contour
+            self._fusion_result = dataclasses.replace(result, fused_contour=fused_contour)
 
         # Replace pending contour with fused contour
         contours = [
