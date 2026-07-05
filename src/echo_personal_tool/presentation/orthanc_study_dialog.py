@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
+    QDialogButtonBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -22,10 +25,19 @@ from PySide6.QtWidgets import (
 
 from echo_personal_tool.application.workers.orthanc_download_worker import OrthancDownloadWorker
 from echo_personal_tool.domain.models import StudyMetadata
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.domain.models.orthanc import SeriesInfo, StudyInfo
-from echo_personal_tool.domain.ports import DicomWebClient
+from echo_personal_tool.domain.ports import DicomWebClient, QuerySource
+from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
 from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClient
-from echo_personal_tool.infrastructure.server_settings import ServerSettings, load_server_settings
+from echo_personal_tool.infrastructure.server_settings import (
+    ServerSettings,
+    load_server_settings,
+    save_server_settings,
+)
+from echo_personal_tool.infrastructure.server_client_factory import (
+    make_dicom_retrieve_service,
+)
 
 _STUDY_UID_ROLE = Qt.ItemDataRole.UserRole
 _SERIES_UID_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -46,14 +58,22 @@ class OrthancStudyDialog(QDialog):
         base_url: str | None = None,
         username: str | None = None,
         password: str | None = None,
+        query_service=None,  # DicomQueryService | None
     ) -> None:
         super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self._client = client
         self._cache = cache
         self._server_settings = server_settings
         self._base_url = base_url
         self._username = username
         self._password = password
+        self._query_service = query_service
+        self._retrieve_service = (
+            make_dicom_retrieve_service(server_settings)
+            if server_settings is not None
+            else None
+        )
         self._result: tuple[str, str] | None = None
         self._downloading = False
         self._worker: OrthancDownloadWorker | None = None
@@ -68,20 +88,31 @@ class OrthancStudyDialog(QDialog):
         self._force_close_timer.setSingleShot(True)
         self._force_close_timer.timeout.connect(self._force_close_if_still_downloading)
 
-        self.setWindowTitle("Загрузка с сервера")
+        self.setWindowTitle(tr("dialog.orthanc.title"))
         self.resize(800, 520)
 
         self._search_edit = QLineEdit()
-        self._search_edit.setPlaceholderText("Имя пациента")
-        self._find_btn = QPushButton("Найти")
+        self._search_edit.setPlaceholderText(tr("orthanc.patient_name_placeholder"))
+        self._find_btn = QPushButton(tr("orthanc.find"))
         self._find_btn.clicked.connect(self._on_find)
+
+        # Source selector (DICOMweb / DIMSE / Auto)
+        self._source_combo = QComboBox()
+        self._source_combo.addItem(tr("server_settings.query_source_dicomweb"), "dicomweb")
+        self._source_combo.addItem(tr("server_settings.query_source_dimse"), "dimse")
+        self._source_combo.addItem(tr("server_settings.query_source_auto"), "auto")
+        if self._query_service is not None:
+            source_idx = self._source_combo.findData(self._query_service.source.value)
+            self._source_combo.setCurrentIndex(max(source_idx, 0))
+        self._source_combo.currentIndexChanged.connect(self._on_source_changed)
 
         search_row = QHBoxLayout()
         search_row.addWidget(self._search_edit, stretch=1)
+        search_row.addWidget(self._source_combo)
         search_row.addWidget(self._find_btn)
 
         self._tree = QTreeWidget()
-        self._tree.setHeaderLabels(["Пациент", "Дата", "Исследование / Серия"])
+        self._tree.setHeaderLabels([tr("orthanc.table_patient"), tr("orthanc.table_date"), tr("orthanc.table_study_series")])
         self._tree.setColumnWidth(0, 200)
         self._tree.setColumnWidth(1, 100)
         self._tree.setSortingEnabled(True)
@@ -94,11 +125,11 @@ class OrthancStudyDialog(QDialog):
         self._progress = QProgressBar()
         self._progress.hide()
 
-        self._load_btn = QPushButton("Загрузить")
+        self._load_btn = QPushButton(tr("orthanc.load"))
         self._load_btn.setEnabled(False)
         self._load_btn.clicked.connect(self._on_load)
 
-        self._cancel_btn = QPushButton("Отмена")
+        self._cancel_btn = QPushButton(tr("orthanc.cancel"))
         self._cancel_btn.clicked.connect(self._on_cancel)
 
         buttons_row = QHBoxLayout()
@@ -106,7 +137,32 @@ class OrthancStudyDialog(QDialog):
         buttons_row.addWidget(self._load_btn)
         buttons_row.addWidget(self._cancel_btn)
 
+        # Custom title bar for frameless dialog
+        from PySide6.QtWidgets import QSizePolicy
+        self._drag_pos: QPoint | None = None
+        title_bar = QWidget()
+        title_bar.setFixedHeight(32)
+        title_bar.setStyleSheet("background: #1a2332;")
+        tb_layout = QHBoxLayout(title_bar)
+        tb_layout.setContentsMargins(8, 0, 4, 0)
+        tb_layout.setSpacing(0)
+        title_label = QLabel(tr("dialog.orthanc.title"))
+        title_label.setStyleSheet("color: #f1f5f9; font-weight: bold; border: none;")
+        tb_layout.addWidget(title_label)
+        tb_layout.addStretch(1)
+        btn_close = QPushButton("\u2715")
+        btn_close.setFixedSize(28, 24)
+        btn_close.setStyleSheet(
+            "QPushButton { color: #94a3b8; border: none; font-size: 14px; }"
+            "QPushButton:hover { color: #f1f5f9; background: #e74c3c; border-radius: 3px; }"
+        )
+        btn_close.clicked.connect(self.reject)
+        tb_layout.addWidget(btn_close)
+
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(title_bar)
         layout.addLayout(search_row)
         layout.addWidget(self._tree, stretch=1)
         layout.addWidget(self._status_label)
@@ -121,6 +177,20 @@ class OrthancStudyDialog(QDialog):
         log.info("[DLG] _check_ping done, loading studies")
         self._load_studies()
         log.info("[DLG] _load_studies done, tree items=%d", self._tree.topLevelItemCount())
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and event.position().y() < 32:
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_pos is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._drag_pos = None
+        super().mouseReleaseEvent(event)
 
     def result_data(self) -> tuple[str, str] | None:
         """Return (session_id, study_uid) after successful download, else None."""
@@ -150,12 +220,13 @@ class OrthancStudyDialog(QDialog):
         super().reject()
 
     def accept(self) -> None:
+        from echo_personal_tool.presentation.ui_animations import hide_dialog_animated
         log.info("[DLG] accept: result=%s downloaded=%d", self._result, len(self._downloaded_studies))
         try:
             self._release_client()
         except Exception:  # noqa: BLE001
             pass
-        super().accept()
+        hide_dialog_animated(self, on_done=super().accept)
 
     def _release_client(self) -> None:
         if self._client_closed:
@@ -165,24 +236,54 @@ class OrthancStudyDialog(QDialog):
             self._client_closed = True
 
     def _check_ping(self) -> None:
+        # Skip DICOMweb ping in DIMSE-only mode
+        if self._server_settings and self._server_settings.dimse_enabled:
+            if not self._server_settings.url or self._server_settings.use_mock:
+                self._status_label.setText(tr("orthanc.dimse_info_banner"))
+                return
         if self._client.ping():
-            self._status_label.setText("Сервер доступен")
+            self._status_label.setText(tr("orthanc.server_available"))
             return
-        self._status_label.setText("Сервер недоступен — mock или проверьте настройки")
+        self._status_label.setText(tr("orthanc.server_unavailable"))
         QMessageBox.warning(
             self,
-            "Сервер",
-            "Не удалось подключиться к серверу Orthanc.\n"
-            "Можно продолжить с mock-данными, если включён в настройках.",
+            tr("orthanc.connect_error.title"),
+            tr("orthanc.connect_error.body"),
         )
+
+    def _on_source_changed(self) -> None:
+        source_val = self._source_combo.currentData()
+        if self._query_service is not None and source_val:
+            self._query_service.source = QuerySource(source_val)
+        if source_val:
+            self._persist_query_source(str(source_val))
+        # Show info if DIMSE selected — download via C-GET
+        if source_val == "dimse":
+            self._status_label.setText(
+                tr("orthanc.dimse_info_banner")
+            )
+
+    def _persist_query_source(self, source_val: str) -> None:
+        if source_val not in {s.value for s in QuerySource}:
+            return
+        current = load_server_settings()
+        if current.query_source == source_val:
+            return
+        updated = replace(current, query_source=source_val)
+        save_server_settings(updated)
+        if self._server_settings is not None:
+            self._server_settings = replace(self._server_settings, query_source=source_val)
 
     def _load_studies(self) -> None:
         text = self._search_edit.text().strip()
         patient_name = text or None
         try:
-            studies = self._client.query_studies(patient_name)
+            if self._query_service is not None:
+                studies = self._query_service.query_studies(patient_name=patient_name)
+            else:
+                studies = self._client.query_studies(patient_name=patient_name)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(self, "Поиск", f"Ошибка запроса исследований: {exc}")
+            QMessageBox.warning(self, tr("orthanc.find"), tr("orthanc.find_error", message=str(exc)))
             return
 
         studies = sorted(
@@ -209,11 +310,13 @@ class OrthancStudyDialog(QDialog):
     def _series_label(self, series: SeriesInfo) -> str:
         parts = [series.modality, series.description]
         if series.instance_count is not None:
-            parts.append(f"{series.instance_count} инст.")
+            parts.append(f"{series.instance_count} {tr('orthanc.instances_suffix')}")
         return " — ".join(part for part in parts if part)
 
     def _on_find(self) -> None:
-        self._load_studies()
+        from echo_personal_tool.presentation.ui_animations import loading_button
+        with loading_button(self._find_btn, tr("orthanc.searching")):
+            self._load_studies()
 
     def _on_item_expanded(self, item: QTreeWidgetItem) -> None:
         if item.parent() is not None:
@@ -226,9 +329,12 @@ class OrthancStudyDialog(QDialog):
             return
 
         try:
-            series_list = self._client.query_series(str(study_uid))
+            if self._query_service is not None:
+                series_list = self._query_service.query_series(str(study_uid))
+            else:
+                series_list = self._client.query_series(str(study_uid))
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(self, "Серии", f"Ошибка запроса серий: {exc}")
+            QMessageBox.warning(self, tr("orthanc.series"), tr("orthanc.series_error", message=str(exc)))
             return
 
         self._tree.blockSignals(True)
@@ -269,6 +375,7 @@ class OrthancStudyDialog(QDialog):
         return result
 
     def _on_load(self) -> None:
+        from echo_personal_tool.presentation.ui_animations import set_button_loading
         all_series = self._collect_all_checked_series()
         log.info("[DLG] _on_load: checked_series=%d", len(all_series))
         if not all_series:
@@ -278,15 +385,15 @@ class OrthancStudyDialog(QDialog):
         self._session_id = session_id
         self._downloading = True
         self._close_pending = False
-        self._load_btn.setEnabled(False)
-        self._cancel_btn.setText("Отменить загрузку")
+        set_button_loading(self._load_btn, True, "…")
+        self._cancel_btn.setText(tr("orthanc.cancel_download"))
         self._cancel_btn.setEnabled(True)
         self._find_btn.setEnabled(False)
         self._tree.setEnabled(False)
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
         self._progress.show()
-        self._status_label.setText("Подготовка загрузки…")
+        self._status_label.setText(tr("orthanc.preparing"))
 
         self._pending_downloads = list(all_series)
         self._completed_downloads = 0
@@ -302,12 +409,12 @@ class OrthancStudyDialog(QDialog):
                 first_study = self._result[1] if self._result else ""
                 self._on_done(self._session_id, first_study)
             elif self._session_id is not None:
-                self._on_failed("", "Часть исследований не загружена")
+                self._on_failed("", tr("orthanc.partial_failed"))
             return
 
         study_uid, series_uids = self._pending_downloads.pop(0)
         self._status_label.setText(
-            f"Загрузка [{self._completed_downloads + 1}/{self._total_studies}]…"
+            tr("orthanc.loading_progress", current=self._completed_downloads + 1, total=self._total_studies)
         )
         worker = OrthancDownloadWorker(
             self._client,
@@ -320,6 +427,7 @@ class OrthancStudyDialog(QDialog):
             base_url=self._base_url,
             username=self._username,
             password=self._password,
+            retrieve_service=self._retrieve_service,
         )
         self._worker = worker
         worker.signals.progress.connect(self._on_progress)
@@ -333,7 +441,7 @@ class OrthancStudyDialog(QDialog):
 
     def _on_cancel(self) -> None:
         if self._downloading and self._worker is not None:
-            self._status_label.setText("Отмена загрузки…")
+            self._status_label.setText(tr("orthanc.download_cancelled"))
             self._cancel_btn.setEnabled(False)
             self._worker.cancel()
             self._force_close_timer.start(_CANCEL_FORCE_CLOSE_MS)
@@ -360,14 +468,14 @@ class OrthancStudyDialog(QDialog):
             self._progress.setRange(0, total)
             self._progress.setValue(min(current, total))
         short_uid = self._short_uid(series_uid)
-        self._status_label.setText(f"Загрузка — {current}/{total} (серия {short_uid})")
+        self._status_label.setText(tr("orthanc.loading_detail", current=current, total=total, uid=short_uid))
 
     def _on_status(self, message: str) -> None:
         self._status_label.setText(message)
 
     def _on_series_done(self, series_uid: str, status: str) -> None:
         if status == "failed":
-            self._status_label.setText(f"Ошибка в серии {self._short_uid(series_uid)}")
+            self._status_label.setText(tr("orthanc.series_error_status", uid=self._short_uid(series_uid)))
 
     def _on_studies_ready(self, studies: list[StudyMetadata]) -> None:
         log.info("[DLG] _on_studies_ready: %d studies", len(studies))
@@ -378,15 +486,17 @@ class OrthancStudyDialog(QDialog):
         self._downloaded_studies.extend(studies)
 
     def _reset_after_download(self) -> None:
+        from echo_personal_tool.presentation.ui_animations import set_button_loading
         self._downloading = False
         self._worker = None
         self._force_close_timer.stop()
+        set_button_loading(self._load_btn, False)
 
     def _on_single_study_done(self, session_id: str, study_uid: str) -> None:
         log.info("[DLG] _on_single_study_done: uid=%s", study_uid[:16])
         self._completed_downloads += 1
         self._status_label.setText(
-            f"Загрузка [{self._completed_downloads}/{self._total_studies}] завершена"
+            tr("orthanc.series_done", current=self._completed_downloads, total=self._total_studies)
         )
         self._start_next_download()
 
@@ -394,7 +504,7 @@ class OrthancStudyDialog(QDialog):
         log.warning("[DLG] _on_single_study_failed: uid=%s msg=%s", _uid[:16] if _uid else "?", message)
         self._completed_downloads += 1
         self._status_label.setText(
-            f"Ошибка [{self._completed_downloads}/{self._total_studies}]: {message}"
+            tr("orthanc.series_error_status", current=self._completed_downloads, total=self._total_studies, message=message)
         )
         self._start_next_download()
 
@@ -405,7 +515,7 @@ class OrthancStudyDialog(QDialog):
         self._session_id = None
         self._result = (session_id, study_uid)
         self._progress.setValue(self._progress.maximum())
-        self._status_label.setText("Загрузка завершена")
+        self._status_label.setText(tr("orthanc.download_complete"))
         self.accept()
 
     def _on_failed(self, _uid: str, message: str) -> None:
@@ -420,10 +530,10 @@ class OrthancStudyDialog(QDialog):
         self._progress.hide()
         self._tree.setEnabled(True)
         self._find_btn.setEnabled(True)
-        self._cancel_btn.setText("Отмена")
+        self._cancel_btn.setText(tr("orthanc.cancel"))
         self._cancel_btn.setEnabled(True)
         self._update_load_button()
-        QMessageBox.warning(self, "Загрузка", f"Ошибка загрузки: {message}")
+        QMessageBox.warning(self, tr("orthanc.download_error.title"), tr("orthanc.download_error.body", message=message))
 
     def _on_cancelled(self, _session_id: str) -> None:
         self._reset_after_download()
@@ -431,7 +541,7 @@ class OrthancStudyDialog(QDialog):
         self._progress.hide()
         self._tree.setEnabled(True)
         self._find_btn.setEnabled(True)
-        self._cancel_btn.setText("Отмена")
+        self._cancel_btn.setText(tr("orthanc.cancel"))
         self._cancel_btn.setEnabled(True)
         self._update_load_button()
         self._release_client()

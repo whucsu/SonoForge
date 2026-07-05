@@ -1,10 +1,10 @@
 # ROADMAP — ECHO Personal Tool
 
-**Обновлено:** 2026-06-23 (сессия: DICOMweb + RV FAC)  
+**Обновлено:** 2026-07-04 (DIMSE Phase 2 + Micro-UX specs)  
 **Источник истины по коду:** этот файл + `CHANGELOG_SESSION.md` (последние записи).  
 **Детальные спеки:** `docs/superpowers/specs/`, планы — `docs/superpowers/plans/`.
 
-Легенда: `[x]` реализовано в коде · `[~]` частично · `[ ]` не начато / отложено.
+Легенда: `[x]` реализовано в коде · `[~]` частично · `[ ]` не начато / отложено · `[—]` **cancelled**
 
 ---
 
@@ -108,7 +108,8 @@
 | Simpson dual workflow (manual + MBS) | [x] |
 | LV Lamé template | [x] |
 | RBF contour deform | [x] |
-| MBS Advanced (ED→ES propagate, sinusoidal) | [~] superseded: Lamé + R-refine, без ED→ES propagate |
+| MBS Advanced (ED→ES propagate) | [—] **cancelled** — superseded Lamé + R-refine |
+| LV Lamé template v2 (piecewise asymmetric) | [—] **cancelled** |
 | Open-arc Simpson (2026-06-11) | [x] |
 | DICOMweb Orthanc (QIDO/WADO, mock offline, session cache) | [x] |
 
@@ -127,6 +128,53 @@
 - [ ] Workplace: реальные JSON-фикстуры с Orthanc (см. spec footer)
 
 **Спека:** `docs/superpowers/specs/2026-06-23-dicomweb-orthanc-design.md` · **Замечания:** `DICOM_parsing.md`
+
+---
+
+## DIMSE / STOW-RS (план 2026-07-02)
+
+- [x] pynetdicom dep + DimseClient / DicomUploadClient ports
+- [x] PynetdimseClient: c_echo, c_find (study/series/instances), c_store
+- [x] FakeDimseClient для offline dev
+- [x] ServerSettings: dimse_enabled, ae_title, called_ae, host, port, stow_dicom_web_url, query_source
+- [x] UI: DIMSE section + Test C-ECHO кнопка
+- [x] UI: Query source selector (DICOMweb / DIMSE / Auto)
+- [x] STOW-RS: stow_instances() в OrthancDicomWebClient
+- [x] DicomUploadWorker: STOW-RS batch + DIMSE sequential C-STORE
+- [x] UI: «Отправить на сервер…» в SystemBar
+- [x] Unit + integration tests (ECHO_ORTHANC=1 / ECHO_ORTHANC_DIMSE=1)
+
+### DIMSE Phase 2 (спека 2026-07-04)
+
+- [x] C-GET retrieval (`c_get_instance`)
+- [x] C-MOVE + embedded Storage SCP (port 11112, lifecycle = download)
+- [x] `DicomRetrieveService` + DIMSE-only (без WADO URL)
+- [x] TLS client (CA + optional client cert)
+- [x] `retrieval_source`: wado / dimse / cmove / auto
+
+**Спека:** `docs/superpowers/specs/2026-07-04-dimse-phase2-design.md`
+
+---
+
+## Micro-UX (спека 2026-07-04)
+
+- [x] Inter fonts, theme fade, SVG icons — done
+- [x] Hover lerp 100ms (SystemBar, ActivityBar, ToolPanel)
+- [x] Dialog fade+scale open/close
+- [x] Focus ring + disabled opacity (global QSS)
+- [x] Loading state on Search / Upload / C-ECHO
+- [—] Darcula palette migration — **cancelled**
+
+**Спека:** `docs/superpowers/specs/2026-07-04-micro-ux-design.md`
+
+---
+
+## Performance Benchmarks (2026-07-02)
+
+- [x] test_pipeline_bench.py — full end-to-end scan→decode→cache
+- [x] test_decode_bench.py — DicomSession (uncompressed, JPEG, JPEG-2000, single-frame, fallback)
+- [x] test_network_bench.py — C-ECHO, C-FIND, C-STORE, STOW multipart, QueryService
+- [x] pytest-benchmark autosave + compare workflow (.benchmarks/ history)
 
 ---
 

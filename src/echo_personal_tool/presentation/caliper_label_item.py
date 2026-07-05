@@ -53,16 +53,13 @@ def compute_caliper_label_layout(
         )
 
     angle = math.degrees(math.atan2(dy, dx))
-    readable = readable_text_angle(angle)
-    if abs(readable) > 90.0:
-        readable += 180.0 if readable < 0 else -180.0
     angle_rad = math.radians(angle)
     nx = -math.sin(angle_rad)
     ny = -math.cos(angle_rad)
     return CaliperLabelLayout(
         anchor_x=mx,
         anchor_y=my,
-        angle_deg=readable,
+        angle_deg=0.0,
         offset_x=nx * offset_px,
         offset_y=ny * offset_px,
     )

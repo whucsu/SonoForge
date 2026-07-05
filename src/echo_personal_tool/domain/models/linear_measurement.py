@@ -5,14 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import cos, radians, sin, sqrt
 
-_DISPLAY_LABEL_MAP: dict[str, str] = {
-    "IVSd": "МЖП",
-    "IVSD": "МЖП",
-    "LVEDD": "КДР ЛЖ",
-    "LVPWd": "ЗСЛЖ",
-    "LVPWD": "ЗСЛЖ",
-    "LVESD": "КСР ЛЖ",
-    "LA": "ЛП ПЗР",
+from echo_personal_tool.infrastructure.i18n import tr
+
+_LABEL_I18N_KEY: dict[str, str] = {
+    "IVSd": "result.ivsd",
+    "IVSD": "result.ivsd",
+    "LVEDD": "result.lvedd",
+    "LVPWd": "result.lvpwd",
+    "LVPWD": "result.lvpwd",
+    "LVESD": "result.lvesd",
+    "LA": "menu.la_lavir",
 }
 
 
@@ -28,7 +30,8 @@ class LinearMeasurement:
     end: tuple[float, float] | None = None
 
     def display_text(self, *, length_unit: str = "mm") -> str:
-        display_label = _DISPLAY_LABEL_MAP.get(self.label, self.label)
+        i18n_key = _LABEL_I18N_KEY.get(self.label)
+        display_label = tr(i18n_key) if i18n_key else self.label
         if self.millimeter_length is None:
             return f"{display_label}: {self.pixel_length:.1f} px"
         return f"{display_label}: {format_length_mm(self.millimeter_length, length_unit)}"

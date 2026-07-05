@@ -20,6 +20,8 @@ class PlaybackConfig:
     batch_size: int  # max frames per prefetch worker run (capped by prefetch_radius - ahead)
     max_lag_frames: int  # skip forward when loaded ahead exceeds this but next frame missing
     evict_window: int  # FrameCache LRU half-width around current index
+    scroll_debounce_ms: int  # wheel coalesce window
+    scroll_batch_size: int  # neighbor prefetch after scroll target frame
 
 
 _LOW_END = PlaybackConfig(
@@ -28,6 +30,8 @@ _LOW_END = PlaybackConfig(
     batch_size=3,
     max_lag_frames=2,
     evict_window=30,
+    scroll_debounce_ms=80,
+    scroll_batch_size=3,
 )
 
 _HIGH_END = PlaybackConfig(
@@ -36,6 +40,8 @@ _HIGH_END = PlaybackConfig(
     batch_size=8,
     max_lag_frames=4,
     evict_window=40,
+    scroll_debounce_ms=50,
+    scroll_batch_size=8,
 )
 
 

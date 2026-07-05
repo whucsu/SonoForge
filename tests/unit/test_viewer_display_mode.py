@@ -45,7 +45,11 @@ def test_rgb_dicom_keeps_red_channel(viewer, qtbot, tmp_path: Path) -> None:
     path = tmp_path / "rgb.dcm"
     write_synthetic_rgb_dicom(path)
     viewer.set_state(_viewer_state_for(path))
-    pixels = DicomReaderImpl().read_pixels(path, frame_index=0)
+    pixels = np.zeros((64, 64, 3), dtype=np.uint8)
+    pixels[:, :, 0] = 200
+    pixels[:, :, 1] = 40
+    pixels[:, :, 2] = 20
+    pixels[0, 0] = np.array([255, 0, 0], dtype=np.uint8)
     viewer.show_frame(pixels)
     frame = viewer._color_source_rgb
     assert frame is not None
@@ -62,11 +66,26 @@ def test_grayscale_dicom_enables_window_level(viewer, qtbot, tmp_path: Path) -> 
     assert viewer._window_slider.isEnabled()
 
 
-def test_rgb_dicom_enables_window_level(viewer, qtbot, tmp_path: Path) -> None:
+def test_rgb_dicom_preserves_color_without_window_level(viewer, qtbot, tmp_path: Path) -> None:
+    path = tmp_path / "rgb.dcm"
+    write_synthetic_rgb_dicom(path)
+    viewer.set_state(_viewer_state_for(path))
+    pixels = np.zeros((64, 64, 3), dtype=np.uint8)
+    pixels[:, :, 0] = 200
+    pixels[:, :, 1] = 40
+    pixels[:, :, 2] = 20
+    viewer.show_frame(pixels)
+    assert viewer._is_color_frame
+    assert not viewer._window_level_enabled
+    assert not viewer._window_slider.isEnabled()
+
+
+def test_bmode_rgb_packing_uses_grayscale_window_level(viewer, qtbot, tmp_path: Path) -> None:
     path = tmp_path / "rgb.dcm"
     write_synthetic_rgb_dicom(path)
     viewer.set_state(_viewer_state_for(path))
     pixels = DicomReaderImpl().read_pixels(path, frame_index=0)
     viewer.show_frame(pixels)
+    assert not viewer._is_color_frame
     assert viewer._window_level_enabled
     assert viewer._window_slider.isEnabled()

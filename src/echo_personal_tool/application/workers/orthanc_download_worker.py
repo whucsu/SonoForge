@@ -13,6 +13,9 @@ from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 logger = logging.getLogger(__name__)
 
+from echo_personal_tool.application.services.dicom_retrieve_service import (
+    DicomRetrieveService,
+)
 from echo_personal_tool.domain.models import InstanceMetadata, SeriesMetadata, StudyMetadata
 from echo_personal_tool.domain.ports import DicomWebClient
 from echo_personal_tool.infrastructure.dicom_metadata_mapper import (
@@ -60,6 +63,7 @@ class OrthancDownloadWorker(QRunnable):
         base_url: str | None = None,
         username: str | None = None,
         password: str | None = None,
+        retrieve_service: DicomRetrieveService | None = None,
     ) -> None:
         super().__init__()
         self._client = client
@@ -71,6 +75,7 @@ class OrthancDownloadWorker(QRunnable):
         self._base_url = base_url
         self._username = username
         self._password = password
+        self._retrieve_service = retrieve_service
         self._cancelled = False
         self._thread_client: OrthancDicomWebClient | None = None
         self._lock = Lock()
@@ -97,6 +102,9 @@ class OrthancDownloadWorker(QRunnable):
         )
 
         try:
+            if self._retrieve_service is not None:
+                self._retrieve_service.set_cancel_check(lambda: self._cancelled)
+
             t_start = time.monotonic()
             all_instances: list[tuple[str, str]] = []
 
@@ -104,7 +112,8 @@ class OrthancDownloadWorker(QRunnable):
                 if self._cancelled:
                     self._finish_cancelled()
                     return
-                self.signals.status.emit(f"Запрос списка инстансов ({series_uid[:12]}…)")
+                from echo_personal_tool.infrastructure.i18n import tr
+                self.signals.status.emit(tr("orthanc.querying_instances", uid=series_uid[:12]))
                 t_q = time.monotonic()
                 instances = _client.query_instances(self._study_uid, series_uid)
                 logger.info(
@@ -122,6 +131,28 @@ class OrthancDownloadWorker(QRunnable):
                 self.signals.done.emit(self._session_id, self._study_uid)
                 return
 
+            if (
+                self._retrieve_service is not None
+                and self._retrieve_service.default_source == "cmove"
+            ):
+                for series_uid in self._series_uids:
+                    if self._cancelled:
+                        self._finish_cancelled()
+                        return
+                    self.signals.status.emit(
+                        f"C-MOVE prefetch series {series_uid[:12]}…"
+                    )
+                    try:
+                        self._retrieve_service.prefetch_series(
+                            self._study_uid, series_uid
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "C-MOVE series prefetch failed series=%s: %s",
+                            series_uid[:16],
+                            exc,
+                        )
+
             logger.info(
                 "[DIAG] worker start download study=%s total_instances=%d concurrency=%d",
                 self._study_uid[:16],
@@ -130,7 +161,8 @@ class OrthancDownloadWorker(QRunnable):
             )
 
             self.signals.progress.emit(0, total, self._series_uids[0])
-            self.signals.status.emit(f"Загрузка {total} инстансов…")
+            from echo_personal_tool.infrastructure.i18n import tr
+            self.signals.status.emit(tr("orthanc.downloading_count", count=total))
 
             saved_count = 0
             failed_count = 0
@@ -238,6 +270,34 @@ class OrthancDownloadWorker(QRunnable):
         """Download single instance. Returns bytes or None on failure."""
         if self._cancelled:
             return None
+
+        # Use retrieve service if available (supports DIMSE/C-GET/C-MOVE)
+        if self._retrieve_service is not None:
+            try:
+                data = self._retrieve_service.retrieve_instance(
+                    study_uid, series_uid, instance_uid
+                )
+                if not data:
+                    return None
+                self._cache.save_instance(
+                    self._session_id,
+                    study_uid,
+                    series_uid,
+                    instance_uid,
+                    data,
+                )
+                return data
+            except DownloadCancelled:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "[DIAG] download failed instance=%s error=%s",
+                    instance_uid[:16],
+                    exc,
+                )
+                return None
+
+        # Fallback to legacy client
         if self._server_settings is not None or self._base_url:
             client = self._make_thread_client()
         else:

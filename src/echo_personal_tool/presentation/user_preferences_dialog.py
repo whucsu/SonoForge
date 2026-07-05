@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -12,16 +14,19 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.server_settings import save_server_settings
 from echo_personal_tool.infrastructure.user_preferences import (
     MAX_LINE_WIDTH,
@@ -55,8 +60,9 @@ def show_user_preferences_dialog(
     *,
     on_apply: Callable[[UserPreferences], None] | None = None,
 ) -> bool:
+    from echo_personal_tool.presentation.ui_animations import exec_animated
     dialog = UserPreferencesDialog(parent, on_apply=on_apply)
-    return dialog.exec() == QDialog.DialogCode.Accepted
+    return exec_animated(dialog) == QDialog.DialogCode.Accepted
 
 
 def _scrollable_tab(form: QFormLayout) -> QWidget:
@@ -77,19 +83,51 @@ class UserPreferencesDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._on_apply = on_apply
-        self.setWindowTitle("Настройки")
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Dialog
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.resize(780, 560)
+        self._drag_pos = None
         current = load_user_preferences()
+
+        # Custom title bar
+        title_bar = QWidget()
+        title_bar.setObjectName("systemBar")
+        title_bar.setFixedHeight(34)
+        title_bar_layout = QHBoxLayout(title_bar)
+        title_bar_layout.setContentsMargins(6, 0, 0, 0)
+        title_bar_layout.setSpacing(8)
+        title_label = QLabel(tr("preferences.title"))
+        title_label.setStyleSheet("font-weight: 500;")
+        title_bar_layout.addWidget(title_label)
+        title_bar_layout.addStretch(1)
+
+        btn_close = QPushButton()
+        from echo_personal_tool.presentation.system_bar import _load_icon
+        btn_close.setIcon(_load_icon("close"))
+        btn_close.setObjectName("closeButton")
+        btn_close.setFixedSize(28, 23)
+        btn_close.clicked.connect(self.reject)
+        title_bar_layout.addWidget(btn_close)
 
         tabs = QTabWidget()
 
         interface_form = QFormLayout()
         self._theme_combo = QComboBox()
-        self._theme_combo.addItem("Тёмная", "dark")
-        self._theme_combo.addItem("Светлая", "light")
-        self._theme_combo.addItem("Системная", "system")
+        self._theme_combo.addItem(tr("preferences.theme_dark"), "dark")
+        self._theme_combo.addItem(tr("preferences.theme_light"), "light")
+        self._theme_combo.addItem("VS Code Dark", "vscode_dark")
+        self._theme_combo.addItem("VS Code Light", "vscode_light")
+        self._theme_combo.addItem(tr("preferences.theme_system"), "system")
         theme_index = self._theme_combo.findData(current.theme_mode)
         self._theme_combo.setCurrentIndex(max(theme_index, 0))
+        self._language_combo = QComboBox()
+        self._language_combo.addItem(tr("preferences.lang_ru"), "ru")
+        self._language_combo.addItem(tr("preferences.lang_en"), "en")
+        lang_index = self._language_combo.findData(current.language)
+        self._language_combo.setCurrentIndex(max(lang_index, 0))
         self._font_spin = QSpinBox()
         self._font_spin.setRange(MIN_UI_FONT_SIZE, MAX_UI_FONT_SIZE)
         self._font_spin.setSuffix(" pt")
@@ -109,12 +147,13 @@ class UserPreferencesDialog(QDialog):
         self._caliper_spin.setDecimals(1)
         self._caliper_spin.setSuffix(" px")
         self._caliper_spin.setValue(current.caliper_line_width)
-        interface_form.addRow("Цветовая тема:", self._theme_combo)
-        interface_form.addRow("Размер шрифта UI:", self._font_spin)
-        interface_form.addRow("Шрифт оверлея результатов:", self._overlay_font_spin)
-        interface_form.addRow("Прозрачность оверлея:", self._overlay_opacity_spin)
-        interface_form.addRow("Толщина калиперов:", self._caliper_spin)
-        tabs.addTab(_scrollable_tab(interface_form), "Интерфейс")
+        interface_form.addRow(tr("preferences.color_theme"), self._theme_combo)
+        interface_form.addRow(tr("preferences.language"), self._language_combo)
+        interface_form.addRow(tr("preferences.ui_font_size"), self._font_spin)
+        interface_form.addRow(tr("preferences.results_overlay_font_size"), self._overlay_font_spin)
+        interface_form.addRow(tr("preferences.results_overlay_opacity"), self._overlay_opacity_spin)
+        interface_form.addRow(tr("preferences.caliper_width"), self._caliper_spin)
+        tabs.addTab(_scrollable_tab(interface_form), tr("preferences.tab_interface"))
 
         display_form = QFormLayout()
         self._playback_spin = QDoubleSpinBox()
@@ -124,15 +163,15 @@ class UserPreferencesDialog(QDialog):
         self._playback_spin.setSuffix("×")
         self._playback_spin.setValue(current.playback_speed_multiplier)
         self._wl_preset = QComboBox()
-        self._wl_preset.addItem("Последний использованный", "last_used")
-        self._wl_preset.addItem("Мягкий", "soft")
-        self._wl_preset.addItem("Контрастный", "contrast")
+        self._wl_preset.addItem(tr("preferences.wl_last_used"), "last_used")
+        self._wl_preset.addItem(tr("preferences.wl_soft"), "soft")
+        self._wl_preset.addItem(tr("preferences.wl_contrast"), "contrast")
         preset_index = self._wl_preset.findData(current.wl_preset)
         self._wl_preset.setCurrentIndex(max(preset_index, 0))
         self._thumbnail_scale = QComboBox()
-        self._thumbnail_scale.addItem("Маленькие", "small")
-        self._thumbnail_scale.addItem("Средние", "medium")
-        self._thumbnail_scale.addItem("Крупные", "large")
+        self._thumbnail_scale.addItem(tr("tool_panel.small"), "small")
+        self._thumbnail_scale.addItem(tr("tool_panel.medium"), "medium")
+        self._thumbnail_scale.addItem(tr("tool_panel.large"), "large")
         thumb_index = self._thumbnail_scale.findData(current.thumbnail_scale)
         self._thumbnail_scale.setCurrentIndex(max(thumb_index, 0))
         self._show_crosshair = QCheckBox()
@@ -141,13 +180,19 @@ class UserPreferencesDialog(QDialog):
         self._show_panel_frames.setChecked(current.show_panel_frames)
         self._show_caliper_labels = QCheckBox()
         self._show_caliper_labels.setChecked(current.show_caliper_labels_on_frame)
-        display_form.addRow("Скорость cine:", self._playback_spin)
-        display_form.addRow("Пресет W/L:", self._wl_preset)
-        display_form.addRow("Размер миниатюр:", self._thumbnail_scale)
-        display_form.addRow("Перекрестие:", self._show_crosshair)
-        display_form.addRow("Рамки панелей:", self._show_panel_frames)
-        display_form.addRow("Подписи калиперов:", self._show_caliper_labels)
-        tabs.addTab(_scrollable_tab(display_form), "Отображение")
+        self._show_caliper_inline_labels = QCheckBox()
+        self._show_caliper_inline_labels.setChecked(current.show_caliper_inline_labels)
+        self._reduce_motion = QCheckBox(tr("preferences.reduce_motion"))
+        self._reduce_motion.setChecked(current.reduce_motion)
+        display_form.addRow(tr("tool_panel.cine_speed"), self._playback_spin)
+        display_form.addRow(tr("tool_panel.wl_preset"), self._wl_preset)
+        display_form.addRow(tr("tool_panel.thumbnail_size"), self._thumbnail_scale)
+        display_form.addRow(tr("tool_panel.crosshair"), self._show_crosshair)
+        display_form.addRow(tr("tool_panel.panel_frames"), self._show_panel_frames)
+        display_form.addRow(tr("tool_panel.caliper_labels"), self._show_caliper_labels)
+        display_form.addRow(tr("tool_panel.caliper_inline_labels"), self._show_caliper_inline_labels)
+        display_form.addRow(tr("preferences.reduce_motion"), self._reduce_motion)
+        tabs.addTab(_scrollable_tab(display_form), tr("preferences.tab_display"))
 
         measure_form = QFormLayout()
         self._manual_contour_spin = QDoubleSpinBox()
@@ -168,7 +213,7 @@ class UserPreferencesDialog(QDialog):
         self._simpson_contour_spin.setDecimals(1)
         self._simpson_contour_spin.setSuffix(" px")
         self._simpson_contour_spin.setValue(current.contour_pen_simpson_width)
-        self._magnetic_snap_check = QCheckBox("Магнит к стенке")
+        self._magnetic_snap_check = QCheckBox(tr("preferences.magnetic_snap"))
         self._magnetic_snap_check.setChecked(current.magnetic_snap_enabled)
         self._magnetic_weight_spin = QDoubleSpinBox()
         self._magnetic_weight_spin.setRange(MIN_MAGNETIC_WEIGHT, MAX_MAGNETIC_WEIGHT)
@@ -188,30 +233,30 @@ class UserPreferencesDialog(QDialog):
         self._magnetic_radius_spin.setValue(current.magnetic_snap_release_max_radial_px)
         self._doppler_auto_cal = QCheckBox()
         self._doppler_auto_cal.setChecked(current.doppler_auto_calibration_enabled)
-        self._calibration_tick_snap = QCheckBox("Привязка к тикам шкалы")
+        self._calibration_tick_snap = QCheckBox(tr("preferences.calibration_tick_snap"))
         self._calibration_tick_snap.setChecked(current.calibration_tick_snap_enabled)
-        self._auto_depth_cal = QCheckBox("Автокалибровка по шкале глубины")
+        self._auto_depth_cal = QCheckBox(tr("preferences.auto_depth_cal"))
         self._auto_depth_cal.setChecked(current.auto_depth_calibration_enabled)
         self._auto_depth_cal.setToolTip(
-            "Для MP4/JPEG без DICOM-тегов. Определяет масштаб по сантиметровым меткам справа."
+            tr("preferences.auto_depth_cal_tooltip")
         )
         self._length_unit = QComboBox()
-        self._length_unit.addItem("мм", "mm")
-        self._length_unit.addItem("см", "cm")
+        self._length_unit.addItem(tr("preferences.unit_mm"), "mm")
+        self._length_unit.addItem(tr("preferences.unit_cm"), "cm")
         unit_index = self._length_unit.findData(current.length_display_unit)
         self._length_unit.setCurrentIndex(max(unit_index, 0))
-        measure_form.addRow("Контур (ручной):", self._manual_contour_spin)
-        measure_form.addRow("Контур (AI):", self._ai_contour_spin)
-        measure_form.addRow("Контур (Simpson):", self._simpson_contour_spin)
+        measure_form.addRow(tr("preferences.contour_manual"), self._manual_contour_spin)
+        measure_form.addRow(tr("preferences.contour_ai"), self._ai_contour_spin)
+        measure_form.addRow(tr("preferences.contour_simpson"), self._simpson_contour_spin)
         measure_form.addRow(self._magnetic_snap_check)
-        measure_form.addRow("Магнит: порог:", self._magnetic_weight_spin)
-        measure_form.addRow("Магнит: отпускание:", self._magnetic_release_spin)
-        measure_form.addRow("Магнит: радиус:", self._magnetic_radius_spin)
-        measure_form.addRow("Doppler из DICOM:", self._doppler_auto_cal)
+        measure_form.addRow(tr("preferences.magnetic_weight"), self._magnetic_weight_spin)
+        measure_form.addRow(tr("preferences.magnetic_release"), self._magnetic_release_spin)
+        measure_form.addRow(tr("preferences.magnetic_radius"), self._magnetic_radius_spin)
+        measure_form.addRow(tr("preferences.doppler_from_dicom"), self._doppler_auto_cal)
         measure_form.addRow(self._calibration_tick_snap)
         measure_form.addRow(self._auto_depth_cal)
-        measure_form.addRow("Единицы длины:", self._length_unit)
-        tabs.addTab(_scrollable_tab(measure_form), "Измерения")
+        measure_form.addRow(tr("preferences.length_display_unit"), self._length_unit)
+        tabs.addTab(_scrollable_tab(measure_form), tr("preferences.tab_measurement"))
 
         dicom_form = QFormLayout()
         self._show_dicom_inspector = QCheckBox()
@@ -219,11 +264,10 @@ class UserPreferencesDialog(QDialog):
         self._interesting_tags = QLineEdit(current.interesting_dicom_tags)
         self._interesting_tags.setPlaceholderText("PatientName,StudyDate,HeartRate")
         self._interesting_tags.setToolTip(
-            "Список тегов через запятую (имя или (0010,0010)). "
-            "Показываются внизу слева на просмотрщике для DICOM-файлов."
+            tr("preferences.tags_tooltip")
         )
-        dicom_form.addRow("Инспектор тегов:", self._show_dicom_inspector)
-        dicom_form.addRow("Теги в оверлее:", self._interesting_tags)
+        dicom_form.addRow(tr("preferences.inspector_tags"), self._show_dicom_inspector)
+        dicom_form.addRow(tr("preferences.tags_overlay"), self._interesting_tags)
         tabs.addTab(_scrollable_tab(dicom_form), "DICOM")
 
         other_form = QFormLayout()
@@ -234,17 +278,17 @@ class UserPreferencesDialog(QDialog):
         self._pdf_font_spin.setSuffix(" pt")
         self._pdf_font_spin.setValue(current.pdf_font_size)
         self._startup_mode = QComboBox()
-        self._startup_mode.addItem("Пустое окно", "empty")
-        self._startup_mode.addItem("Последняя папка", "last_folder")
+        self._startup_mode.addItem(tr("preferences.startup_empty_window"), "empty")
+        self._startup_mode.addItem(tr("preferences.startup_last_folder"), "last_folder")
         startup_index = self._startup_mode.findData(current.startup_mode)
         self._startup_mode.setCurrentIndex(max(startup_index, 0))
-        other_form.addRow("Подтверждать Reset:", self._confirm_reset)
-        other_form.addRow("Шрифт PDF:", self._pdf_font_spin)
-        other_form.addRow("При запуске:", self._startup_mode)
-        tabs.addTab(_scrollable_tab(other_form), "Прочее")
+        other_form.addRow(tr("preferences.confirm_reset"), self._confirm_reset)
+        other_form.addRow(tr("preferences.pdf_font"), self._pdf_font_spin)
+        other_form.addRow(tr("preferences.startup_at"), self._startup_mode)
+        tabs.addTab(_scrollable_tab(other_form), tr("preferences.tab_other"))
 
         self._server_form = ServerSettingsForm()
-        tabs.addTab(self._server_form, "Сервер")
+        tabs.addTab(self._server_form, tr("preferences.tab_server"))
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -253,12 +297,15 @@ class UserPreferencesDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         reset_row = QHBoxLayout()
-        reset_defaults_btn = QPushButton("По умолчанию")
+        reset_defaults_btn = QPushButton(tr("preferences.reset_defaults"))
         reset_defaults_btn.clicked.connect(self._reset_to_defaults)
         reset_row.addWidget(reset_defaults_btn)
         reset_row.addStretch(1)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(title_bar)
         layout.addWidget(tabs)
         layout.addLayout(reset_row)
         layout.addWidget(buttons)
@@ -266,8 +313,8 @@ class UserPreferencesDialog(QDialog):
     def _reset_to_defaults(self) -> None:
         answer = QMessageBox.question(
             self,
-            "Сбросить настройки",
-            "Вернуть все параметры к значениям по умолчанию?",
+            tr("preferences.reset_title"),
+            tr("preferences.reset_confirm"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -303,6 +350,7 @@ class UserPreferencesDialog(QDialog):
             show_crosshair=self._show_crosshair.isChecked(),
             show_panel_frames=self._show_panel_frames.isChecked(),
             show_caliper_labels_on_frame=self._show_caliper_labels.isChecked(),
+            show_caliper_inline_labels=self._show_caliper_inline_labels.isChecked(),
             thumbnail_scale=str(self._thumbnail_scale.currentData()),
             magnetic_snap_weight_threshold=float(self._magnetic_weight_spin.value()),
             magnetic_snap_release_strength=float(self._magnetic_release_spin.value()),
@@ -318,9 +366,22 @@ class UserPreferencesDialog(QDialog):
             startup_mode=str(self._startup_mode.currentData()),
             last_opened_folder=stored.last_opened_folder,
             theme_mode=str(self._theme_combo.currentData()),
+            language=str(self._language_combo.currentData()),
+            reduce_motion=self._reduce_motion.isChecked(),
         )
         save_user_preferences(preferences)
         save_server_settings(self._server_form.settings())
         if self._on_apply is not None:
             self._on_apply(preferences)
         self.accept()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint() - self.pos()
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if self._drag_pos is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        self._drag_pos = None

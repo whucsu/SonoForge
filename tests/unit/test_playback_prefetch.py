@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QRunnable
 from PySide6.QtWidgets import QApplication
 
 from echo_personal_tool.application.app_controller import AppController
@@ -54,14 +53,22 @@ def test_prefetch_starts_batch_worker(qapp, monkeypatch, tmp_path) -> None:
         _SpyLoader,
     )
     controller = AppController(thread_pool=_SpyPool())
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
-    inst = _mp4_instance(mp4)
+    inst = _mp4_instance(mp4, frames=100)
     controller._current_instance = inst
-    controller._frame_cache.set_total_frames(mp4, 30)
+    controller._frame_cache.set_total_frames(mp4, 100)
     controller._frame_cache.put(0, np.zeros((8, 8), dtype=np.uint8))
-    controller._state_manager.set_instance(inst, total_frames=30, frame_time_ms=33.3)
+    controller._state_manager.set_instance(inst, total_frames=100, frame_time_ms=33.3)
     controller._state_manager.set_playing(True)
 
     controller._prefetch_playback_buffer(0)
@@ -83,17 +90,25 @@ def test_prefetch_skipped_when_buffer_full(qapp, monkeypatch, tmp_path) -> None:
         MagicMock,
     )
     controller = AppController(thread_pool=_SpyPool())
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
-    inst = _mp4_instance(mp4)
+    inst = _mp4_instance(mp4, frames=100)
     controller._current_instance = inst
-    controller._frame_cache.set_total_frames(mp4, 30)
+    controller._frame_cache.set_total_frames(mp4, 100)
     controller._frame_cache.put(0, np.zeros((8, 8), dtype=np.uint8))
     controller._frame_cache.put(1, np.ones((8, 8), dtype=np.uint8))
     controller._frame_cache.put(2, np.full((8, 8), 2, dtype=np.uint8))
     controller._frame_cache.put(3, np.full((8, 8), 3, dtype=np.uint8))
-    controller._state_manager.set_instance(inst, total_frames=30, frame_time_ms=33.3)
+    controller._state_manager.set_instance(inst, total_frames=100, frame_time_ms=33.3)
     controller._state_manager.set_playing(True)
 
     controller._prefetch_playback_buffer(0)
@@ -120,15 +135,23 @@ def test_prefetch_batch_capped_by_radius(qapp, monkeypatch, tmp_path) -> None:
         _SpyLoader,
     )
     controller = AppController(thread_pool=_SpyPool())
-    controller._playback_config = PlaybackConfig(prefetch_radius=5, min_buffer=2, batch_size=8, max_lag_frames=2, evict_window=30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=5,
+        min_buffer=2,
+        batch_size=8,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
-    inst = _mp4_instance(mp4)
+    inst = _mp4_instance(mp4, frames=100)
     controller._current_instance = inst
-    controller._frame_cache.set_total_frames(mp4, 30)
+    controller._frame_cache.set_total_frames(mp4, 100)
     controller._frame_cache.put(0, np.zeros((8, 8), dtype=np.uint8))
     controller._frame_cache.put(1, np.ones((8, 8), dtype=np.uint8))
-    controller._state_manager.set_instance(inst, total_frames=30, frame_time_ms=33.3)
+    controller._state_manager.set_instance(inst, total_frames=100, frame_time_ms=33.3)
     controller._state_manager.set_playing(True)
 
     controller._prefetch_playback_buffer(0)
@@ -139,7 +162,15 @@ def test_prefetch_batch_capped_by_radius(qapp, monkeypatch, tmp_path) -> None:
 
 def test_advance_playback_skips_on_lag(qapp, tmp_path) -> None:
     controller = AppController()
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     controller._prefetch_playback_buffer = lambda *a, **k: None
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
@@ -163,7 +194,15 @@ def test_advance_playback_skips_on_lag(qapp, tmp_path) -> None:
 
 def test_advance_playback_lag_skip_to_nearest(qapp, tmp_path) -> None:
     controller = AppController()
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     controller._prefetch_playback_buffer = lambda *a, **k: None
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
@@ -222,14 +261,22 @@ def test_prefetch_cancelled_on_pause(qapp, monkeypatch, tmp_path) -> None:
     )
     controller = AppController(thread_pool=pool)
     controller._thread_pool = pool
-    controller._playback_config = PlaybackConfig(3, 2, 3, 2, 30)
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
     mp4 = tmp_path / "c.mp4"
     mp4.write_bytes(b"\x00")
-    inst = _mp4_instance(mp4)
+    inst = _mp4_instance(mp4, frames=100)
     controller._current_instance = inst
-    controller._frame_cache.set_total_frames(mp4, 30)
+    controller._frame_cache.set_total_frames(mp4, 100)
     controller._frame_cache.put(0, np.zeros((8, 8), dtype=np.uint8))
-    controller._state_manager.set_instance(inst, total_frames=30, frame_time_ms=33.3)
+    controller._state_manager.set_instance(inst, total_frames=100, frame_time_ms=33.3)
     controller._state_manager._is_playing = True
     controller._prefetch_load_id = 0
 
@@ -238,3 +285,138 @@ def test_prefetch_cancelled_on_pause(qapp, monkeypatch, tmp_path) -> None:
 
     controller._invalidate_prefetch()
     assert controller._prefetch_load_id == 0
+
+
+def test_adaptive_batch_increases_on_fast_prefetch(qapp, monkeypatch, tmp_path) -> None:
+    controller = AppController()
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=10,
+        min_buffer=2,
+        batch_size=4,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
+    controller._adaptive_batch_size = 4
+    mp4 = tmp_path / "c.mp4"
+    mp4.write_bytes(b"\x00")
+    inst = _mp4_instance(mp4)
+    controller._current_instance = inst
+    controller._prefetch_load_id = 1
+    t0 = 1000.0
+    monkeypatch.setattr(
+        "echo_personal_tool.application.app_controller.perf_counter",
+        lambda: t0 + 0.001,
+    )
+    controller._prefetch_batch_start = t0
+    controller._prefetch_ema_latency_ms = 0.0
+    frames = [(2, np.zeros((4, 4), dtype=np.uint8))]
+    controller._on_prefetch_batch_loaded(1, mp4, frames)
+    assert controller._adaptive_batch_size == 6
+
+
+def test_adaptive_batch_decreases_on_slow_prefetch(qapp, monkeypatch, tmp_path) -> None:
+    controller = AppController()
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=10,
+        min_buffer=2,
+        batch_size=8,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
+    controller._adaptive_batch_size = 8
+    mp4 = tmp_path / "c.mp4"
+    mp4.write_bytes(b"\x00")
+    inst = _mp4_instance(mp4)
+    controller._current_instance = inst
+    controller._prefetch_load_id = 2
+    controller._prefetch_ema_latency_ms = 80.0
+    t0 = 1000.0
+    monkeypatch.setattr(
+        "echo_personal_tool.application.app_controller.perf_counter",
+        lambda: t0 + 0.2,
+    )
+    controller._prefetch_batch_start = t0
+    frames = [(3, np.zeros((4, 4), dtype=np.uint8))]
+    controller._on_prefetch_batch_loaded(2, mp4, frames)
+    assert controller._adaptive_batch_size == 7
+
+
+def test_small_loop_prefetch_all_unloaded(qapp, monkeypatch, tmp_path) -> None:
+    started: list[object] = []
+
+    class _SpyPool:
+        def start(self, worker):
+            started.append(worker)
+
+    class _SpyLoader:
+        def __init__(self, path, frame_index=0, media_format="mp4", parent=None,
+                     total_frames=0, batch_size=0):
+            self._batch_size = batch_size
+            self._frame_index = frame_index
+            self.signals = MagicMock()
+
+    monkeypatch.setattr(
+        "echo_personal_tool.application.app_controller.FrameLoaderWorker",
+        _SpyLoader,
+    )
+    controller = AppController(thread_pool=_SpyPool())
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=5,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=2,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
+    mp4 = tmp_path / "c.mp4"
+    mp4.write_bytes(b"\x00")
+    inst = _mp4_instance(mp4, frames=45)
+    controller._current_instance = inst
+    controller._frame_cache.set_total_frames(mp4, 45)
+    controller._frame_cache.put(0, np.zeros((8, 8), dtype=np.uint8))
+    controller._state_manager.set_instance(inst, total_frames=45, frame_time_ms=33.3)
+    controller._state_manager.set_playing(True)
+
+    controller._prefetch_playback_buffer(0)
+
+    assert len(started) == 1
+    assert started[0]._batch_size == 44
+    assert started[0]._frame_index == 1
+
+
+def test_advance_playback_double_next_skip(qapp, tmp_path) -> None:
+    controller = AppController()
+    controller._playback_config = PlaybackConfig(
+        prefetch_radius=3,
+        min_buffer=2,
+        batch_size=3,
+        max_lag_frames=10,
+        evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
+    )
+    controller._prefetch_playback_buffer = lambda *a, **k: None
+    controller._last_frame_shown_at = 0.0
+    mp4 = tmp_path / "c.mp4"
+    mp4.write_bytes(b"\x00")
+    inst = _mp4_instance(mp4, frames=10)
+    controller._current_instance = inst
+    controller._frame_cache.set_total_frames(mp4, 10)
+    controller._frame_cache.put(0, np.zeros((4, 4), dtype=np.uint8))
+    controller._frame_cache.put(2, np.full((4, 4), 2, dtype=np.uint8))
+    controller._state_manager.set_instance(inst, total_frames=10, frame_time_ms=33.3)
+    controller._state_manager.set_frame(0)
+    controller._state_manager._is_playing = True
+    controller._pending_decode_id = 0
+    controller._pending_load_id = 0
+    controller._prefetch_load_id = 0
+    controller._playback_warmup_pending = False
+
+    controller._advance_playback()
+
+    assert controller.state_manager.snapshot.current_frame_index == 2

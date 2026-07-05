@@ -16,6 +16,8 @@ dependencies = [
     "opencv-python-headless>=4.8",
     "httpx>=0.27",
     "psutil>=5.9",
+    "pymupdf>=1.24",
+    "pynetdicom>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -51,13 +53,24 @@ include = ["src/echo_personal_tool", "README.md"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: tests requiring real DICOM files on disk",
+    "integration: tests requiring real DICOM files on disk or live Orthanc (ECHO_ORTHANC=1)",
     "interactive: manual cine segmentation diagnostics (MP4 without DICOM tags)",
 ]
 addopts = "-q -m 'not interactive'"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+
+[tool.pytest-benchmark]
+autosave = true
+min_rounds = 5
+calibration_precision = 100
+save = "bench"
+sort = "mean"
+compare = "mean"
+name = "ECHO2026"
+group_by = "group"
+timer = "time.perf_counter"
 
 [tool.ruff]
 line-length = 100

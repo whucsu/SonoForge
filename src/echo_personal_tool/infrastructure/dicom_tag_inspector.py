@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import pydicom
@@ -77,7 +78,8 @@ def read_all_dicom_tag_rows(path: Path) -> list[DicomTagRow]:
     return rows
 
 
-def read_interesting_dicom_tag_rows(path: Path, tag_specs: list[str]) -> list[DicomTagRow]:
+@lru_cache(maxsize=32)
+def read_interesting_dicom_tag_rows(path: Path, tag_specs: tuple[str, ...]) -> list[DicomTagRow]:
     if not tag_specs:
         return []
     dataset = pydicom.dcmread(path, stop_before_pixels=True, force=True)

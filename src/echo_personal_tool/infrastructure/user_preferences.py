@@ -82,6 +82,7 @@ class UserPreferences:
     show_crosshair: bool = True
     show_panel_frames: bool = False
     show_caliper_labels_on_frame: bool = True
+    show_caliper_inline_labels: bool = False
     thumbnail_scale: str = "medium"
     magnetic_snap_weight_threshold: float = DEFAULT_MAGNETIC_WEIGHT
     magnetic_snap_release_strength: float = DEFAULT_MAGNETIC_RELEASE
@@ -97,6 +98,10 @@ class UserPreferences:
     startup_mode: str = "empty"
     last_opened_folder: str = ""
     theme_mode: str = "dark"
+    language: str = "ru"
+    auto_play: bool = False
+    layout_state_json: str = ""
+    reduce_motion: bool = False
 
 
 def _settings_store() -> QSettings:
@@ -224,6 +229,7 @@ def load_user_preferences() -> UserPreferences:
         show_crosshair=_read_bool(store.value("show_crosshair"), True),
         show_panel_frames=_read_bool(store.value("show_panel_frames"), False),
         show_caliper_labels_on_frame=_read_bool(store.value("show_caliper_labels_on_frame"), True),
+        show_caliper_inline_labels=_read_bool(store.value("show_caliper_inline_labels"), False),
         thumbnail_scale=_read_choice(
             store.value("thumbnail_scale"),
             "medium",
@@ -278,8 +284,12 @@ def load_user_preferences() -> UserPreferences:
         startup_mode=_read_choice(store.value("startup_mode"), "empty", {"empty", "last_folder"}),
         last_opened_folder=str(store.value("last_opened_folder", "")),
         theme_mode=_read_choice(
-            store.value("theme_mode"), "dark", {"dark", "light", "system"}
+            store.value("theme_mode"), "dark", {"dark", "light", "system", "vscode_dark", "vscode_light"}
         ),
+        language=_read_choice(store.value("language"), "ru", {"ru", "en"}),
+        auto_play=_read_bool(store.value("auto_play"), False),
+        layout_state_json=str(store.value("layout_state_json", "")),
+        reduce_motion=_read_bool(store.value("reduce_motion"), False),
     )
 
 

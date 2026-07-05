@@ -112,3 +112,42 @@ def test_context_manager_releases_capture(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError):
         reader.read_frame(0)
+
+
+def test_keyframe_index_includes_zero(tmp_path: Path) -> None:
+    video_path = tmp_path / "clip.mp4"
+    _write_synthetic_mp4(video_path, frame_count=12)
+
+    reader = VideoReader()
+    reader.open(video_path)
+    reader.read_frame(0)
+
+    assert reader.keyframe_index[0] == 0
+    assert len(reader.keyframe_index) >= 1
+    reader.release()
+
+
+def test_random_access_after_sequential_read(tmp_path: Path) -> None:
+    video_path = tmp_path / "clip.mp4"
+    _write_synthetic_mp4(video_path, frame_count=15, width=16, height=16)
+
+    reader = VideoReader()
+    reader.open(video_path)
+    reader.read_frame(0)
+    frame = reader.read_frame(9)
+
+    assert int(frame[0, 0, 0]) == 9
+    reader.release()
+
+
+def test_backward_seek_uses_keyframe_path(tmp_path: Path) -> None:
+    video_path = tmp_path / "clip.mp4"
+    _write_synthetic_mp4(video_path, frame_count=20)
+
+    reader = VideoReader()
+    reader.open(video_path)
+    reader.read_frame(14)
+    frame = reader.read_frame(3)
+
+    assert int(frame[0, 0, 0]) == 3
+    reader.release()

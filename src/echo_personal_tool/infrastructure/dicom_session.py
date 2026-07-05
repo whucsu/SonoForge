@@ -12,6 +12,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pydicom
+from pydicom.encaps import generate_frames, parse_basic_offsets
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,13 @@ _UNCOMPRESSED_SYNTAXES = frozenset({
     "1.2.840.10008.1.2.2",
 })
 
-_ITEM_TAG = 0xE000FFFE
-_DELIM_TAG = 0xE0DDFFFE
+_JPEG2000_SYNTAXES = frozenset({
+    "1.2.840.10008.1.2.4.90",
+    "1.2.840.10008.1.2.4.91",
+    "1.2.840.10008.1.2.4.92",
+    "1.2.840.10008.1.2.4.93",
+})
+
 _MAX_DECODE_WORKERS = 4
 _PIXEL_DATA_TAG = struct.pack("<HH", 0x7FE0, 0x0010)
 
@@ -91,51 +97,85 @@ def _extract_pixel_data_from_bytes(raw: bytes) -> bytes | None:
     return None
 
 
-def _parse_encapsulated_fragments(pixel_data: bytes) -> list[bytes]:
-    """Parse DICOM encapsulated pixel data, excluding the Basic Offset Table."""
-    if len(pixel_data) < 8:
-        return [pixel_data]
-
-    fragments: list[bytes] = []
-    first_item = True
-    pos = 0
-
-    while pos + 8 <= len(pixel_data):
-        tag = struct.unpack_from("<I", pixel_data, pos)[0]
-        length = struct.unpack_from("<I", pixel_data, pos + 4)[0]
-        pos += 8
-
-        if tag == _DELIM_TAG:
-            break
-        if tag != _ITEM_TAG:
-            break
-        if length == 0:
-            continue
-
-        data = pixel_data[pos : pos + length]
-        if first_item and _is_bot(data, pixel_data):
-            first_item = False
-            pos += length
-            continue
-        first_item = False
-        fragments.append(data)
-        pos += length
-
-    return fragments if fragments else [pixel_data]
+def _extended_offsets_from_metadata(
+    metadata: pydicom.Dataset,
+) -> tuple[bytes, bytes] | None:
+    eot = getattr(metadata, "ExtendedOffsetTable", None)
+    eot_lengths = getattr(metadata, "ExtendedOffsetTableLengths", None)
+    if eot is None or eot_lengths is None:
+        return None
+    return bytes(eot), bytes(eot_lengths)
 
 
-def _is_bot(data: bytes, full_pixel_data: bytes) -> bool:
-    """Heuristic: first item is BOT if it contains 4-byte offsets into pixel data."""
-    if len(data) < 4 or len(data) % 4 != 0:
-        return False
-    num_entries = len(data) // 4
-    if num_entries < 1:
-        return False
-    for i in range(min(num_entries, 4)):
-        offset = struct.unpack_from("<I", data, i * 4)[0]
-        if offset >= len(full_pixel_data):
-            return False
-    return True
+def _build_encapsulated_frame_index(
+    pixel_data: bytes,
+    *,
+    frame_count: int,
+    extended_offsets: tuple[bytes, bytes] | None = None,
+) -> tuple[list[bytes], list[int] | None]:
+    """Parse BOT/EOT and build per-frame compressed byte blobs via pydicom.encaps."""
+    kwargs: dict = {"number_of_frames": frame_count}
+    if extended_offsets is not None:
+        kwargs["extended_offsets"] = extended_offsets
+    frames = list(generate_frames(pixel_data, **kwargs))
+    if not frames:
+        raise ValueError("Encapsulated pixel data contains no frames")
+    if len(frames) != frame_count:
+        logger.warning(
+            "Encapsulated frame count mismatch: expected %s, got %s",
+            frame_count,
+            len(frames),
+        )
+    bot_offsets: list[int] | None
+    try:
+        bot_offsets = parse_basic_offsets(pixel_data)
+        if not bot_offsets:
+            bot_offsets = None
+    except Exception:
+        bot_offsets = None
+    return frames, bot_offsets
+
+
+def _decode_fragment_openjpeg(
+    fragment: bytes,
+    rows: int,
+    cols: int,
+) -> np.ndarray | None:
+    """Decode a JPEG-2000 codestream with pylibjpeg-openjpeg."""
+    try:
+        import openjpeg
+
+        img = openjpeg.decode(fragment)
+        if img is None:
+            return None
+        if img.ndim == 3:
+            if img.shape[2] == 4:
+                img = img[..., :3]
+            if img.shape[2] == 1:
+                img = img[..., 0]
+        if img.shape[:2] != (rows, cols):
+            return None
+        return np.ascontiguousarray(img)
+    except Exception:
+        return None
+
+
+def _decode_compressed_frame(
+    fragment: bytes,
+    rows: int,
+    cols: int,
+    transfer_syntax_uid: str,
+) -> np.ndarray | None:
+    if transfer_syntax_uid in _JPEG2000_SYNTAXES:
+        decoded = _decode_fragment_openjpeg(fragment, rows, cols)
+        if decoded is not None:
+            return decoded
+    decoded = _decode_fragment_cv2(fragment, rows, cols)
+    if decoded is not None:
+        return decoded
+    if transfer_syntax_uid not in _JPEG2000_SYNTAXES:
+        return _decode_fragment_openjpeg(fragment, rows, cols)
+    return None
 
 
 def _decode_fragment_cv2(fragment: bytes, rows: int, cols: int) -> np.ndarray | None:
@@ -150,9 +190,12 @@ def _decode_fragment_cv2(fragment: bytes, rows: int, cols: int) -> np.ndarray | 
                 img = img[..., :3]
             if img.shape[2] == 1:
                 img = img[..., 0]
+            # OpenCV returns BGR, convert to RGB for DICOM color Doppler
+            if img.ndim == 3 and img.shape[2] == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         if img.shape[:2] != (rows, cols):
             return None
-        return img
+        return np.ascontiguousarray(img)
     except Exception:
         return None
 
@@ -160,13 +203,13 @@ def _decode_fragment_cv2(fragment: bytes, rows: int, cols: int) -> np.ndarray | 
 def _decode_uncompressed_frame(
     pixel_data: bytes, offset: int, size: int, rows: int, cols: int, bytes_per_pixel: int
 ) -> np.ndarray:
-    """Decode a single uncompressed frame by slicing raw bytes."""
+    """Decode a single uncompressed frame — zero-copy view into raw bytes."""
     raw = pixel_data[offset : offset + size]
     if bytes_per_pixel == 1:
-        return np.frombuffer(raw, dtype=np.uint8).reshape(rows, cols).copy()
+        return np.frombuffer(raw, dtype=np.uint8).reshape(rows, cols)
     if bytes_per_pixel == 2:
-        return np.frombuffer(raw, dtype=np.uint16).reshape(rows, cols).copy()
-    return np.frombuffer(raw, dtype=np.uint8).reshape(rows, cols, bytes_per_pixel).copy()
+        return np.frombuffer(raw, dtype=np.uint16).reshape(rows, cols)
+    return np.frombuffer(raw, dtype=np.uint8).reshape(rows, cols, bytes_per_pixel)
 
 
 class DicomSession:
@@ -179,7 +222,10 @@ class DicomSession:
         self._is_uncompressed: bool = True
         self._frame_slices: list[tuple[int, int]] | None = None
         self._pixel_data_raw: bytes | None = None
-        self._fragments: list[bytes] | None = None
+        self._encapsulated_frames: list[bytes] | None = None
+        self._bot_offsets: list[int] | None = None
+        self._extended_offsets: tuple[bytes, bytes] | None = None
+        self._transfer_syntax_uid: str = "1.2.840.10008.1.2.1"
         self._first_frame: np.ndarray | None = None
 
     @property
@@ -206,15 +252,23 @@ class DicomSession:
         tsuid = str(
             getattr(self._metadata.file_meta, "TransferSyntaxUID", "1.2.840.10008.1.2.1")
         )
+        self._transfer_syntax_uid = tsuid
+        self._extended_offsets = _extended_offsets_from_metadata(self._metadata)
         self._is_uncompressed = tsuid in _UNCOMPRESSED_SYNTAXES
         if self._is_uncompressed:
             self._compute_frame_slices()
 
     def _compute_frame_slices(self) -> None:
         ds = self._metadata
-        rows, cols = int(ds.Rows), int(ds.Columns)
+        rows = getattr(ds, "Rows", None)
+        cols = getattr(ds, "Columns", None)
+        if rows is None or cols is None:
+            # Missing pixel geometry — cannot compute slices, fall back to pydicom decode
+            self._is_uncompressed = False
+            return
+        rows, cols = int(rows), int(cols)
         samples = int(getattr(ds, "SamplesPerPixel", 1))
-        bytes_per_pixel = (int(ds.BitsAllocated) // 8) * samples
+        bytes_per_pixel = (int(getattr(ds, "BitsAllocated", 8)) // 8) * samples
         frame_size = rows * cols * bytes_per_pixel
         self._frame_slices = [
             (i * frame_size, frame_size) for i in range(self._frame_count)
@@ -231,7 +285,18 @@ class DicomSession:
             full_ds = pydicom.dcmread(BytesIO(self._raw_bytes), force=True)
             self._pixel_data_raw = bytes(full_ds.PixelData)
         if not self._is_uncompressed:
-            self._fragments = _parse_encapsulated_fragments(self._pixel_data_raw)
+            self._encapsulated_frames, self._bot_offsets = _build_encapsulated_frame_index(
+                self._pixel_data_raw,
+                frame_count=self._frame_count,
+                extended_offsets=self._extended_offsets,
+            )
+
+    def _encapsulated_frame_bytes(self, index: int) -> bytes | None:
+        if self._encapsulated_frames is None:
+            return None
+        if index < 0 or index >= len(self._encapsulated_frames):
+            return None
+        return self._encapsulated_frames[index]
 
     def decode_first_frame(self) -> np.ndarray:
         """Decode only the first frame for fast initial display."""
@@ -286,8 +351,14 @@ class DicomSession:
                 self._pixel_data_raw, offset, size, rows, cols, bytes_per_pixel
             )
 
-        if self._fragments is not None and index < len(self._fragments):
-            decoded = _decode_fragment_cv2(self._fragments[index], rows, cols)
+        compressed = self._encapsulated_frame_bytes(index)
+        if compressed is not None:
+            decoded = _decode_compressed_frame(
+                compressed,
+                rows,
+                cols,
+                self._transfer_syntax_uid,
+            )
             if decoded is not None:
                 return decoded
 
@@ -328,7 +399,10 @@ class DicomSession:
         self._frames = None
         self._frame_slices = None
         self._pixel_data_raw = None
-        self._fragments = None
+        self._encapsulated_frames = None
+        self._bot_offsets = None
+        self._extended_offsets = None
+        self._transfer_syntax_uid = "1.2.840.10008.1.2.1"
         self._first_frame = None
 
 

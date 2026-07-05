@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import inspect
+import shutil
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QPropertyAnimation, QSize, Qt, QTimer, Signal, QEasingCurve
 from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
+    QFileDialog,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QSizePolicy,
     QStyle,
     QStyledItemDelegate,
@@ -18,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from echo_personal_tool.application.thumbnail_scheduler import ThumbnailPriority
 from echo_personal_tool.domain.models import InstanceMetadata, StudyMetadata
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.presentation.echopac_theme import ACCENT_BRIGHT, BG_DARK, TEXT
 
 _ITEM_ROLE = Qt.ItemDataRole.UserRole
@@ -27,7 +31,7 @@ _SCROLL_DEBOUNCE_MS = 25
 _THUMBNAIL_SCALES: dict[str, dict[str, tuple[int, int]]] = {
     "small": {"thumb": (72, 54), "cell": (84, 66)},
     "medium": {"thumb": (96, 72), "cell": (108, 84)},
-    "large": {"thumb": (128, 96), "cell": (140, 108)},
+    "large": {"thumb": (176, 132), "cell": (192, 148)},
 }
 _COLUMN_COUNT = 2
 _CELL_SPACING = 2
@@ -88,7 +92,7 @@ class ThumbnailGalleryDelegate(QStyledItemDelegate):
             painter.setPen(QColor_from(TEXT))
             font = painter.font()
             font.setBold(True)
-            font.setPointSize(9)
+            font.setPointSize(11)
             painter.setFont(font)
             painter.drawText(
                 rect.adjusted(6, 4, 0, 0),
@@ -113,7 +117,7 @@ class ThumbnailGalleryDelegate(QStyledItemDelegate):
         if _has_dicom_tags(instance):
             painter.setPen(QColor_from("#ffd54f"))
             font.setBold(True)
-            font.setPointSize(9)
+            font.setPointSize(11)
             painter.setFont(font)
             painter.drawText(
                 rect.adjusted(0, 0, -6, -4),
@@ -144,10 +148,14 @@ class ThumbnailGalleryWidget(QListWidget):
     """Two-column vertical thumbnail strip (EchoPac left panel)."""
 
     instance_selected = Signal(object)
+    export_mp4_requested = Signal(object)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("thumbnailGallery")
+        self._collapsed = False
+        self._saved_width = None
+        self._horizontal_mode = False
         self._thumb_w, self._thumb_h = _THUMBNAIL_SCALES["medium"]["thumb"]
         self._cell_w, self._cell_h = _THUMBNAIL_SCALES["medium"]["cell"]
         self.setItemDelegate(ThumbnailGalleryDelegate(self))
@@ -164,6 +172,8 @@ class ThumbnailGalleryWidget(QListWidget):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.itemClicked.connect(self._on_item_clicked)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._on_context_menu)
 
         self._thumbnail_cache: dict[str, QIcon] = {}
         self._thumbnail_pixmaps: dict[str, QPixmap] = {}
@@ -190,6 +200,37 @@ class ThumbnailGalleryWidget(QListWidget):
         self._cell_w, self._cell_h = spec["cell"]
         self._apply_gallery_metrics()
         self.viewport().update()
+
+    def set_horizontal_mode(self, enabled: bool) -> None:
+        if enabled:
+            self._saved_width = self.width()
+            self.setFixedWidth(16777215)
+            row_h = self._cell_h + _CELL_SPACING
+            self.setFixedHeight(row_h * 2 + 4)
+            self.setWrapping(True)
+            self.setFlow(QListWidget.Flow.LeftToRight)
+            self.setGridSize(QSize(self._cell_w, row_h))
+            self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        else:
+            self.setFixedWidth(_gallery_width(self._cell_w))
+            self.setFixedHeight(16777215)
+            self.setFlow(QListWidget.Flow.LeftToRight)
+            self.setGridSize(QSize(self._cell_w, self._cell_h))
+            self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self._horizontal_mode = enabled
+
+    def wheelEvent(self, event) -> None:
+        if self._horizontal_mode:
+            delta = event.angleDelta().y()
+            self.horizontalScrollBar().setValue(
+                self.horizontalScrollBar().value() - delta
+            )
+        else:
+            super().wheelEvent(event)
 
     def _apply_gallery_metrics(self) -> None:
         self.setGridSize(QSize(self._cell_w, self._cell_h))
@@ -303,6 +344,102 @@ class ThumbnailGalleryWidget(QListWidget):
         instance = item.data(_ITEM_ROLE)
         if isinstance(instance, InstanceMetadata):
             self.instance_selected.emit(instance)
+
+    def _on_context_menu(self, pos) -> None:
+        item = self.itemAt(pos)
+        if item is None:
+            return
+        instance = item.data(_ITEM_ROLE)
+        if not isinstance(instance, InstanceMetadata):
+            return
+        menu = QMenu(self)
+        if instance.media_format == "dicom":
+            menu.addAction(
+                tr("gallery.copy_dicom"),
+                lambda: self._copy_source_file(instance),
+            )
+            menu.addAction(
+                tr("gallery.export_mp4"),
+                lambda: self.export_mp4_requested.emit(instance),
+            )
+        elif instance.media_format == "mp4":
+            menu.addAction(
+                tr("gallery.copy_mp4"),
+                lambda: self._copy_source_file(instance),
+            )
+        menu.exec(self.viewport().mapToGlobal(pos))
+
+    def _copy_source_file(self, instance: InstanceMetadata) -> None:
+        if instance.path is None:
+            return
+        default_name = instance.path.name
+        dest, _ = QFileDialog.getSaveFileName(
+            self, tr("gallery.save_file"), default_name,
+        )
+        if dest:
+            shutil.copy2(str(instance.path), dest)
+
+    def toggle_collapse(self) -> None:
+        if self._collapsed:
+            self._animate_expand()
+        else:
+            self._animate_collapse()
+
+    def select_next_instance(self) -> None:
+        current = self.currentItem()
+        if current is None:
+            return
+        row = self.row(current) + 1
+        if row < self.count():
+            self.setCurrentRow(row)
+            item = self.item(row)
+            if item is not None:
+                instance = item.data(_ITEM_ROLE)
+                if isinstance(instance, InstanceMetadata):
+                    self.instance_selected.emit(instance)
+
+    def select_previous_instance(self) -> None:
+        current = self.currentItem()
+        if current is None:
+            return
+        row = self.row(current) - 1
+        if row >= 0:
+            self.setCurrentRow(row)
+            item = self.item(row)
+            if item is not None:
+                instance = item.data(_ITEM_ROLE)
+                if isinstance(instance, InstanceMetadata):
+                    self.instance_selected.emit(instance)
+
+    def _animate_collapse(self) -> None:
+        self._saved_width = self.width()
+        self._anim = QPropertyAnimation(self, b"maximumWidth")
+        self._anim.setDuration(200)
+        self._anim.setStartValue(self._saved_width)
+        self._anim.setEndValue(0)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutQuint)
+        self._anim.finished.connect(lambda: (self.hide(), setattr(self, '_collapsed', True)))
+        self._anim.start()
+
+    def _animate_expand(self) -> None:
+        target = self._saved_width or _gallery_width(self._cell_w)
+        self.show()
+        self.setMaximumWidth(0)
+        self._anim = QPropertyAnimation(self, b"maximumWidth")
+        self._anim.setDuration(200)
+        self._anim.setStartValue(0)
+        self._anim.setEndValue(target)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutQuint)
+        self._anim.finished.connect(lambda: (
+            self.setMaximumWidth(16777215),
+            self.setFixedWidth(target),
+            setattr(self, '_collapsed', False),
+        ))
+        self._anim.start()
+
+    @property
+    def is_collapsed(self) -> bool:
+        return self._collapsed
 
     def _visible_instance_uids(self) -> set[str]:
         uids: set[str] = set()

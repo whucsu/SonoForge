@@ -15,6 +15,8 @@ def test_playback_config_is_frozen():
         batch_size=3,
         max_lag_frames=2,
         evict_window=30,
+        scroll_debounce_ms=80,
+        scroll_batch_size=3,
     )
     with pytest.raises(AttributeError):
         cfg.prefetch_radius = 5  # type: ignore[misc]
@@ -37,6 +39,8 @@ def test_detect_playback_config_low_end(monkeypatch: pytest.MonkeyPatch):
     assert cfg.prefetch_radius == 3
     assert cfg.batch_size == 3
     assert cfg.evict_window == 30
+    assert cfg.scroll_debounce_ms == 80
+    assert cfg.scroll_batch_size == 3
 
 
 def test_detect_playback_config_high_end(monkeypatch: pytest.MonkeyPatch):
@@ -56,3 +60,11 @@ def test_detect_playback_config_high_end(monkeypatch: pytest.MonkeyPatch):
     assert cfg.prefetch_radius == 10
     assert cfg.batch_size == 8
     assert cfg.evict_window == 40
+    assert cfg.scroll_debounce_ms == 50
+    assert cfg.scroll_batch_size == 8
+
+
+def test_playback_config_includes_scroll_fields() -> None:
+    cfg = detect_playback_config()
+    assert cfg.scroll_debounce_ms in (50, 80)
+    assert cfg.scroll_batch_size in (3, 8)

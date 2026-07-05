@@ -8,6 +8,7 @@ speckle tracking).
 
 from __future__ import annotations
 
+import bisect
 from pathlib import Path
 
 import numpy as np
@@ -24,14 +25,22 @@ class FrameCache:
         self._total_frames: int = 0
         self._current_index: int = 0
         self._evict_window: int = evict_window
+        self._pinned: set[int] = set()
+        self._sorted_keys: list[int] = []
+        self._cached_frames: np.ndarray | None = None
 
     @property
     def frames(self) -> np.ndarray | None:
+        if self._cached_frames is not None:
+            return self._cached_frames
         if not self._frame_store:
             return None
         if len(self._frame_store) == self._total_frames:
-            return np.stack([self._frame_store[i] for i in range(self._total_frames)])
-        return np.stack([self._frame_store[i] for i in sorted(self._frame_store)])
+            result = np.stack([self._frame_store[i] for i in range(self._total_frames)])
+        else:
+            result = np.stack([self._frame_store[i] for i in sorted(self._frame_store)])
+        self._cached_frames = result
+        return result
 
     def is_ready(self, path: Path) -> bool:
         return (
@@ -52,6 +61,8 @@ class FrameCache:
         self._frame_store = {i: arr[i] for i in range(arr.shape[0])}
         self._total_frames = arr.shape[0]
         self._current_index = 0
+        self._sorted_keys = sorted(self._frame_store.keys())
+        self._cached_frames = None
 
     def get(self, index: int) -> np.ndarray:
         if self._total_frames == 0:
@@ -70,13 +81,19 @@ class FrameCache:
         self._total_frames = total
 
     def put(self, index: int, frame: np.ndarray) -> None:
+        if index not in self._frame_store:
+            bisect.insort(self._sorted_keys, index)
         self._frame_store[index] = frame
+        self._cached_frames = None
 
     def clear(self) -> None:
         self.source_path = None
         self._frame_store.clear()
         self._total_frames = 0
         self._current_index = 0
+        self._pinned.clear()
+        self._sorted_keys.clear()
+        self._cached_frames = None
 
     def frame_count(self) -> int:
         return self._total_frames
@@ -90,6 +107,12 @@ class FrameCache:
     def set_current(self, index: int) -> None:
         self._current_index = index
         self._evict()
+
+    def pin(self, index: int) -> None:
+        self._pinned.add(index)
+
+    def unpin(self, index: int) -> None:
+        self._pinned.discard(index)
 
     def prefetch(self, center: int, near: int = 5) -> None:
         self._current_index = center
@@ -109,23 +132,62 @@ class FrameCache:
         """Count loaded frames strictly after center (no wrap)."""
         if self._total_frames == 0:
             return 0
-        return sum(1 for i in range(center + 1, self._total_frames) if i in self._frame_store)
+        # O(k) scan where k = frames ahead, instead of O(n) full scan
+        count = 0
+        store = self._frame_store
+        for i in range(center + 1, self._total_frames):
+            if i in store:
+                count += 1
+        return count
+
+    def loaded_before(self, center: int) -> int:
+        """Count loaded frames strictly before center (no wrap)."""
+        if self._total_frames == 0:
+            return 0
+        count = 0
+        store = self._frame_store
+        for i in range(0, center):
+            if i in store:
+                count += 1
+        return count
+
+    def nearest_loaded_before(self, center: int) -> int | None:
+        """Return the largest loaded index < center; None if none."""
+        if self._total_frames == 0:
+            return None
+        store = self._frame_store
+        for idx in range(center - 1, -1, -1):
+            if idx in store:
+                return idx
+        return None
 
     def nearest_loaded_ahead(self, center: int) -> int | None:
         """Return the smallest loaded index > center, wrapping to 0 at end; None if none."""
         if self._total_frames == 0:
             return None
+        store = self._frame_store
         for idx in range(center + 1, self._total_frames):
-            if idx in self._frame_store:
+            if idx in store:
                 return idx
         for idx in range(0, center):
-            if idx in self._frame_store:
+            if idx in store:
                 return idx
         return None
 
     def _evict(self) -> None:
         lo = self._current_index - self._evict_window
         hi = self._current_index + self._evict_window
-        to_drop = [i for i in self._frame_store if i < lo or i > hi]
-        for i in to_drop:
-            del self._frame_store[i]
+        keys = self._sorted_keys
+        if not keys:
+            return
+        # Frames outside [lo, hi] are evicted
+        left_drop = keys[:bisect.bisect_left(keys, lo)]
+        right_drop = keys[bisect.bisect_right(keys, hi):]
+        to_drop = [k for k in left_drop + right_drop if k not in self._pinned]
+        if not to_drop:
+            return
+        to_drop_set = set(to_drop)
+        for k in to_drop:
+            del self._frame_store[k]
+        self._sorted_keys = [k for k in keys if k not in to_drop_set]
+        self._cached_frames = None
