@@ -94,17 +94,20 @@ def clamp_nodes_to_center(
     median_points: list[tuple[float, float]],
     center_points: list[tuple[float, float]],
     shift_cap: float,
+    apex_index: int | None = None,
+    apex_shift_cap: float | None = None,
 ) -> list[tuple[float, float]]:
-    """Clamp each node to center ± shift_cap."""
+    """Clamp each node to center ± shift_cap. Apex node uses tighter cap."""
     result = []
-    for m, c in zip(median_points, center_points):
+    for idx, (m, c) in enumerate(zip(median_points, center_points)):
+        cap = apex_shift_cap if (idx == apex_index and apex_shift_cap is not None) else shift_cap
         dx = m[0] - c[0]
         dy = m[1] - c[1]
         dist = math.hypot(dx, dy)
-        if dist <= shift_cap or dist == 0.0:
+        if dist <= cap or dist == 0.0:
             result.append(m)
         else:
-            scale = shift_cap / dist
+            scale = cap / dist
             result.append((c[0] + dx * scale, c[1] + dy * scale))
     return result
 
@@ -207,14 +210,41 @@ def temporal_fuse(
     center_centroid = _ma_centroid(center_ma)
 
     aligned_masks = [center_mask]
+    # Store alignment deltas for point alignment
+    alignment_deltas: dict[int, tuple[float, float]] = {}
     for i in valid_neighbor_ids:
         c = neighbor_contours[i]
         if c.mitral_annulus is not None:
             t_centroid = _ma_centroid(c.mitral_annulus)
+            dx = center_centroid[0] - t_centroid[0]
+            dy = center_centroid[1] - t_centroid[1]
+            alignment_deltas[i] = (dx, dy)
             aligned = align_mask_to_anchor(neighbor_masks[i], t_centroid, center_centroid)
         else:
+            alignment_deltas[i] = (0.0, 0.0)
             aligned = neighbor_masks[i]
         aligned_masks.append(aligned)
+
+    # Align neighbor contour points to anchor canvas
+    aligned_neighbor_contours: dict[int, Contour] = {}
+    for i in valid_neighbor_ids:
+        c = neighbor_contours[i]
+        dx, dy = alignment_deltas.get(i, (0.0, 0.0))
+        aligned_points = [(x + dx, y + dy) for x, y in c.points]
+        aligned_annulus = None
+        if c.mitral_annulus is not None:
+            (sx, sy), (lx, ly) = c.mitral_annulus
+            aligned_annulus = ((sx + dx, sy + dy), (lx + dx, ly + dy))
+        aligned_apex = None
+        if c.apex_landmark is not None:
+            aligned_apex = (c.apex_landmark[0] + dx, c.apex_landmark[1] + dy)
+        aligned_neighbor_contours[i] = Contour(
+            phase=c.phase, view=c.view, chamber=c.chamber,
+            points=aligned_points, source=c.source,
+            mitral_annulus=aligned_annulus, apex_landmark=aligned_apex,
+            num_nodes=c.num_nodes, frame_index=c.frame_index,
+            sop_instance_uid=c.sop_instance_uid,
+        )
 
     # --- 2. Mask vote fusion ---
     threshold = min(config.vote_threshold, len(aligned_masks))
@@ -253,12 +283,24 @@ def temporal_fuse(
     # --- 4. Node clamp ---
     ma_len = _ma_length(annulus)
     shift_cap = config.max_node_shift_ratio(phase) * ma_len
+    apex_shift_cap = config.apex_max_shift_ratio(phase) * ma_len
     center_nodes = center_contour.points
+
+    # Find apex index (node closest to apex landmark)
+    apex_idx = None
+    if center_contour.apex_landmark is not None:
+        apex_pt = center_contour.apex_landmark
+        min_dist = float("inf")
+        for j, pt in enumerate(center_nodes):
+            d = math.hypot(pt[0] - apex_pt[0], pt[1] - apex_pt[1])
+            if d < min_dist:
+                min_dist = d
+                apex_idx = j
 
     # Resample all arcs to 32 nodes (center is already 32 from open_arc)
     neighbor_node_lists = []
     for i in valid_neighbor_ids:
-        c = neighbor_contours[i]
+        c = aligned_neighbor_contours.get(i, neighbor_contours[i])
         pts = c.points
         if len(pts) == len(open_points):
             neighbor_node_lists.append(pts)
@@ -268,7 +310,10 @@ def temporal_fuse(
             _component_wise_median([center_nodes[j]] + [nl[j] for nl in neighbor_node_lists])
             for j in range(len(open_points))
         ]
-        fused_nodes = clamp_nodes_to_center(median_nodes, center_nodes, shift_cap)
+        fused_nodes = clamp_nodes_to_center(
+            median_nodes, center_nodes, shift_cap,
+            apex_index=apex_idx, apex_shift_cap=apex_shift_cap,
+        )
     else:
         fused_nodes = list(open_points)
 
@@ -276,9 +321,9 @@ def temporal_fuse(
     # Use center_contour.mitral_annulus as reference for δ clamp (spec §5.1)
     center_annulus = center_contour.mitral_annulus or annulus
     neighbor_annuli = [
-        neighbor_contours[i].mitral_annulus
+        aligned_neighbor_contours[i].mitral_annulus
         for i in valid_neighbor_ids
-        if neighbor_contours[i].mitral_annulus is not None
+        if aligned_neighbor_contours[i].mitral_annulus is not None
     ]
     delta = config.annulus_max_shift_ratio(phase) * ma_len
     fused_annulus = fuse_annulus_endpoints(center_annulus, neighbor_annuli, delta)
@@ -288,9 +333,9 @@ def temporal_fuse(
     # --- 6. Apex direction lock ---
     if config.apex_direction_lock:
         neighbor_apices = [
-            neighbor_contours[i].apex_landmark
+            aligned_neighbor_contours[i].apex_landmark
             for i in valid_neighbor_ids
-            if neighbor_contours[i].apex_landmark is not None
+            if aligned_neighbor_contours[i].apex_landmark is not None
         ]
         center_apex = center_contour.apex_landmark or apex
         epsilon = config.apex_max_shift_ratio(phase) * ma_len
@@ -324,7 +369,7 @@ def temporal_fuse(
         anchor_frame_index=anchor_frame_index,
         fused_contour=fused_contour,
         center_contour=center_contour,
-        neighbor_contours={i: neighbor_contours[i] for i in valid_neighbor_ids},
+        neighbor_contours={i: aligned_neighbor_contours[i] for i in valid_neighbor_ids},
         frames_used=1 + len(valid_neighbor_ids),
         frames_requested=len(neighbor_masks) + 1,
         config=config,

@@ -3076,13 +3076,11 @@ class ViewerWidget(QWidget):
         return self._ghost_mode
 
     def toggle_ghost_mode(self) -> str:
-        """Cycle: off → center → neighbor → off. Returns new mode."""
-        if self._ghost_mode == "off":
-            self._ghost_mode = "center"
-        elif self._ghost_mode == "center":
-            self._ghost_mode = "neighbor"
-        else:
+        """Toggle center-only ghost overlay. Returns new mode."""
+        if self._ghost_mode == "center":
             self._ghost_mode = "off"
+        else:
+            self._ghost_mode = "center"
         self._render_ghost_overlay()
         return self._ghost_mode
 
