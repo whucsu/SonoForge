@@ -713,7 +713,7 @@ class AppController(QObject):
         self._update_gold_manifest(gold_root, study_uid, instance, frame_index, phase)
 
         self.status_message.emit(
-            tr("app.gold_saved", phase=phase, frame=frame_index, path=str(gold_path))
+            tr("app.gold_saved", phase=phase, frame=frame_index + 1, path=str(gold_path))
         )
 
     def _update_gold_manifest(
