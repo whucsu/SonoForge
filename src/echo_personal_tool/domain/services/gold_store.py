@@ -52,7 +52,11 @@ def merge_frame_into_gold(
     existing: dict[str, Any],
     frame_data: dict[str, Any],
 ) -> dict[str, Any]:
-    """Merge a new frame into existing gold data, deduplicating by frame_index + phase."""
+    """Merge a new frame into existing gold data, deduplicating by frame_index + phase.
+
+    If the frame has a different instance_path than the study-level one,
+    update the study-level instance_path to the most recent file.
+    """
     _validate_frame(frame_data)
     frames: list[dict[str, Any]] = existing.get("frames", [])
     key = (frame_data["frame_index"], frame_data["phase"])
@@ -61,7 +65,13 @@ def merge_frame_into_gold(
             frames[i] = frame_data
             return {**existing, "frames": frames}
     frames.append(frame_data)
-    return {**existing, "frames": frames}
+
+    # Update top-level instance_path if frame comes from a different file
+    result = {**existing, "frames": frames}
+    frame_path = frame_data.get("instance_path")
+    if frame_path and frame_path != existing.get("instance_path"):
+        result["instance_path"] = frame_path
+    return result
 
 
 def make_gold_frame(
@@ -75,6 +85,7 @@ def make_gold_frame(
     annotator: str = "",
     view: str = "A4C",
     sop_instance_uid: str | None = None,
+    instance_path: str | None = None,
 ) -> dict[str, Any]:
     """Build a single gold frame dict ready for merge_frame_into_gold."""
     frame: dict[str, Any] = {
@@ -91,6 +102,8 @@ def make_gold_frame(
         frame["apex_landmark"] = apex_landmark
     if sop_instance_uid is not None:
         frame["sop_instance_uid"] = sop_instance_uid
+    if instance_path is not None:
+        frame["instance_path"] = instance_path
     return frame
 
 

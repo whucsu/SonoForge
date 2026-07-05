@@ -692,6 +692,7 @@ class AppController(QObject):
             annotator="",
             view="A4C",
             sop_instance_uid=instance.sop_instance_uid,
+            instance_path=str(instance.path),
         )
 
         if gold_path.exists():

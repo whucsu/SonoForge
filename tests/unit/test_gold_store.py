@@ -105,6 +105,40 @@ class TestMergeFrame:
         assert len(merged["frames"]) == 1
         assert merged["frames"][0]["points"] == [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
 
+    def test_merge_updates_instance_path_from_different_file(self, sample_gold: dict) -> None:
+        """When frame comes from a different file, top-level instance_path updates."""
+        new_frame = make_gold_frame(
+            frame_index=28,
+            phase="ES",
+            points=[[50.0, 60.0], [70.0, 80.0], [90.0, 100.0]],
+            mitral_annulus=[[40.0, 50.0], [100.0, 50.0]],
+            instance_path="/path/to/other.dcm",
+        )
+        merged = merge_frame_into_gold(sample_gold, new_frame)
+        assert merged["instance_path"] == "/path/to/other.dcm"
+
+    def test_merge_keeps_instance_path_from_same_file(self, sample_gold: dict) -> None:
+        """When frame comes from same file, top-level instance_path unchanged."""
+        new_frame = make_gold_frame(
+            frame_index=28,
+            phase="ES",
+            points=[[50.0, 60.0], [70.0, 80.0], [90.0, 100.0]],
+            mitral_annulus=[[40.0, 50.0], [100.0, 50.0]],
+            instance_path="/path/to/dicom.dcm",
+        )
+        merged = merge_frame_into_gold(sample_gold, new_frame)
+        assert merged["instance_path"] == "/path/to/dicom.dcm"
+
+    def test_make_gold_frame_includes_instance_path(self) -> None:
+        frame = make_gold_frame(
+            frame_index=0,
+            phase="ED",
+            points=[[0, 0], [1, 1], [2, 2]],
+            mitral_annulus=[[0, 0], [2, 0]],
+            instance_path="/path/to/file.dcm",
+        )
+        assert frame["instance_path"] == "/path/to/file.dcm"
+
 
 class TestMakeGoldStudy:
     def test_make_study(self) -> None:
