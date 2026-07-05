@@ -17,6 +17,7 @@ a = Analysis(
     datas=[
         (str(SRC / "resources" / "fonts"), "echo_personal_tool/resources/fonts"),
         (str(SRC / "resources" / "icons"), "echo_personal_tool/resources/icons"),
+        (str(SRC / "resources" / "references"), "echo_personal_tool/resources/references"),
     ],
     hiddenimports=[
         # DICOM stack

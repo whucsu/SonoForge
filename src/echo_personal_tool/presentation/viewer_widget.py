@@ -393,6 +393,9 @@ class _CaliperNodeItem(pg.ScatterPlotItem):
         if ev.button() != Qt.MouseButton.LeftButton:
             super().mousePressEvent(ev)
             return
+        if self._viewer_widget._linear_caliper_active:
+            ev.ignore()
+            return
         ev.accept()
         view_box = self.getViewBox() or self._viewer_widget._view
         point = view_box.mapSceneToView(ev.scenePos())
@@ -1509,6 +1512,7 @@ class ViewerWidget(QWidget):
             self._clear_persistent_linear_calipers()
             self._clear_contours()
             self._stored_linear_measurements = {}
+            self._results_overlay_cleared = False
             if self._doppler_cal_step is not None:
                 self._doppler_cal_step = None
                 self._doppler_roi_corner1 = None

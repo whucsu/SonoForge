@@ -32,8 +32,10 @@ from PySide6.QtWidgets import (
 
 from echo_personal_tool.domain.services.ase_reference_parser import (
     default_ase_reference_path,
+    default_references_dir,
     load_ase_reference_text,
     markdown_to_html,
+    scan_references_dir,
 )
 from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.presentation.echopac_theme import get_theme_palette
@@ -367,7 +369,7 @@ class AseReferenceDialog(QDialog):
         self._pdf_toolbar.hide()
 
         self._apply_font()
-        self._load_default_document()
+        self._load_default_documents()
 
     # ── Title bar ─────────────────────────────────────────────────
 
@@ -517,12 +519,17 @@ class AseReferenceDialog(QDialog):
 
     # ── Documents ─────────────────────────────────────────────────
 
-    def _load_default_document(self) -> None:
+    def _load_default_documents(self) -> None:
         try:
-            md_path = default_ase_reference_path()
+            docs = scan_references_dir()
         except FileNotFoundError:
-            return
-        self._add_doc_tab(md_path.name, md_path, "md")
+            try:
+                md_path = default_ase_reference_path()
+            except FileNotFoundError:
+                return
+            docs = [(md_path.name, md_path, "md")]
+        for name, path, kind in docs:
+            self._add_doc_tab(name, path, kind)
         if self._documents:
             self._switch_to_doc(0)
 

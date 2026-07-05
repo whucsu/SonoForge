@@ -319,8 +319,7 @@ QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabl
     opacity: 0.45;
 }}
 QPushButton:focus, QToolButton:focus {{
-    outline: 2px solid {p["accent_tab"]};
-    outline-offset: 2px;
+    outline: none;
 }}
 
 /* ── GroupBox ───────────────────────────────────────────────── */
@@ -573,7 +572,7 @@ QCheckBox::indicator:checked {{
 }}
 
 /* ── Focus ring ─────────────────────────────────────────────── */
-QPushButton:focus, QToolButton:focus, QTabBar::tab:focus {{
+QTabBar::tab:focus {{
     border-color: {p["accent_tab"]};
 }}
 QSpinBox:focus, QCheckBox:focus {{

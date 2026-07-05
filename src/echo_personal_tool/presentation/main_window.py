@@ -1070,6 +1070,7 @@ class MainWindow(QMainWindow):
         self._viewer.show_frame(image)
         self._viewer.reposition_overlays()
         self._viewer.refresh_dicom_tags_overlay()
+        self._viewer._refresh_frame_overlays()
         self._restore_doppler_for_current_instance()
         self._restore_mmode_for_current_instance()
         self._sync_doppler_tool_availability()
