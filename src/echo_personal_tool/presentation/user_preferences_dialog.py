@@ -285,6 +285,17 @@ class UserPreferencesDialog(QDialog):
         gold_form.addRow(tr("preferences.gold_path"), gold_path_row)
         tabs.addTab(_scrollable_tab(gold_form), tr("preferences.tab_gold"))
 
+        refs_form = QFormLayout()
+        self._refs_dir = QLineEdit(current.references_dir)
+        self._refs_dir.setPlaceholderText(str(Path.home() / "ECHO2026-references"))
+        self._refs_dir_browse = QPushButton(tr("references_dir_browse"))
+        self._refs_dir_browse.clicked.connect(self._browse_references_dir)
+        refs_dir_row = QHBoxLayout()
+        refs_dir_row.addWidget(self._refs_dir)
+        refs_dir_row.addWidget(self._refs_dir_browse)
+        refs_form.addRow(tr("preferences.references_dir"), refs_dir_row)
+        tabs.addTab(_scrollable_tab(refs_form), tr("preferences.tab_references"))
+
         other_form = QFormLayout()
         self._confirm_reset = QCheckBox()
         self._confirm_reset.setChecked(current.confirm_reset)
@@ -353,6 +364,16 @@ class UserPreferencesDialog(QDialog):
         if path:
             self._gold_path.setText(path)
 
+    def _browse_references_dir(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        path = QFileDialog.getExistingDirectory(
+            self,
+            tr("references_dir_browse_title"),
+            self._refs_dir.text() or str(Path.home()),
+        )
+        if path:
+            self._refs_dir.setText(path)
+
     def _on_accept(self) -> None:
         stored = load_user_preferences()
         preferences = UserPreferences(
@@ -395,6 +416,7 @@ class UserPreferencesDialog(QDialog):
             reduce_motion=self._reduce_motion.isChecked(),
             gold_annotation_enabled=self._gold_enabled.isChecked(),
             gold_dataset_path=self._gold_path.text().strip(),
+            references_dir=self._refs_dir.text().strip(),
         )
         save_user_preferences(preferences)
         save_server_settings(self._server_form.settings())

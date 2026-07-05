@@ -14,11 +14,11 @@ os.environ.setdefault(
 )
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 for _logger_name in ("pylibjpeg", "pylibjpeg.utils", "pydicom"):
-    logging.getLogger(_logger_name).setLevel(logging.WARNING)
+    logging.getLogger(_logger_name).setLevel(logging.ERROR)
 if os.environ.get("ECHO_DEBUG"):
     logging.getLogger("echo_personal_tool").setLevel(logging.DEBUG)
 

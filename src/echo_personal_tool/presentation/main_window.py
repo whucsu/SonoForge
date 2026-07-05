@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
         self._instance_overlay_cache: dict[str, str] = {}
         self._instance_overlay_positions: dict[str, tuple[float, float]] = {}
         self._study_overlay_positions: dict[str, tuple[float, float]] = {}
+        self._last_overlay_position: tuple[float, float] | None = None
         self._current_overlay_study_uid: str | None = None
         self._overlay_sync_instance_uid: str | None = None
         self._last_overlay_state: ViewerState | None = None
@@ -672,6 +673,7 @@ class MainWindow(QMainWindow):
         if not preferences.results_overlay_custom_position:
             self._instance_overlay_positions.clear()
             self._study_overlay_positions.clear()
+            self._last_overlay_position = None
             self._current_overlay_study_uid = None
         from echo_personal_tool.infrastructure.i18n import set_language
         set_language(preferences.language)
@@ -711,6 +713,7 @@ class MainWindow(QMainWindow):
         save_user_preferences(self._user_preferences)
 
     def _on_results_overlay_position_changed(self, x_ratio: float, y_ratio: float) -> None:
+        self._last_overlay_position = (x_ratio, y_ratio)
         instance = self._controller.state_manager.snapshot.instance
         if instance is not None:
             self._instance_overlay_positions[instance.sop_instance_uid] = (x_ratio, y_ratio)
@@ -727,10 +730,18 @@ class MainWindow(QMainWindow):
                 x_ratio, y_ratio = self._study_overlay_positions[study_uid]
                 self._viewer.set_results_overlay_position(x_ratio, y_ratio, custom=True)
                 return
+            if self._last_overlay_position is not None:
+                x_ratio, y_ratio = self._last_overlay_position
+                self._viewer.set_results_overlay_position(x_ratio, y_ratio, custom=True)
+                return
             self._viewer.reset_results_overlay_to_default()
             return
         if instance_uid and instance_uid in self._instance_overlay_positions:
             x_ratio, y_ratio = self._instance_overlay_positions[instance_uid]
+            self._viewer.set_results_overlay_position(x_ratio, y_ratio, custom=True)
+            return
+        if self._last_overlay_position is not None:
+            x_ratio, y_ratio = self._last_overlay_position
             self._viewer.set_results_overlay_position(x_ratio, y_ratio, custom=True)
             return
         self._viewer.reset_results_overlay_to_default()
