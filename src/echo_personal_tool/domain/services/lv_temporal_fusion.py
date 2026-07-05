@@ -273,13 +273,15 @@ def temporal_fuse(
         fused_nodes = list(open_points)
 
     # --- 5. Annulus fusion ---
+    # Use center_contour.mitral_annulus as reference for δ clamp (spec §5.1)
+    center_annulus = center_contour.mitral_annulus or annulus
     neighbor_annuli = [
         neighbor_contours[i].mitral_annulus
         for i in valid_neighbor_ids
         if neighbor_contours[i].mitral_annulus is not None
     ]
     delta = config.annulus_max_shift_ratio(phase) * ma_len
-    fused_annulus = fuse_annulus_endpoints(annulus, neighbor_annuli, delta)
+    fused_annulus = fuse_annulus_endpoints(center_annulus, neighbor_annuli, delta)
     fused_nodes[0] = fused_annulus[0]
     fused_nodes[-1] = fused_annulus[1]
 

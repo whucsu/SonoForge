@@ -189,6 +189,7 @@ class AppController(QObject):
         self._fusion_masks: dict[int, np.ndarray] = {}
         self._fusion_contours: dict[int, Contour] = {}
         self._fusion_window: list[int] = []
+        self._fusion_processed: set[int] = set()  # tracks done/failed frames
         self._fusion_result: TemporalFusionResult | None = None
         self._scan_started_at: float | None = None
         self._first_preview_emitted = False
@@ -640,6 +641,7 @@ class AppController(QObject):
         self._fusion_masks = {}
         self._fusion_contours = {}
         self._fusion_window = []
+        self._fusion_processed = set()
         self._fusion_result = None
 
     def request_auto_segment(
@@ -2093,6 +2095,7 @@ class AppController(QObject):
         self._fusion_masks = {frame_index: mask}
         self._fusion_contours = {frame_index: center_contour}
         self._fusion_window = window
+        self._fusion_processed = {frame_index}  # anchor already done
         self._fusion_result = None
 
         self.status_message.emit(
@@ -2241,8 +2244,9 @@ class AppController(QObject):
 
         self._fusion_masks[neighbor_idx] = mask
         self._fusion_contours[neighbor_idx] = contour
+        self._fusion_processed.add(neighbor_idx)
 
-        done = sum(1 for i in self._fusion_window if i in self._fusion_masks)
+        done = len(self._fusion_processed)
         self.status_message.emit(
             tr("status.temporal_fusion_progress", done=done, total=len(self._fusion_window))
         )
@@ -2250,7 +2254,12 @@ class AppController(QObject):
         self._try_complete_temporal_fusion()
 
     def _on_neighbor_segment_failed(self, neighbor_idx: int) -> None:
-        """Neighbor segment failed — count what we have and try fusion."""
+        """Neighbor segment failed — mark processed and try fusion."""
+        self._fusion_processed.add(neighbor_idx)
+        done = len(self._fusion_processed)
+        self.status_message.emit(
+            tr("status.temporal_fusion_progress", done=done, total=len(self._fusion_window))
+        )
         self._try_complete_temporal_fusion()
 
     def _try_complete_temporal_fusion(self) -> None:
@@ -2259,8 +2268,8 @@ class AppController(QObject):
             return
 
         expected = len(self._fusion_window)
-        done = sum(1 for i in self._fusion_window if i in self._fusion_masks)
-        if done < expected:
+        processed = len(self._fusion_processed)
+        if processed < expected:
             return
 
         self._fusion_in_progress = False
@@ -2290,17 +2299,31 @@ class AppController(QObject):
 
         self._fusion_result = result
 
+        # Refine fused contour on frame N pixels (spec §5.2 step 6)
+        fused_contour = result.fused_contour
+        if self._current_frame_pixels is not None and self._should_auto_refine_after_segment():
+            from echo_personal_tool.domain.services.mbs_lite_service import refine_open_arc_contour
+
+            is_cine = (
+                self._current_instance is not None
+                and self._current_instance.media_format != "dicom"
+            )
+            refined, _ = refine_open_arc_contour(
+                self._current_frame_pixels, fused_contour, cine=is_cine,
+            )
+            fused_contour = refined
+
         # Replace pending contour with fused contour
         contours = [
             existing
             for existing in self._state_manager.snapshot.contours
             if not (
-                existing.phase == result.fused_contour.phase
-                and existing.view == result.fused_contour.view
-                and existing.chamber == result.fused_contour.chamber
+                existing.phase == fused_contour.phase
+                and existing.view == fused_contour.view
+                and existing.chamber == fused_contour.chamber
             )
         ]
-        contours.append(result.fused_contour)
+        contours.append(fused_contour)
         self.on_contours_changed(contours)
 
         self.status_message.emit(
