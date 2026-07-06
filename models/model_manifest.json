@@ -102,10 +102,10 @@
     "layout": "NCHW",
     "color_order": "RGB",
     "value_range_before_norm": "0-255",
-    "normalization_mode": "fixed_if_available",
-    "normalization_note": "v1.5: fixed_if_available uses calibrated mean/std when non-null, falls back to per_frame. Calibrate via scripts/calibrate_echonet_norm.py.",
-    "fixed_mean": [0.124, 0.124, 0.124],
-    "fixed_std": [0.116, 0.116, 0.116]
+    "normalization_mode": "per_frame",
+    "normalization_note": "v1.7: per_frame normalization — produces larger masks than fixed mean/std on diverse DICOM data.",
+    "fixed_mean": null,
+    "fixed_std": null
   },
   "la_inference": {
     "active_model": "echonet_la_resnet50_224",
@@ -122,7 +122,7 @@
       "ED",
       "ES"
     ],
-    "crop_mode": "full_roi",
+    "crop_mode": "center_square",
     "logit_threshold": null,
     "auto_refine_after_segment": true,
     "refine_step_stride": 3,

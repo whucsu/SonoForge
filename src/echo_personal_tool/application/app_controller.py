@@ -641,6 +641,11 @@ class AppController(QObject):
         )
 
         chamber = chamber.upper()
+        if chamber == "LA":
+            if phase != "ES":
+                self.status_message.emit(tr("app.gold_la_requires_es_a4c"))
+                return
+
         snapshot = self._state_manager.snapshot
         instance = snapshot.instance
         if instance is None or instance.media_format != "dicom":
@@ -678,7 +683,10 @@ class AppController(QObject):
                 contour = c
                 break
         if contour is None:
-            self.status_message.emit(tr("app.gold_no_contour", phase=phase))
+            self.status_message.emit(tr("app.gold_no_contour", phase=phase, chamber=chamber))
+            return
+        if chamber == "LA" and contour.view != "A4C":
+            self.status_message.emit(tr("app.gold_la_requires_es_a4c"))
             return
 
         pixel_spacing = snapshot.effective_pixel_spacing
@@ -2018,11 +2026,11 @@ class AppController(QObject):
             and self._state_manager.snapshot.current_frame_index == frame_index
         )
 
-    def _should_auto_refine_after_segment(self) -> bool:
+    def _should_auto_refine_after_segment(self, manifest_section: str = "inference") -> bool:
         manifest = _load_manifest(_default_models_dir())
         if not manifest:
             return False
-        inference = manifest.get("inference", {})
+        inference = manifest.get(manifest_section, {})
         if not isinstance(inference, dict):
             return False
         return bool(inference.get("auto_refine_after_segment", False))
@@ -2304,7 +2312,9 @@ class AppController(QObject):
             return
 
         # Optional auto-refine (LA-specific elliptical template)
-        if self._current_frame_pixels is not None and self._should_auto_refine_after_segment():
+        if self._current_frame_pixels is not None and self._should_auto_refine_after_segment(
+            manifest_section="la_inference",
+        ):
             from echo_personal_tool.domain.services.mbs_lite_service import refine_open_arc_contour
 
             instance_uid = (
@@ -2338,7 +2348,11 @@ class AppController(QObject):
 
         pixel_spacing, _ = self._resolve_pixel_spacing(self._state_manager.snapshot)
         reject_reason = explain_la_auto_reject_reason(
-            contour, pixel_spacing, mask_pixels=mask_pixels,
+            contour,
+            pixel_spacing,
+            mask_pixels=mask_pixels,
+            mask=mask,
+            roi_xyxy=self._last_segment_roi_xyxy,
         )
         if reject_reason is not None:
             self.status_message.emit(

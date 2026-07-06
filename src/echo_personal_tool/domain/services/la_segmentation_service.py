@@ -13,6 +13,7 @@ from echo_personal_tool.domain.services.contour_geometry import (
     point_line_distance,
     resample_open_arc_landmarks,
 )
+from echo_personal_tool.domain.services.bench_metrics import mask_iou
 from echo_personal_tool.domain.services.mbs_lite_service import (
     _ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
     _warp_elliptical_open_arc,
@@ -169,11 +170,27 @@ def la_mask_to_contour(
 # Quality gate
 # ---------------------------------------------------------------------------
 
+def _mask_ellipse_fit_residual(mask: np.ndarray, contour: Contour) -> float:
+    """1 − IoU(mask, filled contour polygon), normalized ellipse-fit error."""
+    binary = np.asarray(mask) > 0
+    if not binary.any() or len(contour.points) < 3:
+        return 0.0
+    import cv2
+
+    filled = np.zeros(binary.shape[:2], dtype=np.uint8)
+    pts = np.array(contour.closed_polygon_points(), dtype=np.int32)
+    if len(pts) < 3:
+        return 0.0
+    cv2.fillPoly(filled, [pts], 1)
+    return 1.0 - mask_iou(binary.astype(np.uint8), filled)
+
+
 def explain_la_auto_reject_reason(
     contour: Contour,
     pixel_spacing: tuple[float, float] | None,
     *,
     mask_pixels: int | None = None,
+    mask: np.ndarray | None = None,
     roi_xyxy: tuple[float, float, float, float] | None = None,
 ) -> str | None:
     """Return a short Russian reason when LA auto contour should not enter review."""
@@ -218,6 +235,14 @@ def explain_la_auto_reject_reason(
             f"полость ЛА слишком мала ({mask_pixels} px < {_MIN_LA_MASK_AREA_PX} px) — "
             "выберите другой кадр"
         )
+
+    if mask is not None:
+        residual = _mask_ellipse_fit_residual(mask, contour)
+        if residual > _MAX_LA_ELLIPSE_RESIDUAL:
+            return (
+                f"маска ЛА слишком нерегулярна для эллиптического контура "
+                f"(остаток {residual:.2f} > {_MAX_LA_ELLIPSE_RESIDUAL})"
+            )
 
     # Centroid outside ROI
     if roi_xyxy is not None and len(contour.points) >= 3:

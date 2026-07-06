@@ -176,3 +176,19 @@ class TestExplainLaAutoRejectReason:
         reason = explain_la_auto_reject_reason(c, None, roi_xyxy=(0, 0, 10, 10))
         assert reason is not None
         assert "ROI" in reason
+
+    def test_ellipse_residual_passes_for_matching_mask(self) -> None:
+        mask = _ellipse_mask(cy=140, cx=112, ry=50, rx=40)
+        points, ma, apex = la_mask_to_contour(mask)
+        c = _make_contour(points, ma=ma, apex=apex)
+        assert explain_la_auto_reject_reason(c, (0.15, 0.15), mask=mask) is None
+
+    def test_ellipse_residual_rejects_irregular_mask(self) -> None:
+        mask = _ellipse_mask(cy=140, cx=112, ry=50, rx=40)
+        points, ma, apex = la_mask_to_contour(mask)
+        c = _make_contour(points, ma=ma, apex=apex)
+        irregular = mask.copy()
+        irregular[40:90, 40:90] = 1
+        reason = explain_la_auto_reject_reason(c, None, mask=irregular)
+        assert reason is not None
+        assert "нерегулярна" in reason

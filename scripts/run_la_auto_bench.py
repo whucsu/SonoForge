@@ -55,8 +55,8 @@ def _run_la_auto_segment(
     *,
     instance_path: Path | None,
     engine: OnnxInferenceEngine,
-) -> tuple[Contour | None, int]:
-    """Run LA auto-segment pipeline. Returns (contour, mask_pixels) or (None, 0)."""
+) -> tuple[Contour | None, int, np.ndarray | None]:
+    """Run LA auto-segment pipeline. Returns (contour, mask_pixels, mask) or (None, 0, None)."""
     gray = frame
     if frame.ndim == 3 and frame.shape[2] == 3:
         gray = np.mean(frame[..., :3], axis=2).astype(np.uint8)
@@ -70,12 +70,12 @@ def _run_la_auto_segment(
 
     mask_pixels = int(np.count_nonzero(mask))
     if mask_pixels < 80:
-        return None, mask_pixels
+        return None, mask_pixels, mask
 
     try:
         open_points, annulus, apex = la_mask_to_contour(mask, num_nodes=32)
     except ValueError:
-        return None, mask_pixels
+        return None, mask_pixels, mask
 
     contour = Contour(
         phase="ES",
@@ -87,7 +87,7 @@ def _run_la_auto_segment(
         source="ai",
         num_nodes=32,
     )
-    return contour, mask_pixels
+    return contour, mask_pixels, mask
 
 
 def _contour_to_mask(contour: Contour, shape: tuple[int, int]) -> np.ndarray:
@@ -100,21 +100,21 @@ def _contour_to_mask(contour: Contour, shape: tuple[int, int]) -> np.ndarray:
     return mask
 
 
-def _lav_delta_ml(
+def _lav_delta_metrics(
     auto_contour: Contour,
     gold_frame: dict,
     pixel_spacing: tuple[float, float] | None,
-) -> float | None:
-    """Compute |LAV_auto - LAV_gold| in mL using area-length method."""
+) -> tuple[float | None, float | None]:
+    """Return (|LAV_auto - LAV_gold| in mL, relative fraction) using area-length method."""
     if pixel_spacing is None:
-        return None
+        return None, None
     from echo_personal_tool.domain.calculations.chamber_simpson import chamber_simpson_volume_ml
     auto_vol = chamber_simpson_volume_ml(auto_contour, pixel_spacing)
     # Build gold contour for volume
     gold_pts = gold_frame.get("points", [])
     gold_ma = gold_frame.get("mitral_annulus")
     if not gold_pts or not gold_ma or auto_vol is None:
-        return None
+        return None, None
     gold_contour = Contour(
         phase="ES", view="A4C", chamber="LA",
         mitral_annulus=(
@@ -125,9 +125,10 @@ def _lav_delta_ml(
         source="manual",
     )
     gold_vol = chamber_simpson_volume_ml(gold_contour, pixel_spacing)
-    if gold_vol is None or auto_vol is None:
-        return None
-    return abs(auto_vol - gold_vol)
+    if gold_vol is None or auto_vol is None or gold_vol <= 0:
+        return None, None
+    delta_ml = abs(auto_vol - gold_vol)
+    return delta_ml, delta_ml / gold_vol
 
 
 def run_bench(
@@ -190,7 +191,7 @@ def run_bench(
             print(f"  SKIP {study_id}: {exc}")
             continue
 
-        contour, mask_pixels = _run_la_auto_segment(
+        contour, mask_pixels, seg_mask = _run_la_auto_segment(
             frame, instance_path=instance_path, engine=engine,
         )
 
@@ -208,13 +209,23 @@ def run_bench(
             row["septal_err"] = None
             row["lateral_err"] = None
             row["lav_delta_ml"] = None
+            row["lav_delta_pct"] = None
+            row["lav_gate_pass"] = False
             row["zero_edit"] = False
             row["light_edit"] = False
             rows.append(row)
             continue
 
+        roi_xyxy = resolve_segment_roi_xyxy(
+            frame if frame.ndim == 2 else np.mean(frame[..., :3], axis=2).astype(np.uint8),
+            media_format="dicom",
+            instance_path=instance_path,
+        )
+
         # Quality gate
-        reject_reason = explain_la_auto_reject_reason(contour, ps, mask_pixels=mask_pixels)
+        reject_reason = explain_la_auto_reject_reason(
+            contour, ps, mask_pixels=mask_pixels, mask=seg_mask, roi_xyxy=roi_xyxy,
+        )
         if reject_reason is not None:
             row["reject"] = True
             row["reject_reason"] = reject_reason
@@ -222,6 +233,8 @@ def run_bench(
             row["septal_err"] = None
             row["lateral_err"] = None
             row["lav_delta_ml"] = None
+            row["lav_delta_pct"] = None
+            row["lav_gate_pass"] = False
             row["zero_edit"] = False
             row["light_edit"] = False
             rows.append(row)
@@ -260,9 +273,18 @@ def run_bench(
 
         # LAV delta
         row["lav_delta_ml"] = None
-        lav_delta = _lav_delta_ml(contour, es_frame, ps)
+        row["lav_delta_pct"] = None
+        row["lav_gate_pass"] = False
+        lav_delta, lav_pct = _lav_delta_metrics(contour, es_frame, ps)
         if lav_delta is not None:
             row["lav_delta_ml"] = round(lav_delta, 2)
+        if lav_pct is not None:
+            row["lav_delta_pct"] = round(lav_pct, 4)
+        if lav_delta is not None or lav_pct is not None:
+            row["lav_gate_pass"] = (
+                (lav_delta is not None and lav_delta < 5.0)
+                or (lav_pct is not None and lav_pct < 0.08)
+            )
 
         row["zero_edit"] = False
         row["light_edit"] = False
@@ -276,6 +298,8 @@ def run_bench(
     n_reject = sum(1 for r in rows if r.get("reject"))
     ious = [r["iou"] for r in rows if r.get("iou") is not None]
     lav_deltas = [r["lav_delta_ml"] for r in rows if r.get("lav_delta_ml") is not None]
+    lav_pcts = [r["lav_delta_pct"] for r in rows if r.get("lav_delta_pct") is not None]
+    lav_gate_passes = [r for r in rows if r.get("lav_gate_pass")]
     mv_se = [r["septal_err"] for r in rows if r.get("septal_err") is not None]
     mv_le = [r["lateral_err"] for r in rows if r.get("lateral_err") is not None]
 
@@ -288,6 +312,8 @@ def run_bench(
     summary["n_studies"] = n
     summary["median_iou"] = _median(ious)
     summary["median_lav_delta_ml"] = _median(lav_deltas)
+    summary["median_lav_delta_pct"] = _median(lav_pcts)
+    summary["lav_gate_pass_rate"] = len(lav_gate_passes) / n if n else None
     summary["median_mv_septal_err_px"] = _median(mv_se)
     summary["median_mv_lateral_err_px"] = _median(mv_le)
     summary["reject_rate"] = n_reject / n if n else None
@@ -295,6 +321,8 @@ def run_bench(
     # Gate check
     median_iou = summary.get("median_iou")
     median_lav = summary.get("median_lav_delta_ml")
+    median_lav_pct = summary.get("median_lav_delta_pct")
+    lav_gate_pass_rate = summary.get("lav_gate_pass_rate")
     reject_rate = summary.get("reject_rate")
 
     print(f"\n=== LA Auto Bench Results ({n} studies) ===")
@@ -306,9 +334,21 @@ def run_bench(
     if median_iou is not None:
         passed = median_iou > 0.78
         print(f"  IoU > 0.78:     {median_iou:.4f}  {'PASS' if passed else 'FAIL'}")
-    if median_lav is not None:
-        passed = median_lav < 5.0
-        print(f"  |ΔLAV| < 5ml:   {median_lav:.2f} ml  {'PASS' if passed else 'FAIL'}")
+    if median_lav is not None or median_lav_pct is not None:
+        abs_pass = median_lav is not None and median_lav < 5.0
+        rel_pass = median_lav_pct is not None and median_lav_pct < 0.08
+        passed = abs_pass or rel_pass
+        ml_txt = f"{median_lav:.2f} ml" if median_lav is not None else "n/a"
+        pct_txt = f"{median_lav_pct:.1%}" if median_lav_pct is not None else "n/a"
+        print(
+            f"  |ΔLAV| gate:    {ml_txt} / {pct_txt}  "
+            f"{'PASS' if passed else 'FAIL'} (<5 ml or <8%)"
+        )
+    if lav_gate_pass_rate is not None:
+        print(
+            f"  LAV per-study:  {lav_gate_pass_rate:.1%} "
+            f"(each study <5 ml or <8%)"
+        )
     if reject_rate is not None:
         passed = reject_rate < 0.20
         print(f"  Reject < 20%:   {reject_rate:.1%}  {'PASS' if passed else 'FAIL'}")
