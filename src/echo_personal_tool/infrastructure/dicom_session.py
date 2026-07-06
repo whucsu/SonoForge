@@ -341,6 +341,10 @@ class DicomSession:
 
     def _decode_single_frame(self, index: int) -> np.ndarray:
         ds = self._metadata
+        if index < 0 or index >= self._frame_count:
+            raise IndexError(
+                f"Frame index {index} out of range [0, {self._frame_count})"
+            )
         rows, cols = int(ds.Rows), int(ds.Columns)
 
         if self._is_uncompressed and self._frame_slices is not None:

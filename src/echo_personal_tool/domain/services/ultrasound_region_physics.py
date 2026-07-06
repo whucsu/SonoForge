@@ -77,7 +77,8 @@ def time_span_ms_from_region(width_px: float, delta_x: float, units_x: int) -> f
 
 def velocity_span_cm_s_from_region(height_px: float, delta_y: float, units_y: int) -> float | None:
     """Full vertical velocity span (cm/s) for spectral Doppler."""
-    if units_y != PHYSICAL_UNIT_CM_PER_SEC or delta_y <= 0.0 or height_px <= 0.0:
+    # units_y=6 is standard cm/s; units_y=7 is a known vendor mis-tag (also cm/s)
+    if units_y not in (PHYSICAL_UNIT_CM_PER_SEC, 7) or delta_y <= 0.0 or height_px <= 0.0:
         return None
     return height_px * delta_y
 
