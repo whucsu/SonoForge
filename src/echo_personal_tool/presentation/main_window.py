@@ -942,8 +942,8 @@ class MainWindow(QMainWindow):
                 self._controller.on_mmode_calibration_changed(mmode_cal)
         label = _loaded_file_label(selected)
         self._system_bar.set_study_context(label)
+        self._viewer.set_results_overlay("")
         self._controller.load_instance(selected)
-        self._restore_results_overlay_position(selected.sop_instance_uid)
 
     def _load_instance_into_viewer2(self, instance: InstanceMetadata) -> None:
         self._ensure_viewer2()

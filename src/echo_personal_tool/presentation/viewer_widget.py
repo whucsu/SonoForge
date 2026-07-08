@@ -705,6 +705,7 @@ class ViewerWidget(QWidget):
         self._magnetic_snap_enabled = True
         self._results_overlay_custom_position = False
         self._results_overlay_cleared = False
+        self._results_overlay_position_just_restored = False
         self._edge_map_cache: EdgeMap | None = None
         self._edge_map_cache_key: tuple[int, tuple[float, float] | None] | None = None
 
@@ -796,6 +797,10 @@ class ViewerWidget(QWidget):
             "Dynamic range: center = full range; left = clip dark (typical for US)"
         )
         self._dr_slider.valueChanged.connect(self._update_levels)
+
+        # Per-file slider state: {instance_path: (window, level, dr)}
+        self._per_file_wl_dr: dict[Path, tuple[int, int, int]] = {}
+        self._external_wl_dr_sliders: tuple[object, object, object] | None = None
 
         controls = QVBoxLayout()
         timeline_row = QHBoxLayout()
@@ -1193,6 +1198,8 @@ class ViewerWidget(QWidget):
         if self._results_overlay_cleared and text.strip():
             return
         self._results_overlay_cleared = False
+        just_restored = self._results_overlay_position_just_restored
+        self._results_overlay_position_just_restored = False
         if text.strip():
             text_changed = text != self._results_overlay_label.text()
             was_visible = self._results_overlay_label.isVisible()
@@ -1202,7 +1209,7 @@ class ViewerWidget(QWidget):
             if not was_visible:
                 self._results_overlay_label.show()
             self._results_overlay_label.raise_()
-            if not self._results_overlay_custom_position and (not was_visible or text_changed):
+            if not just_restored and not self._results_overlay_custom_position and (not was_visible or text_changed):
                 self._request_results_overlay_reposition()
         else:
             self._results_overlay_label.hide()
@@ -1304,6 +1311,7 @@ class ViewerWidget(QWidget):
         custom: bool = True,
     ) -> None:
         self._results_overlay_custom_position = custom
+        self._results_overlay_position_just_restored = True
         if custom:
             self._results_overlay_label.set_position_ratios(x_ratio, y_ratio)
         if self._results_overlay_label.isVisible():
@@ -1439,9 +1447,13 @@ class ViewerWidget(QWidget):
                 self._image_item.setLevels((vmin, vmax))
             new_path = Path(self._current_state.instance.path) if self._current_state and self._current_state.instance and self._current_state.instance.path else None
             if new_path != self._current_instance_path:
-                with QSignalBlocker(self._dr_slider):
-                    self._dr_slider.setValue(50)
+                self._save_current_wl_dr()
                 self._current_instance_path = new_path
+                saved = self._per_file_wl_dr.get(new_path)
+                if saved is not None:
+                    self._set_wl_dr_sliders(*saved)
+                else:
+                    self._set_wl_dr_sliders(100, 50, 50)
             self._update_levels()
         self._window_slider.setEnabled(self._window_level_enabled)
         self._level_slider.setEnabled(self._window_level_enabled)
@@ -4864,7 +4876,48 @@ class ViewerWidget(QWidget):
                 internal.setEnabled(enabled)
 
         self._sync_display_control_enabled = sync_enabled  # type: ignore[attr-defined]
+        self._external_wl_dr_sliders = (window_slider, level_slider, dr_slider)
         sync_enabled()
+
+    def _set_wl_dr_sliders(
+        self, window: int, level: int, dr: int, *, update_display: bool = True,
+    ) -> None:
+        """Set window/level/DR on internal + external sliders with signals blocked."""
+        ext = self._external_wl_dr_sliders
+        for slider in (self._window_slider, self._level_slider, self._dr_slider):
+            slider.blockSignals(True)
+        if ext is not None:
+            for slider in ext:
+                if hasattr(slider, "blockSignals"):
+                    slider.blockSignals(True)
+        self._window_slider.setValue(window)
+        self._level_slider.setValue(level)
+        self._dr_slider.setValue(dr)
+        if ext is not None:
+            ext_win, ext_lev, ext_dr = ext
+            if hasattr(ext_win, "setValue"):
+                ext_win.setValue(window)
+            if hasattr(ext_lev, "setValue"):
+                ext_lev.setValue(level)
+            if hasattr(ext_dr, "setValue"):
+                ext_dr.setValue(dr)
+        for slider in (self._window_slider, self._level_slider, self._dr_slider):
+            slider.blockSignals(False)
+        if ext is not None:
+            for slider in ext:
+                if hasattr(slider, "blockSignals"):
+                    slider.blockSignals(False)
+        if update_display:
+            self._update_levels()
+
+    def _save_current_wl_dr(self) -> None:
+        """Save current slider values for the active file."""
+        if self._current_instance_path is not None:
+            self._per_file_wl_dr[self._current_instance_path] = (
+                self._window_slider.value(),
+                self._level_slider.value(),
+                self._dr_slider.value(),
+            )
 
     @_prof
     def _update_levels(self) -> None:
