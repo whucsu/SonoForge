@@ -37,6 +37,13 @@ def lvef_delta(lvef_auto: float | None, lvef_gold: float | None) -> float | None
     return abs(lvef_auto - lvef_gold)
 
 
+def lvef_reject_gate(lvef_delta_pct: float | None, threshold: float = 15.0) -> bool:
+    """Reject contour if |ΔLVEF| exceeds threshold (product safety gate)."""
+    if lvef_delta_pct is None:
+        return False
+    return lvef_delta_pct > threshold
+
+
 def zero_edit_accept(lvef_delta_pct: float | None, iou: float) -> bool:
     """Accept without edits: |ΔLVEF| ≤ 5% or IoU ≥ 0.80."""
     if lvef_delta_pct is not None and lvef_delta_pct <= 5.0:

@@ -25,6 +25,7 @@ from echo_personal_tool.domain.services.bench_lvef import (
 from echo_personal_tool.domain.services.bench_metrics import (
     aggregate_bench_results,
     annulus_endpoint_error,
+    lvef_reject_gate,
     mask_iou,
     zero_edit_accept,
 )
@@ -334,14 +335,16 @@ def run_bench(
                 and pair_result["lvef_delta"] is not None
             )
 
-    # --- Zero-edit pass: compute zero_edit for each non-reject row ---
+    # --- Zero-edit + LVEF reject pass ---
     for row in rows:
         if row.get("reject"):
             row["zero_edit"] = False
+            row["lvef_reject"] = False
             continue
         iou = row.get("iou")
         delta = row.get("lvef_delta")
         row["zero_edit"] = zero_edit_accept(delta, iou if iou is not None else 0.0)
+        row["lvef_reject"] = lvef_reject_gate(delta)
 
     # Aggregate
     summary = aggregate_bench_results(rows)
@@ -380,6 +383,13 @@ def run_bench(
         print(f"  Zero-edit ≥ 60%:   {zero_rate:.1%}  {'PASS' if zero_rate >= 0.60 else 'FAIL'}")
     if reject_rate is not None:
         print(f"  Reject < 15%:      {reject_rate:.1%}  {'PASS' if reject_rate < 0.15 else 'FAIL'}")
+
+    # LVEF reject gate stats
+    n_lvef_reject = sum(1 for r in rows if r.get("lvef_reject"))
+    total_pairs = sum(1 for r in rows if r.get("pair_complete") and r.get("phase") == "ED")
+    if total_pairs > 0:
+        lvef_reject_rate = n_lvef_reject / (total_pairs * 2)  # both ED/ES rows
+        print(f"  LVEF reject >15%:  {n_lvef_reject}/{len(rows)} frames ({lvef_reject_rate:.1%} of paired frames)")
 
     # Write CSV
     if output_path is not None:

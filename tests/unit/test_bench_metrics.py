@@ -10,6 +10,7 @@ from echo_personal_tool.domain.services.bench_metrics import (
     annulus_endpoint_error,
     light_edit_accept,
     lvef_delta,
+    lvef_reject_gate,
     mask_iou,
     zero_edit_accept,
 )
@@ -91,6 +92,21 @@ class TestLightEditAccept:
 
     def test_three_edits(self) -> None:
         assert light_edit_accept(3.0, 0.70, 3) is False
+
+
+class TestLvefRejectGate:
+    def test_reject_when_delta_high(self) -> None:
+        assert lvef_reject_gate(20.0) is True
+
+    def test_accept_when_delta_low(self) -> None:
+        assert lvef_reject_gate(10.0) is False
+
+    def test_accept_when_delta_none(self) -> None:
+        assert lvef_reject_gate(None) is False
+
+    def test_custom_threshold(self) -> None:
+        assert lvef_reject_gate(8.0, threshold=5.0) is True
+        assert lvef_reject_gate(4.0, threshold=5.0) is False
 
 
 class TestAggregateResults:
