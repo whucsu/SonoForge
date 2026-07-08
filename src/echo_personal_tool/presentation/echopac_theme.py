@@ -444,6 +444,23 @@ QCheckBox::indicator:checked {{
     border-color: {p["text"]};
 }}
 
+/* ── Tree/View CheckBox indicators ──────────────────────────── */
+QTreeWidget::indicator, QTreeView::indicator {{
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid {p["border"]};
+    background: {p["bg_control"]};
+}}
+QTreeWidget::indicator:checked, QTreeView::indicator:checked {{
+    background: {p["text"]};
+    border-color: {p["text"]};
+}}
+QTreeWidget::indicator:unchecked, QTreeView::indicator:unchecked {{
+    background: {p["bg_control"]};
+    border: 1px solid {p["border"]};
+}}
+
 /* ── SystemBar ──────────────────────────────────────────────── */
 #systemBar {{
     background: {p["bg_control"]};
