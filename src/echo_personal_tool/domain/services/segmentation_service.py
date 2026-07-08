@@ -504,41 +504,44 @@ def _snap_annulus_to_mask_boundary(
     mask: np.ndarray,
     *,
     basal_y_range: tuple[int, int],
-    search_radius_px: float = 12.0,
+    search_radius_px: float = 16.0,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Snap annulus endpoints to nearest mask-boundary pixel in basal band.
+    """Snap annulus endpoints to basal mask opening (septal=leftmost, lateral=rightmost).
 
-    Each endpoint searches only its half-plane (septal = left, lateral = right).
+    Half-plane split uses the MA midpoint, not the image center.
     """
     y_low, y_high = basal_y_range
     bys, bxs = _mask_boundary_points_in_band(mask, y_low, y_high)
     if bys.size == 0:
         return septal, lateral
 
-    center_x = float(mask.shape[1]) / 2.0
+    split_x = (septal[0] + lateral[0]) / 2.0
 
     def _snap_one(
         point: tuple[float, float],
-        is_left: bool,
+        *,
+        is_septal: bool,
     ) -> tuple[float, float]:
         px, py = point
-        # Filter to correct half-plane
-        if is_left:
-            half_mask = bxs <= center_x
-        else:
-            half_mask = bxs >= center_x
+        half_mask = bxs <= split_x if is_septal else bxs >= split_x
         if not np.any(half_mask):
             return point
         hys = bys[half_mask]
         hxs = bxs[half_mask]
         dists = np.sqrt((hxs - px) ** 2 + (hys - py) ** 2)
-        best = int(np.argmin(dists))
-        if dists[best] > search_radius_px:
-            return point
-        return (float(hxs[best]), float(hys[best]))
+        nearby = dists <= search_radius_px
+        if not np.any(nearby):
+            best = int(np.argmin(dists))
+            if dists[best] > search_radius_px:
+                return point
+            return (float(hxs[best]), float(hys[best]))
+        hys_n = hys[nearby]
+        hxs_n = hxs[nearby]
+        pick = int(np.argmin(hxs_n)) if is_septal else int(np.argmax(hxs_n))
+        return (float(hxs_n[pick]), float(hys_n[pick]))
 
-    snapped_septal = _snap_one(septal, is_left=True)
-    snapped_lateral = _snap_one(lateral, is_left=False)
+    snapped_septal = _snap_one(septal, is_septal=True)
+    snapped_lateral = _snap_one(lateral, is_septal=False)
 
     if snapped_septal[0] > snapped_lateral[0]:
         snapped_septal, snapped_lateral = snapped_lateral, snapped_septal
@@ -863,6 +866,46 @@ def _fallback_annulus_sector_chord(
 
 _MA_ONNX_MODEL_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "models" / "ma_landmark_224.onnx"
 _MA_ONNX_CROP = 224
+_MA_ONNX_BLEND_WEIGHT = 0.35
+
+
+def _blend_landmark(
+    base: tuple[float, float],
+    ref: tuple[float, float],
+    weight: float,
+) -> tuple[float, float]:
+    return (
+        base[0] + weight * (ref[0] - base[0]),
+        base[1] + weight * (ref[1] - base[1]),
+    )
+
+
+def _try_refine_annulus_with_onnx(
+    septal: tuple[float, float],
+    lateral: tuple[float, float],
+    mask: np.ndarray,
+    frame_shape: tuple[int, int],
+    *,
+    blend_weight: float = _MA_ONNX_BLEND_WEIGHT,
+    max_offset_px: float = 25.0,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Post-process geometry landmarks with MA ONNX when prediction is plausible."""
+    if not _MA_ONNX_MODEL_PATH.is_file():
+        return septal, lateral
+    try:
+        onnx_septal, onnx_lateral = _predict_ma_onnx_keypoints(mask, frame_shape)
+    except Exception:
+        return septal, lateral
+
+    for base, pred in ((septal, onnx_septal), (lateral, onnx_lateral)):
+        if math.hypot(pred[0] - base[0], pred[1] - base[1]) > max_offset_px:
+            return septal, lateral
+
+    septal = _blend_landmark(septal, onnx_septal, blend_weight)
+    lateral = _blend_landmark(lateral, onnx_lateral, blend_weight)
+    if septal[0] > lateral[0]:
+        septal, lateral = lateral, septal
+    return septal, lateral
 
 
 def _predict_ma_onnx_keypoints(
@@ -964,16 +1007,17 @@ def open_arc_from_cavity_mask(
         msg = "cavity mask bounding box too small"
         raise ValueError(msg)
 
+    component_mask = component.astype(np.uint8)
     try:
         septal, lateral, apex = _annulus_and_apex_from_mask_pixels(
             ys, xs, y_min=y_min, y_max=y_max, annulus_end=annulus_end,
-            mask=component.astype(np.uint8),
+            mask=component_mask,
         )
     except ValueError:
         try:
             septal, lateral, apex = _fallback_annulus_wider_band(
                 ys, xs, y_min=y_min, y_max=y_max,
-                mask=component.astype(np.uint8),
+                mask=component_mask,
             )
         except ValueError:
             try:
@@ -981,10 +1025,9 @@ def open_arc_from_cavity_mask(
                     ys, xs, y_min=y_min, y_max=y_max,
                 )
             except ValueError:
-                # Fallback C: MA ONNX landmark regressor
                 frame_h, frame_w = original_shape or binary.shape[:2]
                 septal, lateral, apex = _ma_onnx_fallback(
-                    component.astype(np.uint8), (frame_h, frame_w),
+                    component_mask, (frame_h, frame_w),
                 )
 
     if view == "A4C" and annulus_end == "auto":
@@ -993,19 +1036,32 @@ def open_arc_from_cavity_mask(
             try:
                 septal, lateral, apex = _annulus_and_apex_from_mask_pixels(
                     ys, xs, y_min=y_min, y_max=y_max, annulus_end="bottom",
-                    mask=component.astype(np.uint8),
+                    mask=component_mask,
                 )
             except ValueError:
                 pass  # keep the original flip result
-    annulus = (septal, lateral)
 
     frame_shape = original_shape or binary.shape[:2]
-    boundary = mask_to_contour(component.astype(np.uint8), frame_shape)
+    septal, lateral = _try_refine_annulus_with_onnx(
+        septal, lateral, component_mask, frame_shape,
+    )
+
+    boundary = mask_to_contour(component_mask, frame_shape)
     if len(boundary) < 4:
         msg = "cavity boundary too short"
         raise ValueError(msg)
 
+    # Preliminary arc for tip-guided MA refinement, then rebuild arc with final MA.
     open_points = _boundary_open_arc(boundary, septal, lateral, apex)
+    septal, lateral = _blend_annulus_with_arc_tips(
+        (septal, lateral),
+        open_points,
+        max_blend_dist_px=12.0,
+        blend_weight=0.3,
+    )
+    open_points = _boundary_open_arc(boundary, septal, lateral, apex)
+    annulus = (septal, lateral)
+
     resampled = resample_open_arc(open_points, num_nodes=max(num_nodes, 4))
     if len(resampled) < 3:
         resampled = [septal, apex, lateral]
