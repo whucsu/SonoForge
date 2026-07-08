@@ -167,27 +167,21 @@ def bce_dice_loss(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
 
 def build_model() -> nn.Module:
-    model = torchvision.models.segmentation.deeplabv3_resnet50(
-        weights=None, aux_loss=False,
-    )
+    # ImageNet-pretrained backbone — critical for good features
+    try:
+        model = torchvision.models.segmentation.deeplabv3_resnet50(
+            weights="DEFAULT",
+        )
+    except TypeError:
+        model = torchvision.models.segmentation.deeplabv3_resnet50(
+            pretrained=True,
+        )
     classifier = model.classifier[-1]
     model.classifier[-1] = nn.Conv2d(
         classifier.in_channels, 1, kernel_size=classifier.kernel_size,
     )
 
-    # Load existing weights (backbone + partial decoder)
-    weights_path = MODELS_DIR / "deeplabv3_resnet50_random.pt"
-    if weights_path.is_file():
-        checkpoint = torch.load(weights_path, map_location="cpu", weights_only=True)
-        raw_sd = checkpoint.get("state_dict", checkpoint)
-        # Strip DataParallel 'module.' prefix
-        sd = {k.removeprefix("module."): v for k, v in raw_sd.items()}
-        model_state = model.state_dict()
-        compatible = {k: v for k, v in sd.items() if k in model_state and v.shape == model_state[k].shape}
-        model.load_state_dict(compatible, strict=False)
-        print(f"Loaded {len(compatible)}/{len(model_state)} weights from {weights_path.name}")
-
-    # Freeze backbone, train classifier head
+    # Freeze backbone, train only classifier head (ASPP + new 1-class conv)
     for param in model.parameters():
         param.requires_grad = False
     for param in model.classifier.parameters():
@@ -195,7 +189,7 @@ def build_model() -> nn.Module:
 
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
-    print(f"Model: {trainable:,} trainable / {total:,} total params")
+    print(f"Model: {trainable:,} trainable / {total:,} total params (ImageNet backbone)")
     return model
 
 
