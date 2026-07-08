@@ -2,9 +2,24 @@
 
 **Назначение:** Автоматическая передача ключевого контекста между чатами Cursor.
 **Правила чтения:** При старте нового чата — `AGENTS.md`, затем последние записи здесь (не весь файл).
-**Лимиты:** Максимум 30 записей; при превышении удаляются самые старые. Только суть, без кода.
+**Лимиты:** Только суть, без кода.
 
 ---
+
+## [2026-07-08 22:26] LV auto: annulus endpoint snapping improved
+- **Тип:** fix
+- **Файлы:** `src/echo_personal_tool/domain/services/segmentation_service.py`, `bench/reports/lv_baseline_lvannulus_20260708.csv`
+- **Суть:** Уточнён выбор септальной/латеральной точек МК с привязкой к базальной кромке маски; на Tier-1 вырос median IoU и снизилась ошибка annulus.
+
+## [2026-07-08 21:30] Шаг 2: LA fine-tune + bench fixes
+- **Тип:** feature + fix
+- **Файлы:** `finetune_la_seg.py`, `calibrate_echonet_norm.py`, `run_la_auto_bench.py`, `bench_metrics.py`, `models/echonet_la_resnet50_224.onnx`
+- **Суть:** LA ONNX на 57 gold ES (ROI crop, кэш DICOM); bench по всем instance; LAV через `calculate_chamber`; LV norm-калибровка хуже per_frame. LA gates не пройдены — нужен warm-start.
+
+## [2026-07-08 18:30] Generate manifest.json from consolidated gold
+- **Тип:** feature
+- **Файлы:** `scripts/generate_manifest_from_gold.py`, `manifest.json`
+- **Суть:** Скрипт генерирует manifest.json из единого gold-файла (lv_*.json) — 105 записей с ED/ES frame_index для каждого DICOM instance. Запуск: `python scripts/generate_manifest_from_gold.py`.
 
 ## [2026-07-07 22:35] Gold merge fix — per-instance dedup + repair script
 - **Тип:** fix

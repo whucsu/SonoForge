@@ -22,7 +22,7 @@ from echo_personal_tool.domain.services.bench_metrics import (
     annulus_endpoint_error,
     mask_iou,
 )
-from echo_personal_tool.domain.services.gold_store import load_gold
+from echo_personal_tool.domain.services.gold_store import frame_instance_key, load_gold
 from echo_personal_tool.domain.services.segment_roi import (
     echonet_crop_mode_for_media,
     resolve_segment_roi_xyxy,
@@ -100,6 +100,33 @@ def _contour_to_mask(contour: Contour, shape: tuple[int, int]) -> np.ndarray:
     return mask
 
 
+def _gold_frame_matches_instance(
+    gold_frame: dict,
+    instance_path: Path,
+    *,
+    study: dict,
+) -> bool:
+    frame_path = gold_frame.get("instance_path")
+    if frame_path:
+        return Path(str(frame_path)).name == instance_path.name
+    return frame_instance_key(gold_frame, study=study) == instance_path.name
+
+
+def _find_gold_frame(
+    gold: dict,
+    *,
+    instance_path: Path,
+    frame_index: int,
+    phase: str,
+) -> dict | None:
+    for gf in gold.get("frames", []):
+        if gf.get("frame_index") != frame_index or gf.get("phase") != phase:
+            continue
+        if _gold_frame_matches_instance(gf, instance_path, study=gold):
+            return gf
+    return None
+
+
 def run_bench(
     manifest_path: Path,
     *,
@@ -151,6 +178,7 @@ def run_bench(
 
             row: dict = {
                 "study_id": study_id,
+                "instance": instance_path.name,
                 "phase": phase_key,
                 "frame_index": frame_index,
             }
@@ -169,12 +197,13 @@ def run_bench(
 
             row["reject"] = False
 
-            # Find matching gold frame
-            gold_frame = None
-            for gf in gold.get("frames", []):
-                if gf.get("frame_index") == frame_index and gf.get("phase") == phase_key:
-                    gold_frame = gf
-                    break
+            # Find matching gold frame (per DICOM instance, not global frame_index)
+            gold_frame = _find_gold_frame(
+                gold,
+                instance_path=instance_path,
+                frame_index=frame_index,
+                phase=phase_key,
+            )
 
             if gold_frame is None:
                 row["reject_reason"] = "no_gold_frame"
@@ -229,6 +258,22 @@ def run_bench(
     for k, v in summary.items():
         if v is not None:
             print(f"  {k}: {v}")
+
+    median_iou = summary.get("median_iou")
+    median_lvef = summary.get("median_lvef_delta")
+    reject_rate = summary.get("reject_rate")
+    zero_rate = summary.get("zero_edit_rate")
+    print("\n--- Gate Check (release targets) ---")
+    if median_iou is not None:
+        print(f"  IoU > 0.82:        {median_iou:.4f}  {'PASS' if median_iou > 0.82 else 'FAIL'}")
+    if median_lvef is not None:
+        print(f"  |ΔLVEF| < 5%:      {median_lvef:.2f}  {'PASS' if median_lvef < 5.0 else 'FAIL'}")
+    else:
+        print("  |ΔLVEF| < 5%:      n/a (LVEF not computed in this bench run)")
+    if zero_rate is not None:
+        print(f"  Zero-edit ≥ 60%:   {zero_rate:.1%}  {'PASS' if zero_rate >= 0.60 else 'FAIL'}")
+    if reject_rate is not None:
+        print(f"  Reject < 15%:      {reject_rate:.1%}  {'PASS' if reject_rate < 0.15 else 'FAIL'}")
 
     # Write CSV
     if output_path is not None:

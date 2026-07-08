@@ -78,9 +78,9 @@ def aggregate_bench_results(rows: list[dict]) -> dict:
             return s[n // 2]
         return (s[n // 2 - 1] + s[n // 2]) / 2.0
 
-    ious = [r["iou"] for r in rows if "iou" in r]
-    septal = [r["septal_err"] for r in rows if "septal_err" in r]
-    lateral = [r["lateral_err"] for r in rows if "lateral_err" in r]
+    ious = [r["iou"] for r in rows if r.get("iou") is not None]
+    septal = [r["septal_err"] for r in rows if r.get("septal_err") is not None]
+    lateral = [r["lateral_err"] for r in rows if r.get("lateral_err") is not None]
     lvef_deltas = [r["lvef_delta"] for r in rows if r.get("lvef_delta") is not None]
 
     total = len(rows)

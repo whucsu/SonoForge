@@ -30,6 +30,7 @@ import torch.nn.functional as F
 import torchvision
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 MODELS_DIR = PROJECT_ROOT / "models"
 MANIFEST_PATH = MODELS_DIR / "model_manifest.json"
 DEFAULT_OUTPUT = MODELS_DIR / "echonet_la_resnet50_224.onnx"
@@ -90,14 +91,23 @@ def _resolve_dicom_frame(
     except Exception:
         return None
 
-    if pixel_array.ndim == 3:
-        # Multi-frame: select frame_index
+    if pixel_array.ndim == 4:
         if frame_index < pixel_array.shape[0]:
+            frame = pixel_array[frame_index]
+        else:
+            frame = pixel_array[-1]
+    elif pixel_array.ndim == 3:
+        if pixel_array.shape[-1] in (3, 4):
+            frame = pixel_array
+        elif frame_index < pixel_array.shape[0]:
             frame = pixel_array[frame_index]
         else:
             frame = pixel_array[-1]
     else:
         frame = pixel_array
+
+    if frame.ndim == 3 and frame.shape[-1] in (3, 4):
+        frame = np.mean(frame[..., :3], axis=2)
 
     # Normalize to uint8
     frame = frame.astype(np.float32)
@@ -121,12 +131,15 @@ class LaGoldDataset(torch.utils.data.Dataset):
         self._samples: list[dict] = []
         self._input_size = input_size
         for study in studies:
-            instance_path = study.get("instance_path", "")
+            default_path = study.get("instance_path", "")
             for frame in study.get("frames", []):
                 if frame.get("chamber", "").upper() != "LA":
                     continue
                 points = frame.get("points", [])
                 if len(points) < 3:
+                    continue
+                instance_path = frame.get("instance_path") or default_path
+                if not instance_path:
                     continue
                 self._samples.append(
                     {
@@ -137,19 +150,34 @@ class LaGoldDataset(torch.utils.data.Dataset):
                         "pixel_spacing_mm": study.get("pixel_spacing_mm", [0.15, 0.15]),
                     }
                 )
+        self._cache: list[tuple[np.ndarray, np.ndarray]] = []
+        from echo_personal_tool.domain.services.segment_roi import resolve_segment_roi_xyxy
+        from echo_personal_tool.domain.services.segmentation_service import crop_frame_for_echonet
+
+        for sample in self._samples:
+            instance_path = Path(sample["instance_path"])
+            frame = _resolve_dicom_frame(str(instance_path), sample["frame_index"])
+            if frame is None:
+                frame = np.zeros((224, 224), dtype=np.uint8)
+            h, w = frame.shape[:2]
+            mask = rasterize_polygon(sample["points"], (h, w))
+            roi_xyxy = resolve_segment_roi_xyxy(
+                frame, media_format="dicom", instance_path=instance_path,
+            )
+            cropped_frame, transform = crop_frame_for_echonet(
+                frame, roi_xyxy=roi_xyxy, crop_mode="full_roi",
+            )
+            cropped_mask = mask[
+                transform.crop_y0 : transform.crop_y0 + transform.crop_height,
+                transform.crop_x0 : transform.crop_x0 + transform.crop_width,
+            ]
+            self._cache.append((cropped_frame, cropped_mask))
 
     def __len__(self) -> int:
-        return len(self._samples)
+        return len(self._cache)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        sample = self._samples[idx]
-        frame = _resolve_dicom_frame(sample["instance_path"], sample["frame_index"])
-        if frame is None:
-            # Fallback: synthetic noise frame
-            frame = np.random.randint(0, 256, (224, 224), dtype=np.uint8)
-
-        h, w = frame.shape[:2]
-        mask = rasterize_polygon(sample["points"], (h, w))
+        frame, mask = self._cache[idx]
 
         # Resize to input_size
         frame_resized = cv2.resize(frame, (self._input_size, self._input_size), interpolation=cv2.INTER_CUBIC)
@@ -225,11 +253,11 @@ def build_la_model() -> nn.Module:
         classifier.in_channels, 1, kernel_size=classifier.kernel_size,
     )
 
-    # Freeze backbone
-    for param in model.backbone.parameters():
+    # Freeze backbone; train full ASPP classifier head (1-class output)
+    for param in model.parameters():
         param.requires_grad = False
-    for param in model.classifier[:-1].parameters():
-        param.requires_grad = False
+    for param in model.classifier.parameters():
+        param.requires_grad = True
 
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
@@ -257,7 +285,7 @@ def train(
         sys.exit(1)
 
     loader = torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, shuffle=True, drop_last=False,
+        dataset, batch_size=batch_size, shuffle=True, drop_last=len(dataset) >= batch_size,
     )
     optimizer = torch.optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()), lr=lr,
@@ -266,6 +294,8 @@ def train(
 
     model.to(device)
     model.train()
+    if hasattr(model, "backbone"):
+        model.backbone.eval()
 
     print(f"Training: {len(dataset)} samples, {epochs} epochs, lr={lr}")
     for epoch in range(1, epochs + 1):
@@ -290,7 +320,7 @@ def train(
         scheduler.step()
         avg = total_loss / max(n_batches, 1)
         if epoch % 5 == 0 or epoch == 1:
-            print(f"  Epoch {epoch:3d}/{epochs}: loss={avg:.4f}")
+            print(f"  Epoch {epoch:3d}/{epochs}: loss={avg:.4f}", flush=True)
 
     print("Training complete.")
 
@@ -329,7 +359,7 @@ def export_onnx(
     print(f"ONNX exported: {output_path} ({output_path.stat().st_size:,} bytes)")
 
 
-def update_manifest(onnx_path: Path) -> None:
+def update_manifest(onnx_path: Path, *, input_size: int = INPUT_SIZE) -> None:
     """Add LA model slot to model_manifest.json."""
     if not MANIFEST_PATH.exists():
         print(f"Manifest not found: {MANIFEST_PATH}")
@@ -450,7 +480,7 @@ def main() -> int:
         verify_onnx(args.output, input_size=args.input_size)
 
     if not args.no_manifest:
-        update_manifest(args.output)
+        update_manifest(args.output, input_size=args.input_size)
 
     print("Done.")
     return 0

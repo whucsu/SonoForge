@@ -100,16 +100,30 @@ def _contour_to_mask(contour: Contour, shape: tuple[int, int]) -> np.ndarray:
     return mask
 
 
+def _lav_volume_ml(
+    contour: Contour,
+    pixel_spacing: tuple[float, float],
+) -> float | None:
+    from echo_personal_tool.domain.calculations.chamber_simpson import (
+        calculate_chamber,
+        es_volume_from_view,
+    )
+
+    result = calculate_chamber((contour,), "LA", pixel_spacing)
+    if result is None:
+        return None
+    return es_volume_from_view(result.a4c)
+
+
 def _lav_delta_metrics(
     auto_contour: Contour,
     gold_frame: dict,
     pixel_spacing: tuple[float, float] | None,
 ) -> tuple[float | None, float | None]:
-    """Return (|LAV_auto - LAV_gold| in mL, relative fraction) using area-length method."""
+    """Return (|LAV_auto - LAV_gold| in mL, relative fraction) using Simpson monoplane."""
     if pixel_spacing is None:
         return None, None
-    from echo_personal_tool.domain.calculations.chamber_simpson import chamber_simpson_volume_ml
-    auto_vol = chamber_simpson_volume_ml(auto_contour, pixel_spacing)
+    auto_vol = _lav_volume_ml(auto_contour, pixel_spacing)
     # Build gold contour for volume
     gold_pts = gold_frame.get("points", [])
     gold_ma = gold_frame.get("mitral_annulus")
@@ -124,7 +138,7 @@ def _lav_delta_metrics(
         points=[(float(p[0]), float(p[1])) for p in gold_pts],
         source="manual",
     )
-    gold_vol = chamber_simpson_volume_ml(gold_contour, pixel_spacing)
+    gold_vol = _lav_volume_ml(gold_contour, pixel_spacing)
     if gold_vol is None or auto_vol is None or gold_vol <= 0:
         return None, None
     delta_ml = abs(auto_vol - gold_vol)
@@ -165,130 +179,128 @@ def run_bench(
             continue
 
         study_id = gold.get("study_id", "")
-        instance_path_str = gold.get("instance_path", "")
-        if not instance_path_str:
-            print(f"  SKIP {study_id}: no instance_path")
-            continue
-        instance_path = Path(instance_path_str)
-
-        # Find ES frame
-        es_frame = None
-        for frame in gold.get("frames", []):
-            if frame.get("phase") == "ES" and frame.get("view") == "A4C":
-                es_frame = frame
-                break
-        if es_frame is None:
-            print(f"  SKIP {study_id}: no ES A4C frame in gold")
-            continue
-
-        frame_index = es_frame.get("frame_index", 0)
+        default_path = gold.get("instance_path", "")
         pixel_spacing = tuple(gold.get("pixel_spacing_mm", [0.15, 0.15]))
         ps = (float(pixel_spacing[0]), float(pixel_spacing[1])) if len(pixel_spacing) >= 2 else None
 
-        try:
-            frame = _load_dicom_frame(instance_path, frame_index)
-        except Exception as exc:
-            print(f"  SKIP {study_id}: {exc}")
+        es_frames = [
+            frame for frame in gold.get("frames", [])
+            if frame.get("phase") == "ES"
+            and (frame.get("view") in (None, "A4C"))
+            and frame.get("chamber", "LA").upper() == "LA"
+        ]
+        if not es_frames:
+            print(f"  SKIP {study_id}: no ES A4C frames in gold")
             continue
 
-        contour, mask_pixels, seg_mask = _run_la_auto_segment(
-            frame, instance_path=instance_path, engine=engine,
-        )
+        for es_frame in es_frames:
+            instance_path_str = es_frame.get("instance_path") or default_path
+            if not instance_path_str:
+                continue
+            instance_path = Path(instance_path_str)
+            frame_index = es_frame.get("frame_index", 0)
 
-        row: dict = {
-            "study_id": study_id,
-            "phase": "ES",
-            "frame_index": frame_index,
-            "mask_pixels": mask_pixels,
-        }
+            try:
+                frame = _load_dicom_frame(instance_path, frame_index)
+            except Exception as exc:
+                print(f"  SKIP {instance_path.name}: {exc}")
+                continue
 
-        if contour is None:
-            row["reject"] = True
-            row["reject_reason"] = "pipeline_failed"
-            row["iou"] = 0.0
-            row["septal_err"] = None
-            row["lateral_err"] = None
+            contour, mask_pixels, seg_mask = _run_la_auto_segment(
+                frame, instance_path=instance_path, engine=engine,
+            )
+
+            row: dict = {
+                "study_id": study_id,
+                "instance": instance_path.name,
+                "phase": "ES",
+                "frame_index": frame_index,
+                "mask_pixels": mask_pixels,
+            }
+
+            if contour is None:
+                row["reject"] = True
+                row["reject_reason"] = "pipeline_failed"
+                row["iou"] = 0.0
+                row["septal_err"] = None
+                row["lateral_err"] = None
+                row["lav_delta_ml"] = None
+                row["lav_delta_pct"] = None
+                row["lav_gate_pass"] = False
+                row["zero_edit"] = False
+                row["light_edit"] = False
+                rows.append(row)
+                continue
+
+            roi_xyxy = resolve_segment_roi_xyxy(
+                frame if frame.ndim == 2 else np.mean(frame[..., :3], axis=2).astype(np.uint8),
+                media_format="dicom",
+                instance_path=instance_path,
+            )
+
+            reject_reason = explain_la_auto_reject_reason(
+                contour, ps, mask_pixels=mask_pixels, mask=seg_mask, roi_xyxy=roi_xyxy,
+            )
+            if reject_reason is not None:
+                row["reject"] = True
+                row["reject_reason"] = reject_reason
+                row["iou"] = 0.0
+                row["septal_err"] = None
+                row["lateral_err"] = None
+                row["lav_delta_ml"] = None
+                row["lav_delta_pct"] = None
+                row["lav_gate_pass"] = False
+                row["zero_edit"] = False
+                row["light_edit"] = False
+                rows.append(row)
+                continue
+
+            row["reject"] = False
+            row["reject_reason"] = None
+
+            gold_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            gold_pts = np.array(es_frame.get("points", []), dtype=np.int32)
+            if len(gold_pts) >= 3:
+                import cv2
+                cv2.fillPoly(gold_mask, [gold_pts], 1)
+            pred_mask = _contour_to_mask(contour, frame.shape[:2])
+            iou = mask_iou(pred_mask, gold_mask)
+            row["iou"] = round(iou, 4)
+
+            if contour.mitral_annulus and es_frame.get("mitral_annulus"):
+                gold_ann = es_frame["mitral_annulus"]
+                pred_ann = (
+                    (float(contour.mitral_annulus[0][0]), float(contour.mitral_annulus[0][1])),
+                    (float(contour.mitral_annulus[1][0]), float(contour.mitral_annulus[1][1])),
+                )
+                gold_ann_tuple = (
+                    (float(gold_ann[0][0]), float(gold_ann[0][1])),
+                    (float(gold_ann[1][0]), float(gold_ann[1][1])),
+                )
+                se, le = annulus_endpoint_error(pred_ann, gold_ann_tuple)
+                row["septal_err"] = round(se, 2)
+                row["lateral_err"] = round(le, 2)
+            else:
+                row["septal_err"] = None
+                row["lateral_err"] = None
+
             row["lav_delta_ml"] = None
             row["lav_delta_pct"] = None
             row["lav_gate_pass"] = False
+            lav_delta, lav_pct = _lav_delta_metrics(contour, es_frame, ps)
+            if lav_delta is not None:
+                row["lav_delta_ml"] = round(lav_delta, 2)
+            if lav_pct is not None:
+                row["lav_delta_pct"] = round(lav_pct, 4)
+            if lav_delta is not None or lav_pct is not None:
+                row["lav_gate_pass"] = (
+                    (lav_delta is not None and lav_delta < 5.0)
+                    or (lav_pct is not None and lav_pct < 0.08)
+                )
+
             row["zero_edit"] = False
             row["light_edit"] = False
             rows.append(row)
-            continue
-
-        roi_xyxy = resolve_segment_roi_xyxy(
-            frame if frame.ndim == 2 else np.mean(frame[..., :3], axis=2).astype(np.uint8),
-            media_format="dicom",
-            instance_path=instance_path,
-        )
-
-        # Quality gate
-        reject_reason = explain_la_auto_reject_reason(
-            contour, ps, mask_pixels=mask_pixels, mask=seg_mask, roi_xyxy=roi_xyxy,
-        )
-        if reject_reason is not None:
-            row["reject"] = True
-            row["reject_reason"] = reject_reason
-            row["iou"] = 0.0
-            row["septal_err"] = None
-            row["lateral_err"] = None
-            row["lav_delta_ml"] = None
-            row["lav_delta_pct"] = None
-            row["lav_gate_pass"] = False
-            row["zero_edit"] = False
-            row["light_edit"] = False
-            rows.append(row)
-            continue
-
-        row["reject"] = False
-        row["reject_reason"] = None
-
-        # IoU
-        gold_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-        gold_pts = np.array(es_frame.get("points", []), dtype=np.int32)
-        if len(gold_pts) >= 3:
-            import cv2
-            cv2.fillPoly(gold_mask, [gold_pts], 1)
-        pred_mask = _contour_to_mask(contour, frame.shape[:2])
-        iou = mask_iou(pred_mask, gold_mask)
-        row["iou"] = round(iou, 4)
-
-        # MV endpoint error
-        if contour.mitral_annulus and es_frame.get("mitral_annulus"):
-            gold_ann = es_frame["mitral_annulus"]
-            pred_ann = (
-                (float(contour.mitral_annulus[0][0]), float(contour.mitral_annulus[0][1])),
-                (float(contour.mitral_annulus[1][0]), float(contour.mitral_annulus[1][1])),
-            )
-            gold_ann_tuple = (
-                (float(gold_ann[0][0]), float(gold_ann[0][1])),
-                (float(gold_ann[1][0]), float(gold_ann[1][1])),
-            )
-            se, le = annulus_endpoint_error(pred_ann, gold_ann_tuple)
-            row["septal_err"] = round(se, 2)
-            row["lateral_err"] = round(le, 2)
-        else:
-            row["septal_err"] = None
-            row["lateral_err"] = None
-
-        # LAV delta
-        row["lav_delta_ml"] = None
-        row["lav_delta_pct"] = None
-        row["lav_gate_pass"] = False
-        lav_delta, lav_pct = _lav_delta_metrics(contour, es_frame, ps)
-        if lav_delta is not None:
-            row["lav_delta_ml"] = round(lav_delta, 2)
-        if lav_pct is not None:
-            row["lav_delta_pct"] = round(lav_pct, 4)
-        if lav_delta is not None or lav_pct is not None:
-            row["lav_gate_pass"] = (
-                (lav_delta is not None and lav_delta < 5.0)
-                or (lav_pct is not None and lav_pct < 0.08)
-            )
-
-        row["zero_edit"] = False
-        row["light_edit"] = False
-        rows.append(row)
 
     # Aggregate
     summary = aggregate_bench_results(rows)

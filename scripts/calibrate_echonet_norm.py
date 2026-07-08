@@ -22,6 +22,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = PROJECT_ROOT / "models" / "model_manifest.json"
 
 
+def _to_grayscale_frame(frame: np.ndarray) -> np.ndarray:
+    """Convert a DICOM frame to 2D grayscale float32."""
+    array = np.asarray(frame)
+    if array.ndim == 2:
+        return array.astype(np.float32)
+    if array.ndim == 3 and array.shape[-1] in (3, 4):
+        return np.mean(array[..., :3], axis=2).astype(np.float32)
+    raise ValueError(f"unsupported frame shape: {array.shape}")
+
+
 def _load_dicom_frames(input_dir: Path, max_frames: int = 500) -> list[np.ndarray]:
     """Load grayscale DICOM frames from directory."""
     try:
@@ -43,13 +53,21 @@ def _load_dicom_frames(input_dir: Path, max_frames: int = 500) -> list[np.ndarra
             if not hasattr(ds, "pixel_array"):
                 continue
             pixel_array = ds.pixel_array
-            if pixel_array.ndim == 3:
+            if pixel_array.ndim == 4:
                 for frame_idx in range(pixel_array.shape[0]):
                     if len(frames) >= max_frames:
                         break
-                    frames.append(pixel_array[frame_idx])
+                    frames.append(_to_grayscale_frame(pixel_array[frame_idx]))
+            elif pixel_array.ndim == 3:
+                if pixel_array.shape[-1] in (3, 4):
+                    frames.append(_to_grayscale_frame(pixel_array))
+                else:
+                    for frame_idx in range(pixel_array.shape[0]):
+                        if len(frames) >= max_frames:
+                            break
+                        frames.append(_to_grayscale_frame(pixel_array[frame_idx]))
             elif pixel_array.ndim == 2:
-                frames.append(pixel_array)
+                frames.append(_to_grayscale_frame(pixel_array))
         except Exception:
             continue
 

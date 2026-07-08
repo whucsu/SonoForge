@@ -568,8 +568,13 @@ def _mitral_annulus_endpoints(
     ann_ys: np.ndarray,
     *,
     trim_percentile: float = 12.0,
+    prefer_high_y: bool | None = None,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Septal/lateral MV points with independent Y (sloped annulus), trimmed from mask edges."""
+    """Septal/lateral MV points with independent Y (sloped annulus), trimmed from mask edges.
+
+    When ``prefer_high_y`` is set, snap each endpoint to basal-most points in the
+    side bucket (higher y for bottom annulus, lower y for top annulus).
+    """
     if ann_xs.size < 2:
         msg = "cannot locate mitral annulus on cavity mask"
         raise ValueError(msg)
@@ -579,18 +584,26 @@ def _mitral_annulus_endpoints(
     septal_mask = ann_xs <= x_cut_low
     lateral_mask = ann_xs >= x_cut_high
     if np.any(septal_mask):
-        septal = (
-            float(np.mean(ann_xs[septal_mask])),
-            float(np.mean(ann_ys[septal_mask])),
-        )
+        sx = ann_xs[septal_mask]
+        sy = ann_ys[septal_mask]
+        if prefer_high_y is None:
+            septal = (float(np.mean(sx)), float(np.mean(sy)))
+        else:
+            target = np.max(sy) if prefer_high_y else np.min(sy)
+            pick = np.isclose(sy, target)
+            septal = (float(np.mean(sx[pick])), float(target))
     else:
         min_index = int(np.argmin(ann_xs))
         septal = (float(ann_xs[min_index]), float(ann_ys[min_index]))
     if np.any(lateral_mask):
-        lateral = (
-            float(np.mean(ann_xs[lateral_mask])),
-            float(np.mean(ann_ys[lateral_mask])),
-        )
+        lx = ann_xs[lateral_mask]
+        ly = ann_ys[lateral_mask]
+        if prefer_high_y is None:
+            lateral = (float(np.mean(lx)), float(np.mean(ly)))
+        else:
+            target = np.max(ly) if prefer_high_y else np.min(ly)
+            pick = np.isclose(ly, target)
+            lateral = (float(np.mean(lx[pick])), float(target))
     else:
         max_index = int(np.argmax(ann_xs))
         lateral = (float(ann_xs[max_index]), float(ann_ys[max_index]))
@@ -639,7 +652,9 @@ def _annulus_and_apex_from_mask_pixels(
         msg = "cannot locate mitral annulus on cavity mask"
         raise ValueError(msg)
 
-    septal, lateral = _mitral_annulus_endpoints(ann_xs, ann_ys)
+    septal, lateral = _mitral_annulus_endpoints(
+        ann_xs, ann_ys, prefer_high_y=annulus_at_bottom,
+    )
     if np.any(apex_mask):
         apex = (float(np.median(xs[apex_mask])), float(np.median(ys[apex_mask])))
     else:
@@ -681,7 +696,9 @@ def _fallback_annulus_wider_band(
         msg = "fallback A: cannot locate mitral annulus with wider band"
         raise ValueError(msg)
 
-    septal, lateral = _mitral_annulus_endpoints(ann_xs, ann_ys, trim_percentile=8.0)
+    septal, lateral = _mitral_annulus_endpoints(
+        ann_xs, ann_ys, trim_percentile=8.0, prefer_high_y=annulus_at_bottom,
+    )
     if np.any(apex_mask):
         apex = (float(np.median(xs[apex_mask])), float(np.median(ys[apex_mask])))
     else:
