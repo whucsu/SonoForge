@@ -39,6 +39,7 @@ from echo_personal_tool.domain.services.segmentation_service import (
     open_arc_from_cavity_mask,
     papillary_mask_cleanup,
 )
+from echo_personal_tool.domain.services.contour_geometry import smooth_open_arc
 from echo_personal_tool.infrastructure.dicom_reader import DicomReaderImpl
 from echo_personal_tool.infrastructure.onnx_engine import OnnxInferenceEngine
 
@@ -83,15 +84,17 @@ def _run_auto_segment(
         return None
 
     refined_points = exclude_papillary_concavities(open_points, annulus, apex, phase=phase)
+    # Temporal smoothing: Laplacian relaxation to reduce frame-to-frame noise
+    smoothed = smooth_open_arc(refined_points, annulus, iterations=6, blend=0.4)
     contour = Contour(
         phase=phase,
         view="A4C",
         chamber="LV",
         mitral_annulus=annulus,
         apex_landmark=apex,
-        points=refined_points,
+        points=smoothed,
         source="ai",
-        num_nodes=len(refined_points),
+        num_nodes=len(smoothed),
     )
     return contour
 
