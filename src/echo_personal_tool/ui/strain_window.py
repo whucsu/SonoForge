@@ -843,27 +843,16 @@ class ControlPanel(QWidget):
         # Quality Control (per-segment checkboxes)
         group_qc = QGroupBox("Quality Control")
         group_qc.setStyleSheet("QGroupBox { font-weight: bold; color: #e0e0e0; }")
-        qc_layout = QVBoxLayout()
-        qc_layout.setSpacing(2)
+        self._qc_layout = QVBoxLayout()
+        self._qc_layout.setSpacing(2)
 
         self._qc_checkboxes: dict[int, QCheckBox] = {}
-        # AHA segment names in Russian (matching Bull's Eye)
-        qc_segments = [
-            (1, "БазПерг"), (2, "Базбок"), (3, "СрПерг"), (4, "Србок"),
-            (5, "АпПер"), (6, "АпЛат"), (7, "СрПер"), (8, "СрЛат"),
-            (9, "СрЗад"), (10, "СрНиж"), (11, "СрНижЛат"),
-            (12, "АпЗад"), (13, "АпПерВерх"), (14, "АпНиж"),
-            (15, "БазЗад"), (16, "АпЛат"), (17, "Апекс"),
-        ]
-        for seg_id, seg_name in qc_segments:
-            cb = QCheckBox(seg_name)
-            cb.setChecked(True)
-            cb.setStyleSheet("color: #e0e0e0; font-size: 10px;")
-            cb.toggled.connect(lambda checked, sid=seg_id: self.qc_segment_toggled.emit(sid, checked))
-            qc_layout.addWidget(cb)
-            self._qc_checkboxes[seg_id] = cb
+        # Will be populated when results arrive
+        self._qc_placeholder = QLabel("Загрузите результаты")
+        self._qc_placeholder.setStyleSheet("color: #9e9e9e; font-size: 10px;")
+        self._qc_layout.addWidget(self._qc_placeholder)
 
-        group_qc.setLayout(qc_layout)
+        group_qc.setLayout(self._qc_layout)
 
         # Wrap in scroll area for many checkboxes
         qc_scroll = QScrollArea()
@@ -1051,6 +1040,9 @@ class StrainWindow(QMainWindow):
                 result.segment_quality,
             )
 
+            # Populate QC checkboxes for available segments
+            self._populate_qc_checkboxes(result.segment_strain)
+
         # Get endo kernels and positions
         endo_indices = [i for i, k in enumerate(result.kernels) if k.layer == "endo"]
         endo_kernels = [result.kernels[i] for i in endo_indices]
@@ -1153,6 +1145,39 @@ class StrainWindow(QMainWindow):
         self._control._btn_redo.setEnabled(False)
 
         logger.info("Kernel %d moved: (%.1f, %.1f) -> (%.1f, %.1f)", actual_idx, old_x, old_y, new_x, new_y)
+
+    def _populate_qc_checkboxes(self, segment_strain: dict[int, float]) -> None:
+        """Populate QC checkboxes only for segments with data."""
+        # Remove placeholder
+        if self._control._qc_placeholder is not None:
+            self._control._qc_layout.removeWidget(self._control._qc_placeholder)
+            self._control._qc_placeholder.deleteLater()
+            self._control._qc_placeholder = None
+
+        # Clear old checkboxes
+        for cb in self._control._qc_checkboxes.values():
+            self._control._qc_layout.removeWidget(cb)
+            cb.deleteLater()
+        self._control._qc_checkboxes.clear()
+
+        # AHA segment names
+        segment_names = {
+            1: "БазПерг", 2: "Базбок", 3: "СрПерг", 4: "Србок",
+            5: "АпПер", 6: "АпЛат",
+        }
+
+        # Create checkboxes for segments with data
+        for seg_id in sorted(segment_strain.keys()):
+            seg_name = segment_names.get(seg_id, f"Сегмент {seg_id}")
+            cb = QCheckBox(seg_name)
+            cb.setChecked(True)
+            cb.setStyleSheet("color: #e0e0e0; font-size: 10px;")
+            cb.toggled.connect(lambda checked, sid=seg_id: self._control.qc_segment_toggled.emit(sid, checked))
+            self._control._qc_layout.addWidget(cb)
+            self._control._qc_checkboxes[seg_id] = cb
+
+        # Add stretch at end
+        self._control._qc_layout.addStretch()
 
     def _undo_kernel_move(self) -> None:
         """Undo the last kernel movement."""

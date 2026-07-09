@@ -278,9 +278,11 @@ class SpeckleTrackingWorker(QRunnable):
                 per_kernel, kernels, es_ncc if es_ncc is not None else np.ones(len(kernels))
             )
 
+            n_kernels = len(kernels)
+
             # Quality gate: filter kernels by NCC quality
             min_quality = config.min_kernel_quality
-            es_ncc_for_gate = es_ncc if es_ncc is not None else np.ones(len(kernels))
+            es_ncc_for_gate = es_ncc if es_ncc is not None else np.ones(n_kernels)
             quality_mask = es_ncc_for_gate >= min_quality
             n_accepted = int(np.sum(quality_mask))
             n_rejected = n_kernels - n_accepted
@@ -313,8 +315,6 @@ class SpeckleTrackingWorker(QRunnable):
                         gls, gls_quality_gated,
                     )
                     gls = gls_quality_gated
-
-            n_kernels = len(kernels)
             tracked_positions_all = np.full((n_frames, n_kernels, 2), np.nan)
             ncc_all_frames = np.full((n_frames, n_kernels), np.nan)
             tracked_positions_all[phase_start : phase_end + 1] = smoothed
