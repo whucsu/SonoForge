@@ -841,8 +841,8 @@ class ControlPanel(QWidget):
         layout.addWidget(group_quality)
 
         # Quality Control (per-segment checkboxes)
-        group_qc = QGroupBox("Quality Control")
-        group_qc.setStyleSheet("QGroupBox { font-weight: bold; color: #e0e0e0; }")
+        self._qc_group = QGroupBox("Quality Control")
+        self._qc_group.setStyleSheet("QGroupBox { font-weight: bold; color: #e0e0e0; }")
         self._qc_layout = QVBoxLayout()
         self._qc_layout.setSpacing(2)
 
@@ -852,11 +852,11 @@ class ControlPanel(QWidget):
         self._qc_placeholder.setStyleSheet("color: #9e9e9e; font-size: 10px;")
         self._qc_layout.addWidget(self._qc_placeholder)
 
-        group_qc.setLayout(self._qc_layout)
+        self._qc_group.setLayout(self._qc_layout)
 
         # Wrap in scroll area for many checkboxes
         qc_scroll = QScrollArea()
-        qc_scroll.setWidget(group_qc)
+        qc_scroll.setWidget(self._qc_group)
         qc_scroll.setWidgetResizable(True)
         qc_scroll.setMaximumHeight(150)
         qc_scroll.setFrameShape(QFrame.Shape.NoFrame)
