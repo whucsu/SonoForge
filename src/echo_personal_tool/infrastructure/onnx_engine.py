@@ -164,6 +164,14 @@ class OnnxInferenceEngine:
             and self._model_path.is_file()
         )
 
+    @property
+    def crop_mode(self) -> str:
+        """Crop mode from model manifest inference section."""
+        if self._manifest is None:
+            return "center_square"
+        section = self._manifest.get(self._manifest_section, {})
+        return section.get("crop_mode", "center_square")
+
     def segment(
         self,
         frame: np.ndarray,

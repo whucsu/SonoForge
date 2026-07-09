@@ -67,7 +67,7 @@ def _run_auto_segment(
         media_format=media_format,
         instance_path=instance_path,
     )
-    crop_mode = echonet_crop_mode_for_media(media_format)
+    crop_mode = engine.crop_mode
     mask = engine.segment(gray, roi_xyxy=roi_xyxy, crop_mode=crop_mode)
 
     mask_int = np.count_nonzero(mask)

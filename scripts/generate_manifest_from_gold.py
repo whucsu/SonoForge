@@ -16,8 +16,14 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def generate_manifest(gold_dir: Path, output: Path) -> dict:
+def generate_manifest(
+    gold_dir: Path,
+    output: Path,
+    *,
+    exclude_instances: set[str] | None = None,
+) -> dict:
     by_instance: dict[str, dict] = {}
+    exclude = exclude_instances or set()
 
     for gold_path in sorted(gold_dir.glob("lv_*.json")):
         with open(gold_path, encoding="utf-8") as f:
@@ -27,6 +33,10 @@ def generate_manifest(gold_dir: Path, output: Path) -> dict:
         for frame in data.get("frames", []):
             instance_path = frame.get("instance_path", "")
             if not instance_path:
+                continue
+
+            instance_name = Path(instance_path).name
+            if instance_name in exclude:
                 continue
 
             if instance_path not in by_instance:
@@ -77,13 +87,23 @@ def main():
         default=Path(__file__).resolve().parent.parent / "manifest.json",
         help="Output manifest.json path (default: <repo>/manifest.json)",
     )
+    parser.add_argument(
+        "--exclude",
+        type=str,
+        default="",
+        help="Comma-separated instance filenames to exclude (e.g. gold38.dcm,gold71.dcm)",
+    )
     args = parser.parse_args()
 
     if not args.gold_dir.is_dir():
         print(f"Error: gold dir not found: {args.gold_dir}", file=sys.stderr)
         sys.exit(1)
 
-    manifest = generate_manifest(args.gold_dir, args.output)
+    exclude = {name.strip() for name in args.exclude.split(",") if name.strip()}
+    if exclude:
+        print(f"Excluding {len(exclude)} instances: {sorted(exclude)}")
+
+    manifest = generate_manifest(args.gold_dir, args.output, exclude_instances=exclude)
 
     studies = manifest["studies"]
     complete = sum(

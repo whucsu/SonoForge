@@ -107,13 +107,6 @@
     },
     {
       "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
-      "instance_path": "/home/areatu/ECHO2026_src/gold112.dcm",
-      "tags": {},
-      "es_frame": 101,
-      "ed_frame": 90
-    },
-    {
-      "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
       "instance_path": "/home/areatu/ECHO2026_src/gold113.dcm",
       "tags": {},
       "ed_frame": 13,
@@ -261,13 +254,6 @@
     },
     {
       "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
-      "instance_path": "/home/areatu/ECHO2026_src/gold29.dcm",
-      "tags": {},
-      "es_frame": 51,
-      "ed_frame": 42
-    },
-    {
-      "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
       "instance_path": "/home/areatu/ECHO2026_src/gold3.dcm",
       "tags": {},
       "ed_frame": 6,
@@ -307,13 +293,6 @@
       "tags": {},
       "es_frame": 18,
       "ed_frame": 46
-    },
-    {
-      "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
-      "instance_path": "/home/areatu/ECHO2026_src/gold38.dcm",
-      "tags": {},
-      "ed_frame": 53,
-      "es_frame": 63
     },
     {
       "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
@@ -436,13 +415,6 @@
     },
     {
       "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
-      "instance_path": "/home/areatu/ECHO2026_src/gold58.dcm",
-      "tags": {},
-      "ed_frame": 73,
-      "es_frame": 84
-    },
-    {
-      "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
       "instance_path": "/home/areatu/ECHO2026_src/gold59.dcm",
       "tags": {},
       "es_frame": 62,
@@ -506,13 +478,6 @@
     },
     {
       "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
-      "instance_path": "/home/areatu/ECHO2026_src/gold69.dcm",
-      "tags": {},
-      "ed_frame": 65,
-      "es_frame": 76
-    },
-    {
-      "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
       "instance_path": "/home/areatu/ECHO2026_src/gold7.dcm",
       "tags": {},
       "ed_frame": 66,
@@ -524,13 +489,6 @@
       "tags": {},
       "ed_frame": 23,
       "es_frame": 62
-    },
-    {
-      "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
-      "instance_path": "/home/areatu/ECHO2026_src/gold71.dcm",
-      "tags": {},
-      "ed_frame": 80,
-      "es_frame": 98
     },
     {
       "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
@@ -601,13 +559,6 @@
       "tags": {},
       "ed_frame": 94,
       "es_frame": 101
-    },
-    {
-      "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",
-      "instance_path": "/home/areatu/ECHO2026_src/gold82.dcm",
-      "tags": {},
-      "ed_frame": 60,
-      "es_frame": 74
     },
     {
       "study_id": "1.2.410.200001.1.1185.2062614048.1.20251111.1220602869.758.1",

@@ -51,7 +51,7 @@
       "id": "echonet_seg_mobilenet_v3",
       "filename": "echonet_seg_mobilenet_v3.onnx",
       "architecture": "deeplabv3_mobilenet_v3_large",
-      "description": "Lite fallback for 8 GB RAM (Phase 2) — not exported by default",
+      "description": "Lite fallback for 8 GB RAM (Phase 2) \u2014 not exported by default",
       "status": "not_exported",
       "sha256": null,
       "file_size_bytes": null
@@ -126,7 +126,7 @@
     "color_order": "RGB",
     "value_range_before_norm": "0-255",
     "normalization_mode": "per_frame",
-    "normalization_note": "v1.7: per_frame normalization — produces larger masks than fixed mean/std on diverse DICOM data.",
+    "normalization_note": "v1.7: per_frame normalization \u2014 produces larger masks than fixed mean/std on diverse DICOM data.",
     "fixed_mean": [
       0.079259,
       0.079259,

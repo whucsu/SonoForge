@@ -98,6 +98,13 @@ def _resolve_frame(instance_path: str, frame_index: int) -> np.ndarray | None:
         frame = reader.read_pixels(Path(instance_path), frame_index)
         if frame.ndim == 3 and frame.shape[2] == 3:
             frame = np.mean(frame[..., :3], axis=2)
+        # Normalize to uint8 — DICOM pixels may not be in 0-255 range
+        frame = frame.astype(np.float32)
+        fmin, fmax = frame.min(), frame.max()
+        if fmax > fmin:
+            frame = (frame - fmin) / (fmax - fmin) * 255.0
+        else:
+            frame = np.zeros_like(frame)
         return frame.astype(np.uint8)
     except Exception:
         return None
@@ -167,7 +174,7 @@ def bce_dice_loss(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
 
 def build_model() -> nn.Module:
-    # ImageNet-pretrained backbone — critical for good features
+    # ImageNet-pretrained backbone
     try:
         model = torchvision.models.segmentation.deeplabv3_resnet50(
             weights="DEFAULT",
