@@ -11,6 +11,7 @@ from scipy.interpolate import CubicSpline
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QFrame,
     QGridLayout,
@@ -19,14 +20,18 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QRadioButton,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 if TYPE_CHECKING:
     from echo_personal_tool.domain.models.speckle import StrainResult
+
+from echo_personal_tool.ui.strain_curves_view import StrainCurvesView
 
 logger = logging.getLogger(__name__)
 
@@ -605,6 +610,7 @@ class ControlPanel(QWidget):
     """Left-side control panel for Strain Window."""
 
     view_toggled = Signal(str, bool)  # view_name, checked
+    display_mode_changed = Signal(str)  # "contour" or "curves"
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -613,6 +619,25 @@ class ControlPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
+
+        # Display mode (Samsung-style radio buttons)
+        group_mode = QGroupBox("Режим отображения")
+        group_mode.setStyleSheet("QGroupBox { font-weight: bold; color: #e0e0e0; }")
+        mode_layout = QVBoxLayout()
+
+        self._mode_contour = QRadioButton("Деформация")
+        self._mode_contour.setChecked(True)
+        self._mode_contour.setStyleSheet("color: #e0e0e0;")
+        self._mode_contour.toggled.connect(lambda c: self.display_mode_changed.emit("contour") if c else None)
+        mode_layout.addWidget(self._mode_contour)
+
+        self._mode_curves = QRadioButton("Кривые деформации")
+        self._mode_curves.setStyleSheet("color: #e0e0e0;")
+        self._mode_curves.toggled.connect(lambda c: self.display_mode_changed.emit("curves") if c else None)
+        mode_layout.addWidget(self._mode_curves)
+
+        group_mode.setLayout(mode_layout)
+        layout.addWidget(group_mode)
 
         # View toggles
         group_views = QGroupBox("Views")
@@ -715,6 +740,7 @@ class StrainWindow(QMainWindow):
         # Control panel
         self._control = ControlPanel()
         self._control.view_toggled.connect(self._on_view_toggled)
+        self._control.display_mode_changed.connect(self._on_display_mode_changed)
         self._control._btn_close.clicked.connect(self.close)
         splitter.addWidget(self._control)
 
@@ -724,23 +750,32 @@ class StrainWindow(QMainWindow):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(4)
 
-        # Quad view (2x2 grid)
-        quad = QWidget()
-        quad_layout = QGridLayout(quad)
-        quad_layout.setContentsMargins(0, 0, 0, 0)
-        quad_layout.setSpacing(4)
+        # Stacked widget for contour/curves modes
+        self._stacked = QStackedWidget()
+
+        # Contour mode (2x2 grid)
+        contour_widget = QWidget()
+        contour_layout = QGridLayout(contour_widget)
+        contour_layout.setContentsMargins(0, 0, 0, 0)
+        contour_layout.setSpacing(4)
 
         self._panel_a4c = CinePanel("A4C")
         self._panel_a2c = CinePanel("A2C")
         self._panel_dao = CinePanel("DAO (A3C)")
         self._panel_bullseye = BullseyeWidget()
 
-        quad_layout.addWidget(self._panel_a4c, 0, 0)
-        quad_layout.addWidget(self._panel_a2c, 0, 1)
-        quad_layout.addWidget(self._panel_dao, 1, 0)
-        quad_layout.addWidget(self._panel_bullseye, 1, 1)
+        contour_layout.addWidget(self._panel_a4c, 0, 0)
+        contour_layout.addWidget(self._panel_a2c, 0, 1)
+        contour_layout.addWidget(self._panel_dao, 1, 0)
+        contour_layout.addWidget(self._panel_bullseye, 1, 1)
 
-        content_layout.addWidget(quad, stretch=3)
+        self._stacked.addWidget(contour_widget)  # index 0
+
+        # Curves mode
+        self._curves_view = StrainCurvesView()
+        self._stacked.addWidget(self._curves_view)  # index 1
+
+        content_layout.addWidget(self._stacked, stretch=3)
 
         # Summary table
         self._summary = SummaryTable()
@@ -837,6 +872,9 @@ class StrainWindow(QMainWindow):
         self._panel_a2c.set_title_info(f"GLS: {result.gls:.1f}%")
         self._panel_dao.set_title_info(f"GLS: {result.gls:.1f}%")
 
+        # Update curves view
+        self._curves_view.set_strain_data(result)
+
         if not self.isVisible():
             self.show()
         self.raise_()
@@ -878,6 +916,16 @@ class StrainWindow(QMainWindow):
         panel = panel_map.get(view)
         if panel is not None:
             panel.setVisible(checked)
+
+    def _on_display_mode_changed(self, mode: str) -> None:
+        """Switch between contour and curves display modes."""
+        if mode == "contour":
+            self._stacked.setCurrentIndex(0)
+        elif mode == "curves":
+            self._stacked.setCurrentIndex(1)
+            # Update curves view with current result
+            if self._result is not None:
+                self._curves_view.set_strain_data(self._result)
 
     def closeEvent(self, event) -> None:
         self.closed.emit()
