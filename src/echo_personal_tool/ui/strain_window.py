@@ -610,7 +610,8 @@ class ControlPanel(QWidget):
     """Left-side control panel for Strain Window."""
 
     view_toggled = Signal(str, bool)  # view_name, checked
-    display_mode_changed = Signal(str)  # "contour" or "curves"
+    display_mode_changed = Signal(str)  # "contour", "curves", "sr", "peak"
+    strain_metric_changed = Signal(str)  # "deformation", "strain_rate", "peak"
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -620,24 +621,54 @@ class ControlPanel(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
 
-        # Display mode (Samsung-style radio buttons)
-        group_mode = QGroupBox("Режим отображения")
-        group_mode.setStyleSheet("QGroupBox { font-weight: bold; color: #e0e0e0; }")
-        mode_layout = QVBoxLayout()
+        # View mode (contour vs curves)
+        group_view_mode = QGroupBox("Вид")
+        group_view_mode.setStyleSheet("QGroupBox { font-weight: bold; color: #e0e0e0; }")
+        view_mode_layout = QVBoxLayout()
 
-        self._mode_contour = QRadioButton("Деформация")
+        self._mode_contour = QRadioButton("Cine + контур")
         self._mode_contour.setChecked(True)
         self._mode_contour.setStyleSheet("color: #e0e0e0;")
         self._mode_contour.toggled.connect(lambda c: self.display_mode_changed.emit("contour") if c else None)
-        mode_layout.addWidget(self._mode_contour)
+        view_mode_layout.addWidget(self._mode_contour)
 
         self._mode_curves = QRadioButton("Кривые деформации")
         self._mode_curves.setStyleSheet("color: #e0e0e0;")
         self._mode_curves.toggled.connect(lambda c: self.display_mode_changed.emit("curves") if c else None)
-        mode_layout.addWidget(self._mode_curves)
+        view_mode_layout.addWidget(self._mode_curves)
 
-        group_mode.setLayout(mode_layout)
-        layout.addWidget(group_mode)
+        group_view_mode.setLayout(view_mode_layout)
+        layout.addWidget(group_view_mode)
+
+        # Strain metric (Samsung-style: Deformation / SR / Peak)
+        group_metric = QGroupBox("Параметр")
+        group_metric.setStyleSheet("QGroupBox { font-weight: bold; color: #e0e0e0; }")
+        metric_layout = QVBoxLayout()
+
+        self._metric_deformation = QRadioButton("Деформация")
+        self._metric_deformation.setChecked(True)
+        self._metric_deformation.setStyleSheet("color: #e0e0e0;")
+        self._metric_deformation.toggled.connect(
+            lambda c: self.strain_metric_changed.emit("deformation") if c else None
+        )
+        metric_layout.addWidget(self._metric_deformation)
+
+        self._metric_sr = QRadioButton("Скорость деформ.")
+        self._metric_sr.setStyleSheet("color: #e0e0e0;")
+        self._metric_sr.toggled.connect(
+            lambda c: self.strain_metric_changed.emit("strain_rate") if c else None
+        )
+        metric_layout.addWidget(self._metric_sr)
+
+        self._metric_peak = QRadioButton("Пик.изм.деформации")
+        self._metric_peak.setStyleSheet("color: #e0e0e0;")
+        self._metric_peak.toggled.connect(
+            lambda c: self.strain_metric_changed.emit("peak") if c else None
+        )
+        metric_layout.addWidget(self._metric_peak)
+
+        group_metric.setLayout(metric_layout)
+        layout.addWidget(group_metric)
 
         # View toggles
         group_views = QGroupBox("Views")
@@ -741,6 +772,7 @@ class StrainWindow(QMainWindow):
         self._control = ControlPanel()
         self._control.view_toggled.connect(self._on_view_toggled)
         self._control.display_mode_changed.connect(self._on_display_mode_changed)
+        self._control.strain_metric_changed.connect(self._on_strain_metric_changed)
         self._control._btn_close.clicked.connect(self.close)
         splitter.addWidget(self._control)
 
@@ -926,6 +958,44 @@ class StrainWindow(QMainWindow):
             # Update curves view with current result
             if self._result is not None:
                 self._curves_view.set_strain_data(self._result)
+
+    def _on_strain_metric_changed(self, metric: str) -> None:
+        """Switch between deformation, strain rate, and peak strain display."""
+        if self._result is None:
+            return
+
+        # Store current metric for re-rendering
+        self._current_metric = metric
+
+        # Update title info based on metric
+        if metric == "deformation":
+            title_info = f"GLS: {self._result.gls:.1f}%"
+            unit = "%"
+        elif metric == "strain_rate":
+            title_info = f"GLS Rate: --"
+            unit = "1/s"
+        elif metric == "peak":
+            title_info = f"Peak GLS: {self._result.gls:.1f}%"
+            unit = "%"
+        else:
+            return
+
+        self._panel_a4c.set_title_info(title_info)
+
+        # Update bull's eye if available
+        if self._result.segment_strain:
+            if metric == "strain_rate" and self._result.strain_rate is not None:
+                # For SR mode, we would show strain rate per segment
+                # For now, show strain as placeholder
+                self._panel_bullseye.update_data(
+                    self._result.segment_strain,
+                    self._result.segment_quality,
+                )
+            else:
+                self._panel_bullseye.update_data(
+                    self._result.segment_strain,
+                    self._result.segment_quality,
+                )
 
     def closeEvent(self, event) -> None:
         self.closed.emit()
