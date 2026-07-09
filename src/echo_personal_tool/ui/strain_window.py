@@ -322,50 +322,219 @@ class CinePanel(QWidget):
         self._frame_label.setText("--/--")
 
 
-class BullseyePlaceholder(QWidget):
-    """Placeholder for Bull's Eye plot — to be replaced in Phase 5."""
+class BullseyeWidget(QWidget):
+    """17-segment AHA Bull's Eye plot with color-coded strain values."""
+
+    # AHA 17-segment model: (ring, angle_index) -> segment_id
+    # Rings: 0=apex, 1=apical, 2=mid, 3=basal
+    # Angles: 0=anteroseptal, 1=anterior, 2=anterolateral,
+    #         3=inferolateral, 4=inferior, 5=inferoseptal
+    SEGMENT_GEOMETRY: dict[int, tuple[int, int]] = {
+        # Apex (1 segment)
+        17: (0, 0),
+        # Apical (4 segments)
+        13: (1, 0),  # apical anterior
+        16: (1, 1),  # apical lateral
+        14: (1, 2),  # apical inferior
+        12: (1, 3),  # apical septal
+        # Mid (6 segments)
+        7: (2, 0),   # mid anterior
+        8: (2, 1),   # anterolateral
+        11: (2, 2),  # inferolateral
+        10: (2, 3),  # mid inferior
+        9: (2, 4),   # inferoseptal
+        3: (2, 5),   # mid septal
+        # Basal (6 segments)
+        1: (3, 0),   # basal anterior
+        2: (3, 1),   # anterolateral
+        6: (3, 2),   # inferolateral
+        5: (3, 3),   # basal inferior
+        4: (3, 4),   # inferoseptal
+        15: (3, 5),  # basal septal
+    }
+
+    # Russian labels for outer perimeter
+    SEGMENT_LABELS_RU: dict[int, str] = {
+        1: "Пер", 2: "Лат", 6: "Лат",
+        5: "Нижн", 4: "Задн", 15: "Пер",
+        7: "Пер", 8: "Лат", 11: "Лат",
+        10: "Нижн", 9: "Задн", 3: "Пер",
+        13: "АпПер", 16: "АпЛат", 14: "АпНижн", 12: "АпПер",
+    }
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumHeight(200)
-        self._plot = pg.PlotWidget()
-        self._plot.setBackground("black")
-        self._plot.hideAxis("left")
-        self._plot.hideAxis("bottom")
+        self.setMinimumHeight(250)
+        self.setMinimumWidth(250)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
+        self._segment_items: dict[int, pg.PlotDataItem] = {}
+        self._label_items: dict[int, pg.TextItem] = {}
+        self._value_items: dict[int, pg.TextItem] = {}
+        self._colorbar_item: pg.PlotDataItem | None = None
 
-        title = QLabel("17-Segment Bull's Eye")
-        title.setStyleSheet("font-weight: bold; color: #e0e0e0; font-size: 12px;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        # Default: all segments white (no data)
+        self._segment_strains: dict[int, float] = {}
+        self._segment_quality: dict[int, float] = {}
 
-        layout.addWidget(self._plot, stretch=1)
+    def paintEvent(self, event) -> None:
+        """Custom paint using QPainter for filled segments."""
+        from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
+        from PySide6.QtCore import QPointF
 
-        # Draw placeholder circle
-        theta = np.linspace(0, 2 * np.pi, 100)
-        r_outer = 0.9
-        r_mid = 0.6
-        r_inner = 0.3
-        cx, cy = 0.5, 0.5
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        pen = pg.mkPen("#42a5f5", width=1)
-        self._plot.plot(cx + r_outer * np.cos(theta), cy + r_outer * np.sin(theta), pen=pen)
-        self._plot.plot(cx + r_mid * np.cos(theta), cy + r_mid * np.sin(theta), pen=pen)
-        self._plot.plot(cx + r_inner * np.cos(theta), cy + r_inner * np.sin(theta), pen=pen)
+        w, h = self.width(), self.height()
+        cx, cy = w / 2, h / 2
+        r_max = min(w, h) * 0.42
 
-        # Radial lines
-        for angle in np.linspace(0, 2 * np.pi, 7)[:-1]:
-            self._plot.plot(
-                [cx, cx + r_outer * np.cos(angle)],
-                [cy, cy + r_outer * np.sin(angle)],
-                pen=pen,
+        # Ring radii
+        r_apex = r_max * 0.15
+        r_apical = r_max * 0.38
+        r_mid = r_max * 0.68
+        r_basal = r_max * 1.0
+
+        ring_radii = [r_apex, r_apical, r_mid, r_basal]
+
+        # Draw filled segments
+        for seg_id, (ring, angle_idx) in self.SEGMENT_GEOMETRY.items():
+            strain = self._segment_strains.get(seg_id, None)
+
+            if strain is not None:
+                color = self._strain_to_color(strain)
+            else:
+                color = QColor(40, 40, 40)  # dark gray = no data
+
+            # Calculate polygon
+            if ring == 0:
+                # Apex: full circle
+                polygon = QPolygonF()
+                for a in range(360):
+                    rad = np.radians(a)
+                    polygon.append(QPointF(cx + r_apex * np.cos(rad), cy + r_apex * np.sin(rad)))
+            else:
+                # Other rings: arc segments
+                n_segments = 6 if ring >= 2 else 4
+                angle_span = 360 / n_segments
+                # Offset: segments start from 12 o'clock, rotate -90 degrees
+                start_angle = -90 + angle_idx * angle_span
+                end_angle = start_angle + angle_span
+
+                inner_r = ring_radii[ring - 1]
+                outer_r = ring_radii[ring]
+
+                polygon = QPolygonF()
+                # Outer arc
+                for a in range(int(start_angle), int(end_angle) + 1):
+                    rad = np.radians(a)
+                    polygon.append(QPointF(cx + outer_r * np.cos(rad), cy + outer_r * np.sin(rad)))
+                # Inner arc (reversed)
+                for a in range(int(end_angle), int(start_angle) - 1, -1):
+                    rad = np.radians(a)
+                    polygon.append(QPointF(cx + inner_r * np.cos(rad), cy + inner_r * np.sin(rad)))
+
+            painter.setPen(QPen(QColor(80, 80, 80), 1))
+            painter.setBrush(color)
+            painter.drawPolygon(polygon)
+
+        # Draw segment labels and values
+        painter.setPen(QPen(QColor(220, 220, 220), 1))
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+
+        for seg_id, (ring, angle_idx) in self.SEGMENT_GEOMETRY.items():
+            # Calculate label position (centroid of segment)
+            n_segments_ring = 6 if ring >= 2 else 4
+            angle_span = 360 / n_segments_ring
+            mid_angle = np.radians(-90 + angle_idx * angle_span + angle_span / 2)
+
+            if ring == 0:
+                label_r = r_apex * 0.5
+            else:
+                inner_r = ring_radii[ring - 1]
+                outer_r = ring_radii[ring]
+                label_r = (inner_r + outer_r) / 2
+
+            lx = cx + label_r * np.cos(mid_angle)
+            ly = cy + label_r * np.sin(mid_angle)
+
+            # Draw segment value
+            strain = self._segment_strains.get(seg_id, None)
+            if strain is not None:
+                painter.setPen(QPen(QColor(255, 255, 255), 1))
+                painter.drawText(QPointF(lx - 15, ly + 4), f"{strain:.1f}")
+
+        # Draw outer labels (segment names)
+        font.setPointSize(9)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QPen(QColor(180, 180, 180), 1))
+
+        outer_labels = {
+            0: "Пер", 1: "Лат", 2: "Лат",
+            3: "Нижн", 4: "Задн", 5: "Пер",
+        }
+        for i, label in outer_labels.items():
+            angle = np.radians(-90 + i * 60 + 30)
+            lx = cx + (r_basal + 18) * np.cos(angle)
+            ly = cy + (r_basal + 18) * np.sin(angle)
+            painter.drawText(QPointF(lx - 10, ly + 4), label)
+
+        # Draw concentric circles
+        painter.setPen(QPen(QColor(100, 100, 100), 1))
+        for r in ring_radii:
+            painter.drawEllipse(QPointF(cx, cy), r, r)
+
+        # Draw radial lines
+        for angle_deg in range(0, 360, 60):
+            rad = np.radians(angle_deg - 90)
+            painter.drawLine(
+                QPointF(cx + r_apex * np.cos(rad), cy + r_apex * np.sin(rad)),
+                QPointF(cx + r_basal * np.cos(rad), cy + r_basal * np.sin(rad)),
             )
 
-        self._plot.setXRange(0, 1)
-        self._plot.setYRange(0, 1)
-        self._plot.setAspectLocked(True)
+        # Draw center dot
+        painter.setPen(QPen(QColor(100, 100, 100), 1))
+        painter.setBrush(QColor(60, 60, 60))
+        painter.drawEllipse(QPointF(cx, cy), 4, 4)
+
+        painter.end()
+
+    def _strain_to_color(self, strain: float) -> QColor:
+        """Map strain value to color (red=negative, white=zero, blue=positive)."""
+        # Clamp to [-25, 10] range
+        clamped = max(-25.0, min(10.0, strain))
+
+        if clamped < 0:
+            # Red to white (negative strain = abnormal)
+            t = (clamped + 25) / 25  # 0 to 1
+            r = 255
+            g = int(255 * t)
+            b = int(255 * t)
+        else:
+            # White to blue (positive strain)
+            t = clamped / 10  # 0 to 1
+            r = int(255 * (1 - t))
+            g = int(255 * (1 - t))
+            b = 255
+
+        return QColor(r, g, b)
+
+    def update_data(
+        self,
+        segment_strain: dict[int, float],
+        segment_quality: dict[int, float] | None = None,
+    ) -> None:
+        """Update bull's eye with strain data."""
+        self._segment_strains = segment_strain.copy()
+        self._segment_quality = (segment_quality or {}).copy()
+        self.update()  # Trigger repaint
+
+    def clear(self) -> None:
+        self._segment_strains.clear()
+        self._segment_quality.clear()
+        self.update()
 
 
 class SummaryTable(QWidget):
@@ -554,7 +723,7 @@ class StrainWindow(QMainWindow):
         self._panel_a4c = CinePanel("A4C")
         self._panel_a2c = CinePanel("A2C")
         self._panel_dao = CinePanel("DAO (A3C)")
-        self._panel_bullseye = BullseyePlaceholder()
+        self._panel_bullseye = BullseyeWidget()
 
         quad_layout.addWidget(self._panel_a4c, 0, 0)
         quad_layout.addWidget(self._panel_a2c, 0, 1)
@@ -591,6 +760,13 @@ class StrainWindow(QMainWindow):
             gls=result.gls,
             hr=result.heart_rate_bpm if result.heart_rate_bpm > 0 else None,
         )
+
+        # Update Bull's Eye plot
+        if result.segment_strain:
+            self._panel_bullseye.update_data(
+                result.segment_strain,
+                result.segment_quality,
+            )
 
         # Get endo kernels and positions
         endo_indices = [i for i, k in enumerate(result.kernels) if k.layer == "endo"]
