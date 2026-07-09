@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pyqtgraph as pg
+from scipy.interpolate import CubicSpline
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
@@ -28,6 +29,51 @@ if TYPE_CHECKING:
     from echo_personal_tool.domain.models.speckle import StrainResult
 
 logger = logging.getLogger(__name__)
+
+# Russian AHA segment names (Samsung style)
+AHA_SEGMENT_NAMES_RU: dict[int, str] = {
+    1: "БазПерг",   # Basal septal
+    2: "Базбок",    # Basal lateral
+    3: "СрПерг",    # Mid septal
+    4: "Србок",     # Mid lateral
+    5: "АпПер",     # Apical septal
+    6: "АпЛат",     # Apical lateral
+}
+
+
+def _smooth_contour(points: np.ndarray, n_output: int = 64) -> np.ndarray:
+    """Smooth contour using cubic spline interpolation."""
+    if len(points) < 4:
+        return points
+
+    # Close the contour
+    closed = np.vstack([points, points[:1]])
+
+    # Parameterize by cumulative arc length
+    diffs = np.diff(closed, axis=0)
+    dists = np.linalg.norm(diffs, axis=1)
+    t = np.zeros(len(closed))
+    t[1:] = np.cumsum(dists)
+    total_len = t[-1]
+
+    if total_len < 1e-6:
+        return points
+
+    t_norm = t / total_len
+
+    # Fit cubic spline
+    try:
+        cs_x = CubicSpline(t_norm, closed[:, 0], bc_type="periodic")
+        cs_y = CubicSpline(t_norm, closed[:, 1], bc_type="periodic")
+    except Exception:
+        return points
+
+    # Interpolate
+    t_new = np.linspace(0, 1, n_output, endpoint=False)
+    x_new = cs_x(t_new)
+    y_new = cs_y(t_new)
+
+    return np.column_stack([x_new, y_new])
 
 
 class CinePanel(QWidget):
@@ -62,7 +108,16 @@ class CinePanel(QWidget):
         self._plot.setAspectLocked(True)
         self._plot.setMouseEnabled(x=False, y=False)
         self._plot.setMinimumHeight(200)
-        layout.addWidget(self._plot, stretch=1)
+        layout.addWidget(self._plot, stretch=2)
+
+        # ECG trace area
+        self._ecg_plot = pg.PlotWidget()
+        self._ecg_plot.setBackground("black")
+        self._ecg_plot.hideAxis("left")
+        self._ecg_plot.hideAxis("bottom")
+        self._ecg_plot.setMaximumHeight(60)
+        self._ecg_plot.setMinimumHeight(40)
+        layout.addWidget(self._ecg_plot, stretch=0)
 
         # Bottom row: HR + frame counter
         footer = QHBoxLayout()
@@ -76,9 +131,12 @@ class CinePanel(QWidget):
         layout.addLayout(footer)
 
         # Contour items
-        self._contour_item: pg.PlotDataItem | None = None
+        self._ed_contour_item: pg.PlotDataItem | None = None
+        self._es_contour_item: pg.PlotDataItem | None = None
         self._kernel_scatter: pg.ScatterPlotItem | None = None
         self._segment_labels: list[pg.TextItem] = []
+        self._ecg_item: pg.PlotDataItem | None = None
+        self._ecg_marker: pg.InfiniteLine | None = None
 
     @property
     def plot(self) -> pg.PlotWidget:
@@ -93,18 +151,48 @@ class CinePanel(QWidget):
     def set_frame(self, current: int, total: int) -> None:
         self._frame_label.setText(f"{current}/{total}")
 
-    def show_contour(self, points: np.ndarray, color: str = "#ff1744") -> None:
-        """Draw closed contour on the plot."""
-        if self._contour_item is not None:
-            self._plot.removeItem(self._contour_item)
+    def show_contour(self, points: np.ndarray, color: str = "#ff1744", smooth: bool = True) -> None:
+        """Draw closed contour on the plot with optional cubic spline smoothing."""
+        # Remove old ED contour
+        if self._ed_contour_item is not None:
+            self._plot.removeItem(self._ed_contour_item)
+            self._ed_contour_item = None
+
         if len(points) < 3:
             return
-        x = np.append(points[:, 0], points[0, 0])
-        y = np.append(points[:, 1], points[0, 1])
-        pen = pg.mkPen(color, width=2)
-        self._contour_item = pg.PlotDataItem(x, y, pen=pen)
-        self._contour_item.setZValue(5)
-        self._plot.addItem(self._contour_item)
+
+        if smooth:
+            pts = _smooth_contour(points, n_output=64)
+        else:
+            pts = points
+
+        x = np.append(pts[:, 0], pts[0, 0])
+        y = np.append(pts[:, 1], pts[0, 1])
+        pen = pg.mkPen(color, width=3)
+        self._ed_contour_item = pg.PlotDataItem(x, y, pen=pen)
+        self._ed_contour_item.setZValue(5)
+        self._plot.addItem(self._ed_contour_item)
+
+    def show_es_contour(self, points: np.ndarray, color: str = "#00e676", smooth: bool = True) -> None:
+        """Draw ES contour (green) on the plot."""
+        if self._es_contour_item is not None:
+            self._plot.removeItem(self._es_contour_item)
+            self._es_contour_item = None
+
+        if points is None or len(points) < 3:
+            return
+
+        if smooth:
+            pts = _smooth_contour(points, n_output=64)
+        else:
+            pts = points
+
+        x = np.append(pts[:, 0], pts[0, 0])
+        y = np.append(pts[:, 1], pts[0, 1])
+        pen = pg.mkPen(color, width=2, style=Qt.PenStyle.DashLine)
+        self._es_contour_item = pg.PlotDataItem(x, y, pen=pen)
+        self._es_contour_item.setZValue(4)
+        self._plot.addItem(self._es_contour_item)
 
     def show_kernels(
         self,
@@ -147,29 +235,28 @@ class CinePanel(QWidget):
 
     def show_segment_labels(
         self,
+        kernels: list,
         positions: np.ndarray,
-        labels: list[str],
-        segments: list[int],
     ) -> None:
-        """Draw segment name labels near kernel clusters."""
+        """Draw segment name labels near kernel clusters (Russian names)."""
         # Clear old labels
         for item in self._segment_labels:
             self._plot.removeItem(item)
         self._segment_labels.clear()
 
-        if len(positions) == 0 or len(labels) == 0:
+        if len(positions) == 0 or len(kernels) == 0:
             return
 
         # Group positions by segment
-        segment_positions: dict[int, list[np.ndarray]] = {}
-        for i, seg in enumerate(segments):
+        segment_positions: dict[int, list[int]] = {}
+        for i, kernel in enumerate(kernels):
+            seg = kernel.aha_segment
             if seg > 0 and i < len(positions):
-                segment_positions.setdefault(seg, []).append(positions[i])
+                segment_positions.setdefault(seg, []).append(i)
 
-        for seg, label_text in zip(segments, labels):
-            if seg not in segment_positions:
-                continue
-            pts = np.array(segment_positions[seg])
+        for seg, indices in segment_positions.items():
+            label_text = AHA_SEGMENT_NAMES_RU.get(seg, f"Seg{seg}")
+            pts = positions[indices]
             centroid = pts.mean(axis=0)
 
             text_item = pg.TextItem(
@@ -183,16 +270,53 @@ class CinePanel(QWidget):
             self._plot.addItem(text_item)
             self._segment_labels.append(text_item)
 
+    def show_ecg_trace(self, ecg_data: np.ndarray | None, frame_time_ms: float = 33.3, current_frame: int = 0) -> None:
+        """Display ECG trace with frame marker."""
+        if self._ecg_item is not None:
+            self._ecg_plot.removeItem(self._ecg_item)
+            self._ecg_item = None
+        if self._ecg_marker is not None:
+            self._ecg_plot.removeItem(self._ecg_marker)
+            self._ecg_marker = None
+
+        if ecg_data is None or len(ecg_data) == 0:
+            return
+
+        n = len(ecg_data)
+        t = np.arange(n) * frame_time_ms
+
+        pen = pg.mkPen("#4caf50", width=1)
+        self._ecg_item = pg.PlotDataItem(t, ecg_data, pen=pen)
+        self._ecg_plot.addItem(self._ecg_item)
+
+        # Frame marker
+        marker_x = current_frame * frame_time_ms
+        self._ecg_marker = pg.InfiniteLine(
+            pos=marker_x, angle=90, pen=pg.mkPen("#ffd54f", width=1, style=Qt.PenStyle.DashLine)
+        )
+        self._ecg_plot.addItem(self._ecg_marker)
+
+        self._ecg_plot.setXRange(0, t[-1] if len(t) > 0 else 1000)
+
     def clear(self) -> None:
-        if self._contour_item is not None:
-            self._plot.removeItem(self._contour_item)
-            self._contour_item = None
+        if self._ed_contour_item is not None:
+            self._plot.removeItem(self._ed_contour_item)
+            self._ed_contour_item = None
+        if self._es_contour_item is not None:
+            self._plot.removeItem(self._es_contour_item)
+            self._es_contour_item = None
         if self._kernel_scatter is not None:
             self._plot.removeItem(self._kernel_scatter)
             self._kernel_scatter = None
         for item in self._segment_labels:
             self._plot.removeItem(item)
         self._segment_labels.clear()
+        if self._ecg_item is not None:
+            self._ecg_plot.removeItem(self._ecg_item)
+            self._ecg_item = None
+        if self._ecg_marker is not None:
+            self._ecg_plot.removeItem(self._ecg_marker)
+            self._ecg_marker = None
         self._info_label.setText("")
         self._hr_label.setText("HR: --")
         self._frame_label.setText("--/--")
@@ -468,21 +592,42 @@ class StrainWindow(QMainWindow):
             hr=result.heart_rate_bpm if result.heart_rate_bpm > 0 else None,
         )
 
-        # Update A4C panel
+        # Get endo kernels and positions
+        endo_indices = [i for i, k in enumerate(result.kernels) if k.layer == "endo"]
+        endo_kernels = [result.kernels[i] for i in endo_indices]
+
+        # Update A4C panel (main view)
         self._panel_a4c.set_title_info(f"GLS: {result.gls:.1f}%")
+
+        # ED contour (red, smoothed)
         if result.ed_contour is not None and len(result.ed_contour) >= 3:
-            self._panel_a4c.show_contour(result.ed_contour, color="#ff1744")
+            self._panel_a4c.show_contour(result.ed_contour, color="#ff1744", smooth=True)
+
+        # ES contour (green, dashed)
+        if result.es_contour is not None and len(result.es_contour) >= 3:
+            self._panel_a4c.show_es_contour(result.es_contour, color="#00e676", smooth=True)
+
+        # Tracking kernels with quality coloring
         if result.tracked_ed_positions is not None:
-            endo_mask = np.array([k.layer == "endo" for k in result.kernels], dtype=bool)
-            endo_positions = result.tracked_ed_positions[endo_mask]
+            endo_positions = result.tracked_ed_positions[endo_indices]
             if result.es_ncc_scores is not None and result.es_valid_mask is not None:
-                endo_ncc = result.es_ncc_scores[endo_mask]
-                endo_valid = result.es_valid_mask[endo_mask]
+                endo_ncc = result.es_ncc_scores[endo_indices]
+                endo_valid = result.es_valid_mask[endo_indices]
                 self._panel_a4c.show_kernels(endo_positions, endo_ncc, endo_valid)
             else:
                 self._panel_a4c.show_kernels(endo_positions)
+
+            # Segment labels (Russian names)
+            self._panel_a4c.show_segment_labels(endo_kernels, endo_positions)
+
+        # HR and frame info
         self._panel_a4c.set_hr(result.heart_rate_bpm)
-        self._panel_a4c.set_frame(result.es_index, len(result.longitudinal) if result.longitudinal is not None else 0)
+        n_frames = len(result.longitudinal) if result.longitudinal is not None else 0
+        self._panel_a4c.set_frame(result.es_index, n_frames)
+
+        # ECG trace (generate synthetic if not available)
+        ecg = self._generate_synthetic_ecg(n_frames, result.heart_rate_bpm)
+        self._panel_a4c.show_ecg_trace(ecg, current_frame=result.es_index)
 
         # Placeholder panels — show same data for now
         self._panel_a2c.set_title_info(f"GLS: {result.gls:.1f}%")
@@ -492,6 +637,32 @@ class StrainWindow(QMainWindow):
             self.show()
         self.raise_()
         self.activateWindow()
+
+    def _generate_synthetic_ecg(self, n_frames: int, hr_bpm: float) -> np.ndarray:
+        """Generate synthetic ECG trace for visualization."""
+        if n_frames < 2 or hr_bpm <= 0:
+            return np.zeros(max(n_frames, 100))
+
+        frame_time_s = 33.3 / 1000.0  # assuming ~30fps
+        hr_hz = hr_bpm / 60.0
+        period_frames = int(1.0 / (hr_hz * frame_time_s))
+
+        ecg = np.zeros(n_frames)
+        for i in range(n_frames):
+            phase = (i % period_frames) / period_frames
+            # Simple PQRST approximation
+            if 0.0 <= phase < 0.1:  # P wave
+                ecg[i] = 0.15 * np.sin(np.pi * phase / 0.1)
+            elif 0.15 <= phase < 0.18:  # Q wave
+                ecg[i] = -0.1
+            elif 0.18 <= phase < 0.25:  # R wave
+                ecg[i] = 1.0 * np.sin(np.pi * (phase - 0.18) / 0.07)
+            elif 0.25 <= phase < 0.28:  # S wave
+                ecg[i] = -0.2
+            elif 0.35 <= phase < 0.5:  # T wave
+                ecg[i] = 0.3 * np.sin(np.pi * (phase - 0.35) / 0.15)
+
+        return ecg
 
     def _on_view_toggled(self, view: str, checked: bool) -> None:
         """Handle view checkbox toggle."""
