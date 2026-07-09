@@ -145,29 +145,27 @@ class FrameCache:
         if self.source_path is None:
             raise IncompleteCineError("No source path set")
 
-        from echo_personal_tool.infrastructure.dicom_session import DicomSession
-        import cv2
-
         source = self.source_path
-        if source.suffix.lower() == ".mp4" or source.suffix.lower() == ".avi":
-            # Video file
-            cap = cv2.VideoCapture(str(source))
+        suffix = source.suffix.lower()
+
+        if suffix in (".mp4", ".avi", ".mov"):
+            # Video file — use existing video reader
+            from echo_personal_tool.infrastructure.video_reader import get_thread_video_reader
+            reader = get_thread_video_reader()
+            reader.open(source)
             frames = []
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                if frame.ndim == 3 and frame.shape[2] == 3:
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                frames.append(frame)
-            cap.release()
-            if not frames:
-                raise IncompleteCineError("Could not read video frames")
+            for i in range(self._total_frames):
+                frames.append(reader.read_frame(i))
             result = np.stack(frames)
         else:
-            # DICOM
-            session = DicomSession(source)
-            result = session.get_all_frames()
+            # DICOM — load frame by frame
+            from echo_personal_tool.infrastructure.dicom_session import get_thread_dicom_session
+            session = get_thread_dicom_session()
+            session.open(source)
+            frames = []
+            for i in range(self._total_frames):
+                frames.append(session.decode_single_frame(i))
+            result = np.stack(frames)
 
         # Cache all frames
         for i in range(result.shape[0]):
