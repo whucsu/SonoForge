@@ -127,20 +127,22 @@ def smooth_trajectories(
                 if config.quality_weighted_smoothing:
                     s *= float(np.mean(1.0 - weights) + 0.1)
                 t_param = np.arange(len(idx), dtype=np.float64)
-                cs_x = UnivariateSpline(t_param, pts[:, 0], w=weights, s=s, k=3)
-                cs_y = UnivariateSpline(t_param, pts[:, 1], w=weights, s=s, k=3)
+                k = min(3, len(idx) - 1)  # spline degree can't exceed n_points - 1
+                cs_x = UnivariateSpline(t_param, pts[:, 0], w=weights, s=s, k=k)
+                cs_y = UnivariateSpline(t_param, pts[:, 1], w=weights, s=s, k=k)
                 out[t, idx, 0] = cs_x(t_param)
                 out[t, idx, 1] = cs_y(t_param)
 
-    if config.temporal_smoothing > 0:
+    if config.temporal_smoothing > 0 and n_frames >= 4:
         times = np.arange(n_frames, dtype=np.float64)
         for i in range(n_kernels):
             weights = np.clip(ncc_scores[:, i], 0.01, 1.0)
             s = config.temporal_smoothing * n_frames
             if config.quality_weighted_smoothing:
                 s *= float(np.mean(1.0 - weights) + 0.1)
-            cs_x = UnivariateSpline(times, out[:, i, 0], w=weights, s=s, k=3)
-            cs_y = UnivariateSpline(times, out[:, i, 1], w=weights, s=s, k=3)
+            k = min(3, n_frames - 1)  # spline degree can't exceed n_points - 1
+            cs_x = UnivariateSpline(times, out[:, i, 0], w=weights, s=s, k=k)
+            cs_y = UnivariateSpline(times, out[:, i, 1], w=weights, s=s, k=k)
             out[:, i, 0] = cs_x(times)
             out[:, i, 1] = cs_y(times)
     return out
