@@ -64,6 +64,7 @@ class SpeckleConfig:
     quality_weighted_smoothing: bool = True
     drift_compensation: bool = True
     min_segment_quality: float = 0.4
+    min_kernel_quality: float = 0.3
     multi_cycle_average: bool = True
     contour_resample_points: int = 128
     closure_error_threshold: float = 0.5
@@ -135,3 +136,6 @@ class StrainResult:
     tracking_window_start: int = 0
     tracking_window_end: int = 0
     ncc_threshold: float = 0.3
+    kernels_accepted_count: int = 0
+    kernels_rejected_count: int = 0
+    kernels_total_count: int = 0

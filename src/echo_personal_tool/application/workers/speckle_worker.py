@@ -23,7 +23,7 @@ from echo_personal_tool.domain.services.cardiac_cycle_detector import (
     _shoelace_area,
 )
 from echo_personal_tool.domain.services.myocardial_zone import sample_kernels_in_zone
-from echo_personal_tool.domain.services.aha_segments import assign_aha_segments, compute_aha_segment_strain
+from echo_personal_tool.domain.services.aha_segments import assign_aha_segments, compute_aha_segment_strain, compute_gls_from_segments
 from echo_personal_tool.domain.services.speckle_tracking import (
     build_zone_mask,
     preprocess_echo_frame,
@@ -272,6 +272,42 @@ class SpeckleTrackingWorker(QRunnable):
                 per_kernel, kernels, es_ncc if es_ncc is not None else np.ones(len(kernels))
             )
 
+            # Quality gate: filter kernels by NCC quality
+            min_quality = config.min_kernel_quality
+            es_ncc_for_gate = es_ncc if es_ncc is not None else np.ones(len(kernels))
+            quality_mask = es_ncc_for_gate >= min_quality
+            n_accepted = int(np.sum(quality_mask))
+            n_rejected = n_kernels - n_accepted
+
+            logger.info(
+                "STE quality gate: %d/%d kernels accepted (min_quality=%.2f), %d rejected",
+                n_accepted, n_kernels, min_quality, n_rejected,
+            )
+
+            # Log rejected kernels details
+            if n_rejected > 0:
+                rejected_indices = np.where(~quality_mask)[0]
+                for idx in rejected_indices:
+                    k = kernels[idx]
+                    logger.info(
+                        "  Rejected kernel %d: center=(%.1f,%.1f) layer=%s segment=%d ncc=%.3f",
+                        idx, k.center[0], k.center[1], k.layer,
+                        k.aha_segment, float(es_ncc_for_gate[idx]),
+                    )
+
+            # Compute quality-gated GLS using segment strains
+            if segment_strain:
+                gls_quality_gated = compute_gls_from_segments(
+                    segment_strain, segment_quality, min_quality=min_quality
+                )
+                # Use quality-gated GLS if available, otherwise fallback to curve-based GLS
+                if gls_quality_gated != 0.0:
+                    logger.info(
+                        "STE GLS: curve-based=%.2f%%, quality-gated=%.2f%%",
+                        gls, gls_quality_gated,
+                    )
+                    gls = gls_quality_gated
+
             n_kernels = len(kernels)
             tracked_positions_all = np.full((n_frames, n_kernels, 2), np.nan)
             ncc_all_frames = np.full((n_frames, n_kernels), np.nan)
@@ -319,6 +355,9 @@ class SpeckleTrackingWorker(QRunnable):
                 tracking_window_start=phase_start,
                 tracking_window_end=phase_end,
                 ncc_threshold=config.ncc_threshold,
+                kernels_accepted_count=n_accepted,
+                kernels_rejected_count=n_rejected,
+                kernels_total_count=n_kernels,
             )
             self.signals.finished.emit(result)
 
@@ -357,6 +396,7 @@ class SpeckleTrackingWorker(QRunnable):
                 "kernel_size": config.kernel_size,
                 "search_radius": config.search_radius,
                 "ncc_threshold": config.ncc_threshold,
+                "min_kernel_quality": config.min_kernel_quality,
                 "tracking_mode": config.tracking_mode,
                 "bidirectional": config.bidirectional,
             },

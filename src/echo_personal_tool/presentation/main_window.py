@@ -1631,13 +1631,34 @@ class MainWindow(QMainWindow):
             es_index=result.es_index,
             window_start=result.tracking_window_start,
             window_end=result.tracking_window_end,
+            kernels_accepted=result.kernels_accepted_count,
+            kernels_rejected=result.kernels_rejected_count,
+            kernels_total=result.kernels_total_count,
         )
         quality_pct = result.tracking_quality_mean * 100.0
         drift = "ON" if result.drift_compensation_applied else "OFF"
         preset_name = self._format_speckle_preset_name(result.config_preset)
-        self._show_status(
-            f"GLS: {gls:.1f}% | Quality: {quality_pct:.0f}% | Drift comp: {drift} | Preset: {preset_name}"
-        )
+
+        # Quality gate info
+        total = result.kernels_total_count
+        accepted = result.kernels_accepted_count
+        rejected = result.kernels_rejected_count
+        if total > 0:
+            accepted_pct = (accepted / total) * 100.0
+            quality_info = f"Kernels: {accepted}/{total} ({accepted_pct:.0f}%)"
+            if rejected > 0:
+                quality_info += f" [{rejected} rejected]"
+        else:
+            quality_info = ""
+
+        status_parts = [
+            f"GLS: {gls:.1f}%",
+            f"Quality: {quality_pct:.0f}%",
+            quality_info,
+            f"Drift: {drift}",
+            f"Preset: {preset_name}",
+        ]
+        self._show_status(" | ".join(filter(None, status_parts)))
         self._viewer.show_speckle_result(result)
 
     @staticmethod
