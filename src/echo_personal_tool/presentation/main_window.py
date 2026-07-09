@@ -55,6 +55,7 @@ from echo_personal_tool.presentation.orthanc_study_dialog import OrthancStudyDia
 from echo_personal_tool.presentation.speckle_settings_dialog import SpeckleSettingsDialog
 from echo_personal_tool.presentation.ste_results_dialog import SteResultsDialog
 from echo_personal_tool.presentation.system_bar import SystemBar
+from echo_personal_tool.ui.strain_window import StrainWindow
 from echo_personal_tool.presentation.thumbnail_gallery import ThumbnailGalleryWidget
 from echo_personal_tool.presentation.tool_panel import ToolPanel
 from echo_personal_tool.presentation.user_preferences_dialog import show_user_preferences_dialog
@@ -222,6 +223,7 @@ class MainWindow(QMainWindow):
         self._controller.state_manager.state_changed.connect(self._on_state_changed_for_viewer2)
         self._doppler_frame_context: tuple[str | None, int | None] = (None, None)
         self._ste_dialog: SteResultsDialog | None = None
+        self._strain_window: StrainWindow | None = None
 
         self._tool_panel = ToolPanel()
         self._tool_panel.setFixedWidth(_TOOL_PANEL_WIDTH)
@@ -1514,6 +1516,9 @@ class MainWindow(QMainWindow):
         self._viewer.clear_speckle_overlay()
         if self._ste_dialog is not None:
             self._ste_dialog.clear()
+        if self._strain_window is not None:
+            self._strain_window.close()
+            self._strain_window = None
         self._viewer.reset_dist_caliper_serial()
         self._controller.reset_measurements_and_calibration()
         self._viewer.set_results_overlay("")
@@ -1614,6 +1619,15 @@ class MainWindow(QMainWindow):
             self._ste_dialog = SteResultsDialog(self)
         return self._ste_dialog
 
+    def _ensure_strain_window(self) -> StrainWindow:
+        if self._strain_window is None:
+            self._strain_window = StrainWindow(self)
+            self._strain_window.closed.connect(self._on_strain_window_closed)
+        return self._strain_window
+
+    def _on_strain_window_closed(self) -> None:
+        self._strain_window = None
+
     def _on_speckle_result_ready(self, result: object) -> None:
         from echo_personal_tool.domain.models.speckle import StrainResult
 
@@ -1660,6 +1674,9 @@ class MainWindow(QMainWindow):
         ]
         self._show_status(" | ".join(filter(None, status_parts)))
         self._viewer.show_speckle_result(result)
+
+        # Open StrainWindow
+        self._ensure_strain_window().show_result(result)
 
     @staticmethod
     def _format_speckle_preset_name(preset_name: str) -> str:
