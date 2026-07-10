@@ -1664,6 +1664,8 @@ class AppController(QObject):
         ):
             current = state.current_frame_index
             total = state.total_frames
+            if total <= 0:
+                return
             next_idx = (current + 1) % total
 
             if self._frame_cache.is_loaded(next_idx):
@@ -1810,17 +1812,21 @@ class AppController(QObject):
                 self.frame_loaded.emit(pixels)
 
     def _on_frame_load_failed(self, request_id: int, message: str) -> None:
+        is_current = False
         if request_id == self._pending_load_id:
             self._pending_load_id = 0
             self._pending_source_path = None
             self._pending_frame_index = None
+            is_current = True
         if request_id == self._batch_load_id:
             self._batch_load_id = 0
         if request_id == self._scroll_load_id:
             self._scroll_load_id = 0
         if request_id == self._scroll_neighbor_load_id:
             self._scroll_neighbor_load_id = 0
-        self._current_frame_pixels = None
+        # Only clear pixels if the failed request was for the current frame
+        if is_current:
+            self._current_frame_pixels = None
         self.status_message.emit(tr("status.load_failed", message=message))
         self.frame_load_failed.emit(message)
 
@@ -1868,6 +1874,9 @@ class AppController(QObject):
                     break
                 leading_static = idx
         self._leading_static_frames[path.resolve()] = leading_static
+        # Cap to prevent unbounded growth across sessions
+        if len(self._leading_static_frames) > 200:
+            self._leading_static_frames.clear()
 
         self._frame_cache.load(path, frames)
         from echo_personal_tool.infrastructure.dicom_session import get_thread_dicom_session

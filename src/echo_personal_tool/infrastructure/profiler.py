@@ -50,7 +50,7 @@ def profiled(func: F) -> F:
             elif elapsed > 50.0:
                 _LOG.info("[PROFILE] SLOW %.1f ms  %s", elapsed, name)
             return result
-        except Exception:
+        except Exception as exc:
             elapsed = (time.perf_counter() - t0) * 1000.0
             _call_counts[name] += 1
             _total_times[name] += elapsed
@@ -72,7 +72,7 @@ def profile_block(label: str):
     t0 = time.perf_counter()
     try:
         yield
-    except Exception:
+    except Exception as exc:
         elapsed = (time.perf_counter() - t0) * 1000.0
         exc_type = type(exc).__name__
         _errors.append((label, exc_type, str(exc)[:200]))

@@ -346,6 +346,8 @@ class DopplerOverlayTools(QWidget):
     def _clear_interval_preview(self) -> None:
         if self._interval_preview_item is not None:
             self._interval_preview_item.setData([], [])
+            if self._interval_preview_item.scene() is not None:
+                self._plot.removeItem(self._interval_preview_item)
 
     def _resolve_label_index(self, label: str, labels: tuple[str, ...]) -> int:
         normalized = label.strip()

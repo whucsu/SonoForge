@@ -63,6 +63,7 @@ class FrameCache:
         self._current_index = 0
         self._sorted_keys = sorted(self._frame_store.keys())
         self._cached_frames = None
+        self._pinned.clear()
 
     def get(self, index: int) -> np.ndarray:
         if self._total_frames == 0:
@@ -170,6 +171,7 @@ class FrameCache:
         # Cache all frames
         for i in range(result.shape[0]):
             self._frame_store[i] = result[i]
+        self._sorted_keys = sorted(self._frame_store.keys())
         self._cached_frames = result
 
         return result

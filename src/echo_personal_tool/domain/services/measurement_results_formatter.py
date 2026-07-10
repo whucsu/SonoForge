@@ -360,6 +360,8 @@ def format_results_overlay_html(
                 _html_append(parts, tr("indexed.teichholz_ed"), indexed.teichholz_edvi_ml_m2, "mL/m²", param_id="lvedvi", sex_male=sex_male)
             if indexed.teichholz_esvi_ml_m2 is not None:
                 _html_append(parts, tr("indexed.teichholz_es"), indexed.teichholz_esvi_ml_m2, "mL/m²", param_id="lvesvi", sex_male=sex_male)
+        from echo_personal_tool.domain.services.indexed_results_formatter import should_show_indexed_linear
+        _INDEXED_PARAM_ID_MAP = {"ivsd": "ivsd", "lvedd": "lvedd", "lvpwd": "lvpwd", "lvesd": "lvesd"}
         for measurement in snapshot.linear_measurements:
             if measurement.millimeter_length is None:
                 continue
@@ -369,10 +371,8 @@ def format_results_overlay_html(
             )
             if indexed_mm_m2 is None:
                 continue
-            from echo_personal_tool.domain.services.indexed_results_formatter import should_show_indexed_linear
             if should_show_indexed_linear(measurement.label, measurement.millimeter_length):
-                param_id_map = {"ivsd": "ivsd", "lvedd": "lvedd", "lvpwd": "lvpwd", "lvesd": "lvesd"}
-                param_id = param_id_map.get(measurement.label.casefold())
+                param_id = _INDEXED_PARAM_ID_MAP.get(measurement.label.casefold())
                 label_text = _indexed_linear_label(measurement.label)
                 _html_append(parts, label_text, indexed_mm_m2, "mm/m²", decimals=2, param_id=param_id, sex_male=sex_male)
 

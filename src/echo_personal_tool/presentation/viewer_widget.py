@@ -1634,6 +1634,8 @@ class ViewerWidget(QWidget):
         self._clear_linear_caliper()
         self._clear_calibration_caliper()
         self._clear_contours()
+        self._clear_persistent_linear_calipers()
+        self._clear_ghost_overlay()
 
     @_prof
     def set_state(self, viewer_state: ViewerState) -> None:
@@ -1651,6 +1653,7 @@ class ViewerWidget(QWidget):
             self._clear_contours()
             self._stored_linear_measurements = {}
             self._results_overlay_cleared = False
+            self._dist_serial = 1
             if self._doppler_cal_step is not None:
                 self._doppler_cal_step = None
                 self._doppler_roi_corner1 = None
@@ -2861,6 +2864,7 @@ class ViewerWidget(QWidget):
         pending = self.pending_ai_review_contour()
         if pending is None:
             return False
+        instance_uid = self._current_instance_uid()
         self._stored_contours = [
             c
             for c in self._stored_contours
@@ -2870,6 +2874,7 @@ class ViewerWidget(QWidget):
                 and c.frame_index == pending.frame_index
                 and c.phase == pending.phase
                 and c.view == pending.view
+                and (instance_uid is None or c.sop_instance_uid == instance_uid)
             )
         ]
         self._render_contours_for_current_frame()
@@ -4012,11 +4017,10 @@ class ViewerWidget(QWidget):
     def show_calibration_ok_overlay(self) -> None:
         self._auto_calibration_succeeded = True
         self._refresh_frame_overlays()
-        if self._calibration_ok_timer is not None:
-            self._calibration_ok_timer.stop()
-        self._calibration_ok_timer = QTimer(self)
-        self._calibration_ok_timer.setSingleShot(True)
-        self._calibration_ok_timer.timeout.connect(self._fade_out_calibration_ok)
+        if self._calibration_ok_timer is None:
+            self._calibration_ok_timer = QTimer(self)
+            self._calibration_ok_timer.setSingleShot(True)
+            self._calibration_ok_timer.timeout.connect(self._fade_out_calibration_ok)
         self._calibration_ok_timer.start(4000)
 
     def _fade_out_calibration_ok(self) -> None:
