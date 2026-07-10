@@ -45,23 +45,35 @@ def _write_manifest(models_dir: Path, *, timeout_sec: float = 2.0) -> None:
     (models_dir / "model_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
-class _InlineExecutor:
+class _InlinePool:
     """Run submitted callables synchronously for deterministic unit tests."""
 
-    def submit(self, fn, /, *args, **kwargs):
-        future: Future = Future()
+    def apply_async(self, fn, args=(), kwargs=None):
+        from concurrent.futures import Future as _Future
+        from unittest.mock import MagicMock
+
+        result = _Future()
         try:
-            future.set_result(fn(*args, **kwargs))
+            result.set_result(fn(*args, **(kwargs or {})))
         except Exception as exc:  # noqa: BLE001
-            future.set_exception(exc)
-        return future
+            result.set_exception(exc)
+        mock = MagicMock()
+        mock.get.return_value = result.result()
+        return mock
 
 
-class _PendingExecutor:
-    """Return a future that never completes (for timeout tests)."""
+class _PendingPool:
+    """Return a result that never completes (for timeout tests)."""
 
-    def submit(self, fn, /, *args, **kwargs):
-        return Future()
+    def apply_async(self, fn, args=(), kwargs=None):
+        import time
+        from unittest.mock import MagicMock
+
+        mock = MagicMock()
+        mock.get.side_effect = lambda timeout=None: (_ for _ in ()).throw(
+            __import__("multiprocessing").TimeoutError
+        )
+        return mock
 
 
 def _run_worker(qtbot, worker: OnnxWorker) -> None:
@@ -101,8 +113,8 @@ def test_worker_emits_finished_with_mask(
     worker.signals.finished.connect(received.append)
 
     with patch(
-        "echo_personal_tool.application.workers.onnx_worker._get_executor",
-        return_value=_InlineExecutor(),
+        "echo_personal_tool.application.workers.onnx_worker._get_pool",
+        return_value=_InlinePool(),
     ), patch(
         "echo_personal_tool.application.workers.onnx_worker.run_segment_in_subprocess",
         return_value=mask.tobytes(),
@@ -126,8 +138,8 @@ def test_worker_emits_failed_on_exception(
     worker.signals.failed.connect(errors.append)
 
     with patch(
-        "echo_personal_tool.application.workers.onnx_worker._get_executor",
-        return_value=_InlineExecutor(),
+        "echo_personal_tool.application.workers.onnx_worker._get_pool",
+        return_value=_InlinePool(),
     ), patch(
         "echo_personal_tool.application.workers.onnx_worker.run_segment_in_subprocess",
         side_effect=RuntimeError("segmentation failed"),
@@ -151,8 +163,8 @@ def test_worker_emits_timed_out(
     worker.signals.timed_out.connect(lambda: timed_out.append(True))
 
     with patch(
-        "echo_personal_tool.application.workers.onnx_worker._get_executor",
-        return_value=_PendingExecutor(),
+        "echo_personal_tool.application.workers.onnx_worker._get_pool",
+        return_value=_PendingPool(),
     ):
         _run_worker(qtbot, worker)
         qtbot.waitUntil(lambda: len(timed_out) == 1, timeout=5000)
@@ -175,17 +187,21 @@ def test_worker_defaults_timeout_when_manifest_missing(tmp_path: Path) -> None:
     assert worker._timeout_sec == 2.0
 
 
-def test_get_executor_uses_single_worker_process_pool() -> None:
+def test_get_pool_uses_spawn_context() -> None:
+    mock_ctx = MagicMock()
+    mock_pool = MagicMock()
+    mock_ctx.Pool.return_value = mock_pool
     with patch(
-        "echo_personal_tool.application.workers.onnx_worker.ProcessPoolExecutor",
-    ) as mock_pool_cls:
-        mock_pool_cls.return_value = MagicMock()
+        "echo_personal_tool.application.workers.onnx_worker.multiprocessing",
+    ) as mock_mp:
+        mock_mp.get_context.return_value = mock_ctx
         from echo_personal_tool.application.workers import onnx_worker
 
-        onnx_worker._executor = None
-        first = onnx_worker._get_executor()
-        second = onnx_worker._get_executor()
+        onnx_worker._pool = None
+        first = onnx_worker._get_pool()
+        second = onnx_worker._get_pool()
 
-    mock_pool_cls.assert_called_once_with(max_workers=1)
+    mock_mp.get_context.assert_called_once_with("spawn")
+    mock_ctx.Pool.assert_called_once_with(processes=2, initializer=onnx_worker._init_worker)
     assert first is second
-    onnx_worker._executor = None
+    onnx_worker._pool = None

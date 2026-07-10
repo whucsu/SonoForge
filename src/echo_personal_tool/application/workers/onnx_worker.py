@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import atexit
 import json
+import multiprocessing
+import os
+import signal
 import threading
-from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
 
@@ -15,8 +16,8 @@ from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 from echo_personal_tool.infrastructure.onnx_engine import OnnxInferenceEngine
 
 _DEFAULT_TIMEOUT_SEC = 2.0
-_executor: ProcessPoolExecutor | None = None
-_executor_lock = threading.Lock()
+_pool: multiprocessing.pool.Pool | None = None
+_pool_lock = threading.Lock()
 
 
 def _default_models_dir() -> Path:
@@ -40,24 +41,21 @@ def _load_timeout_sec(models_dir: Path) -> float:
     return float(timeout)
 
 
-def _get_executor() -> ProcessPoolExecutor:
-    global _executor
-    with _executor_lock:
-        if _executor is None:
-            _executor = ProcessPoolExecutor(max_workers=1)
-            atexit.register(_shutdown_executor)
-        return _executor
+def _init_worker() -> None:
+    """Suppress SIGINT in worker processes so parent can shut down cleanly."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
-def _shutdown_executor() -> None:
-    global _executor
-    with _executor_lock:
-        if _executor is not None:
-            try:
-                _executor.shutdown(wait=False, cancel_futures=True)
-            except Exception:
-                pass
-            _executor = None
+def _get_pool() -> multiprocessing.pool.Pool:
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            ctx = multiprocessing.get_context("spawn")
+            _pool = ctx.Pool(
+                processes=2,
+                initializer=_init_worker,
+            )
+        return _pool
 
 
 def run_segment_in_subprocess(
@@ -69,7 +67,7 @@ def run_segment_in_subprocess(
     crop_mode: str = "center_square",
     manifest_section: str = "inference",
 ) -> bytes:
-    """Picklable entry point for ProcessPoolExecutor subprocess inference."""
+    """Picklable entry point for multiprocessing.Pool subprocess inference."""
     frame = np.frombuffer(frame_bytes, dtype=np.dtype(dtype_str)).reshape(shape)
     engine = OnnxInferenceEngine(
         models_dir=Path(models_dir_str), manifest_section=manifest_section,
@@ -85,7 +83,7 @@ class OnnxWorkerSignals(QObject):
 
 
 class OnnxWorker(QRunnable):
-    """Run ONNX segmentation in a single-worker process pool."""
+    """Run ONNX segmentation in a spawn-based process pool."""
 
     def __init__(
         self,
@@ -115,21 +113,21 @@ class OnnxWorker(QRunnable):
         frame = self._frame
         mask_shape = (int(frame.shape[0]), int(frame.shape[1]))
         try:
-            future = _get_executor().submit(
+            pool = _get_pool()
+            async_result = pool.apply_async(
                 run_segment_in_subprocess,
-                frame.tobytes(),
-                frame.shape,
-                frame.dtype.str,
-                str(self._models_dir),
-                self._roi_xyxy,
-                self._crop_mode,
-                self._manifest_section,
+                args=(
+                    frame.tobytes(),
+                    frame.shape,
+                    frame.dtype.str,
+                    str(self._models_dir),
+                    self._roi_xyxy,
+                    self._crop_mode,
+                    self._manifest_section,
+                ),
             )
-            mask_bytes = future.result(timeout=self._timeout_sec)
-        except FuturesTimeoutError:
-            # The running subprocess can't be killed via ProcessPoolExecutor.
-            # Don't discard the executor — the stuck task will eventually finish
-            # and the next submit() will queue behind it.  Just stop waiting.
+            mask_bytes = async_result.get(timeout=self._timeout_sec)
+        except (FuturesTimeoutError, multiprocessing.TimeoutError):
             self.signals.timed_out.emit()
             return
         except Exception as exc:  # noqa: BLE001 - surface to UI
