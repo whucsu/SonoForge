@@ -1019,6 +1019,10 @@ class ViewerWidget(QWidget):
         if self._results_overlay_label.isVisible():
             self._request_results_overlay_reposition()
 
+    def is_results_overlay_pinned(self) -> bool:
+        """Return True if the results overlay is pinned in place."""
+        return self._results_overlay_label._pinned
+
     @_prof
     def _on_results_overlay_clear(self) -> None:
         self._results_overlay_cleared = True
@@ -1560,7 +1564,7 @@ class ViewerWidget(QWidget):
             else None
         )
         # Cache display mode per instance to avoid re-detection every frame
-        instance_key = id(frame) if frame.base is None else None
+        instance_key = frame.ctypes.data if hasattr(frame, 'ctypes') else id(frame)
         if not hasattr(self, "_display_mode_cache_key") or self._display_mode_cache_key != instance_key:
             self._is_color_frame, self._window_level_enabled = self._resolve_display_mode(
                 frame, media_format,

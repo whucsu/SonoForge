@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from echo_personal_tool.domain.calculations.chamber_simpson import (
     biplane_es_volume_ml,
     es_volume_from_view,
@@ -12,6 +14,8 @@ from echo_personal_tool.domain.services.indexed_results_formatter import (
 )
 from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.profiler import profiled as _prof
+
+logger = logging.getLogger(__name__)
 
 _COLOR_ABNORMAL = "#ff6b6b"  # light red for out-of-range values on dark background
 _COLOR_NORMAL = "#e8eef4"  # default text color (light on dark)
@@ -97,7 +101,7 @@ def format_results_overlay(
             area_unit = "cm²" if snapshot.spacing_calibrated else "px²"
             _append(lines, tr("panel.s_la"), la.area_cm2, area_unit, decimals=2)
     elif snapshot.la_volume and snapshot.la_volume.volume_ml is not None:
-        _append(lines, tr("result.lvedv"), snapshot.la_volume.volume_ml, volume_unit)
+        _append(lines, tr("result.lav"), snapshot.la_volume.volume_ml, volume_unit)
 
     ra = snapshot.ra_simpson
     if ra is not None:
@@ -124,43 +128,6 @@ def format_results_overlay(
 
     return "\n".join(lines)
 
-
-# ── Mapping from overlay label translation keys to YAML param IDs ──
-_LABEL_TO_PARAM: dict[str, str] = {
-    "result.mv_e": "ea_ratio",
-    "result.mv_a": "ea_ratio",
-    "result.mv_ea_ratio": "ea_ratio",
-    "result.mv_dt": "dt",
-    "result.ivrt": "dt",
-    "result.at": "dt",
-    "result.e_prime_sept": "e_prime_sept",
-    "result.e_prime_lat": "e_prime_lat",
-    "result.e_prime_avg": "e_e_prime_avg",
-    "result.e_over_e_prime": "e_e_prime_avg",
-    "result.e_over_e_prime_sept": "e_e_prime_avg",
-    "result.e_over_e_prime_lat": "e_e_prime_avg",
-    "result.e_prime_over_a_prime": "e_e_prime_avg",
-    "result.vpeak": "tr_vmax",
-    "result.pgpeak": "tr_vmax",
-    "result.tr_vmax": "tr_vmax",
-    "result.vti": "ea_ratio",
-    "result.vmean": "ea_ratio",
-    "result.pgmean": "ea_ratio",
-    "panel.lvef": "lvef",
-    "panel.lv_mass": "lvm",
-    "panel.lav_4c_short": "la_vol_index",
-    "panel.lav_bi_short": "la_vol_index",
-    "panel.s_la": "la_vol_index",
-    "panel.s_ra": "ra_area",
-    "result.rav_4c": "ra_area",
-    "result.fac": "fac",
-    "result.rwt": "rwt",
-    "result.lvedv_teich": "lvedvi",
-    "result.lvesv_teich": "lvesvi",
-    "result.lvef_teich": "lvef",
-    "result.mv_dt": "dt",
-    "result.lvedv": "la_vol_index",
-}
 
 
 _norm_store_cache: ReferenceDataStore | None = None
@@ -194,7 +161,7 @@ def _norm_for_param(param_id: str, sex_male: bool = True):
                 if p.id == param_id:
                     return p.norm_male if sex_male else (p.norm_female or p.norm_male)
     except Exception:
-        pass
+        logger.debug("norm lookup failed for param_id=%s", param_id, exc_info=True)
     return None
 
 
@@ -301,13 +268,13 @@ def format_results_overlay_html(
         _html_append(parts, tr("result.e_over_e_prime_sept"), dop.e_over_e_prime_sept, "", param_id="e_e_prime_avg", sex_male=sex_male)
         _html_append(parts, tr("result.e_over_e_prime_lat"), dop.e_over_e_prime_lat, "", param_id="e_e_prime_avg", sex_male=sex_male)
         _html_append(parts, tr("result.e_prime_over_a_prime"), dop.e_prime_over_a_prime, "", param_id="e_e_prime_avg", sex_male=sex_male)
-        _html_append(parts, tr("result.vpeak"), dop.vpeak_cm_s, "cm/s", param_id="tr_vmax", sex_male=sex_male)
-        _html_append(parts, tr("result.pgpeak"), dop.pgpeak_mmhg, "mmHg", param_id="tr_vmax", sex_male=sex_male)
+        _html_append(parts, tr("result.vpeak"), dop.vpeak_cm_s, "cm/s", sex_male=sex_male)
+        _html_append(parts, tr("result.pgpeak"), dop.pgpeak_mmhg, "mmHg", sex_male=sex_male)
         _html_append(parts, tr("result.tr_vmax"), dop.tr_vmax_cm_s, "cm/s", param_id="tr_vmax", sex_male=sex_male)
         if time_calibrated:
-            _html_append(parts, tr("result.vti"), dop.vti_cm, "cm", param_id="vti", sex_male=sex_male)
-            _html_append(parts, tr("result.vmean"), dop.vmean_cm_s, "cm/s", param_id="vti", sex_male=sex_male)
-            _html_append(parts, tr("result.pgmean"), dop.pgmean_mmhg, "mmHg", param_id="vti", sex_male=sex_male)
+            _html_append(parts, tr("result.vti"), dop.vti_cm, "cm", sex_male=sex_male)
+            _html_append(parts, tr("result.vmean"), dop.vmean_cm_s, "cm/s", sex_male=sex_male)
+            _html_append(parts, tr("result.pgmean"), dop.pgmean_mmhg, "mmHg", sex_male=sex_male)
 
     volume_unit = "mL" if snapshot.spacing_calibrated else "px³"
 
@@ -347,7 +314,7 @@ def format_results_overlay_html(
             area_unit = "cm²" if snapshot.spacing_calibrated else "px²"
             _html_append(parts, tr("panel.s_la"), la.area_cm2, area_unit, decimals=2, param_id="la_vol_index", sex_male=sex_male)
     elif snapshot.la_volume and snapshot.la_volume.volume_ml is not None:
-        _html_append(parts, tr("result.lvedv"), snapshot.la_volume.volume_ml, volume_unit, param_id="la_vol_index", sex_male=sex_male)
+        _html_append(parts, tr("result.lav"), snapshot.la_volume.volume_ml, volume_unit, param_id="la_vol_index", sex_male=sex_male)
 
     ra = snapshot.ra_simpson
     if ra is not None:

@@ -1170,6 +1170,13 @@ class AppController(QObject):
                 return spacing, True
         return (1.0, 1.0), False
 
+    def resolve_study_uid(
+        self,
+        instance: InstanceMetadata | None = None,
+    ) -> str:
+        """Public API: resolve study UID for the given (or current) instance."""
+        return self._resolve_study_uid(instance)
+
     def _resolve_study_uid(
         self,
         instance: InstanceMetadata | None = None,

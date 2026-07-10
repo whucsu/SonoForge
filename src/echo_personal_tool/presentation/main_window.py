@@ -723,8 +723,8 @@ class MainWindow(QMainWindow):
         instance = self._controller.state_manager.snapshot.instance
         if instance is not None:
             self._instance_overlay_positions[instance.sop_instance_uid] = (x_ratio, y_ratio)
-        if self._viewer._results_overlay_label._pinned:
-            study_uid = self._controller._resolve_study_uid(instance)
+        if self._viewer.is_results_overlay_pinned():
+            study_uid = self._controller.resolve_study_uid(instance)
             self._study_overlay_positions[study_uid] = (x_ratio, y_ratio)
 
     def _on_results_overlay_parameter_clicked(self, param_id: str) -> None:
@@ -733,7 +733,7 @@ class MainWindow(QMainWindow):
 
     def _restore_results_overlay_position(self, instance_uid: str | None) -> None:
         instance = self._controller.state_manager.snapshot.instance
-        study_uid = self._controller._resolve_study_uid(instance)
+        study_uid = self._controller.resolve_study_uid(instance)
         if study_uid != self._current_overlay_study_uid:
             self._current_overlay_study_uid = study_uid
             if study_uid in self._study_overlay_positions:
@@ -937,8 +937,8 @@ class MainWindow(QMainWindow):
             if self._viewer.results_overlay_custom_position():
                 x_ratio, y_ratio = self._viewer.results_overlay_position()
                 self._instance_overlay_positions[previous.sop_instance_uid] = (x_ratio, y_ratio)
-                if self._viewer._results_overlay_label._pinned:
-                    study_uid = self._controller._resolve_study_uid(previous)
+                if self._viewer.is_results_overlay_pinned():
+                    study_uid = self._controller.resolve_study_uid(previous)
                     self._study_overlay_positions[study_uid] = (x_ratio, y_ratio)
             frame_index = self._controller.state_manager.snapshot.current_frame_index
             self._controller.save_doppler_for_frame(
@@ -1297,6 +1297,10 @@ class MainWindow(QMainWindow):
         if instance_uid is not None:
             if fresh_html.strip():
                 self._instance_overlay_cache[instance_uid] = fresh_html
+                # Cap cache size to prevent unbounded growth
+                if len(self._instance_overlay_cache) > 500:
+                    oldest = next(iter(self._instance_overlay_cache))
+                    del self._instance_overlay_cache[oldest]
                 display_text = fresh_html
             else:
                 self._instance_overlay_cache.pop(instance_uid, None)

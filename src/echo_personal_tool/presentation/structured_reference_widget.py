@@ -513,11 +513,12 @@ class StructuredReferenceWidget(QWidget):
     def _get_current_parameters(self) -> list:
         if self._current_pathology is None:
             return []
-        if self._current_pathology.gradations:
-            return self._flatten_gradation_parameters(self._current_pathology)
+        params = []
         if self._current_pathology.parameters is not None:
-            return self._current_pathology.parameters
-        return []
+            params.extend(self._current_pathology.parameters)
+        if self._current_pathology.gradations:
+            params.extend(self._flatten_gradation_parameters(self._current_pathology))
+        return params
 
     def _format_norm(self, param) -> str:
         norm = param.norm_female if not self._sex_male else param.norm_male
@@ -613,6 +614,8 @@ class StructuredReferenceWidget(QWidget):
     def navigate_to_param(self, param_id: str) -> None:
         result = self._store.lookup(param_id)
         if result is None:
+            import logging
+            logging.getLogger(__name__).debug("navigate_to_param: param_id=%r not found in YAML", param_id)
             return
         topic, patho, grad = result
         topic_idx = next((i for i, t in enumerate(self._topics) if t.slug == topic.slug), -1)
