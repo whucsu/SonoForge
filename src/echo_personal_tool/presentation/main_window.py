@@ -33,6 +33,7 @@ from echo_personal_tool.domain.models import Contour, InstanceMetadata
 from echo_personal_tool.domain.models.viewer_state import ViewerState
 from echo_personal_tool.domain.services.measurement_results_formatter import (
     format_results_overlay,
+    format_results_overlay_html,
 )
 from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
@@ -217,6 +218,9 @@ class MainWindow(QMainWindow):
         )
         self._viewer.results_overlay_position_changed.connect(
             self._on_results_overlay_position_changed
+        )
+        self._viewer.results_overlay_parameter_clicked.connect(
+            self._on_results_overlay_parameter_clicked
         )
         self._viewer.gold_export_requested.connect(self._on_gold_export_requested)
         self._controller.state_manager.state_changed.connect(self._viewer.set_state)
@@ -722,6 +726,10 @@ class MainWindow(QMainWindow):
         if self._viewer._results_overlay_label._pinned:
             study_uid = self._controller._resolve_study_uid(instance)
             self._study_overlay_positions[study_uid] = (x_ratio, y_ratio)
+
+    def _on_results_overlay_parameter_clicked(self, param_id: str) -> None:
+        """Open Structured Reference browser at the given parameter."""
+        show_ase_reference_dialog(self, param_id=param_id)
 
     def _restore_results_overlay_position(self, instance_uid: str | None) -> None:
         instance = self._controller.state_manager.snapshot.instance
@@ -1268,21 +1276,21 @@ class MainWindow(QMainWindow):
         instance_uid = instance.sop_instance_uid if instance is not None else None
 
         overlay_snapshot = self._controller.compute_overlay_snapshot(state)
-        fresh_text = format_results_overlay(
+        fresh_html = format_results_overlay_html(
             overlay_snapshot,
             time_calibrated=time_calibrated,
             length_display_unit=self._user_preferences.length_display_unit,
         )
 
         if instance_uid is not None:
-            if fresh_text.strip():
-                self._instance_overlay_cache[instance_uid] = fresh_text
-                display_text = fresh_text
+            if fresh_html.strip():
+                self._instance_overlay_cache[instance_uid] = fresh_html
+                display_text = fresh_html
             else:
                 self._instance_overlay_cache.pop(instance_uid, None)
                 display_text = ""
         else:
-            display_text = fresh_text
+            display_text = fresh_html
 
         self._viewer.set_results_overlay(display_text)
 

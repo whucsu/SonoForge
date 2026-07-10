@@ -76,7 +76,7 @@ def _load_icon(name: str) -> QPixmap:
     return QPixmap()
 
 
-def show_ase_reference_dialog(parent: QWidget | None = None) -> None:
+def show_ase_reference_dialog(parent: QWidget | None = None, param_id: str | None = None) -> None:
     try:
         dialog = AseReferenceDialog(parent)
     except Exception as exc:  # noqa: BLE001 — show load errors in UI
@@ -86,6 +86,8 @@ def show_ase_reference_dialog(parent: QWidget | None = None) -> None:
             tr("ase_refs.load_error.body", exc=str(exc)),
         )
         return
+    if param_id:
+        dialog.navigate_to_param(param_id)
     dialog.exec()
 
 

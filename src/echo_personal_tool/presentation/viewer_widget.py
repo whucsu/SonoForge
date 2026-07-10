@@ -444,9 +444,12 @@ class ResultsOverlayLabel(QLabel):
     clear_requested = Signal()
     reset_position_requested = Signal()
     pin_toggled = Signal(bool)
+    parameter_clicked = Signal(str)  # param_id when a link is clicked
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
+        self.setTextFormat(Qt.TextFormat.RichText)
+        self.setOpenExternalLinks(False)
         self._x_ratio = 1.0
         self._y_ratio = DEFAULT_RESULTS_OVERLAY_Y_RATIO
         self._dragging = False
@@ -466,6 +469,12 @@ class ResultsOverlayLabel(QLabel):
     @_prof
     def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
+            # Check for link click first
+            anchor = self.anchorAt(event.position().toPoint())
+            if anchor:
+                self.parameter_clicked.emit(anchor)
+                event.accept()
+                return
             self._dragging = True
             viewer = self.parent()
             if isinstance(viewer, ViewerWidget):
@@ -546,6 +555,7 @@ class ViewerWidget(QWidget):
     mmode_calibration_changed = Signal(object)
     mmode_time_calibration_completed = Signal(object)
     results_overlay_position_changed = Signal(float, float)
+    results_overlay_parameter_clicked = Signal(str)
     gold_export_requested = Signal(str, int, str)  # phase, frame_index, chamber
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -725,6 +735,7 @@ class ViewerWidget(QWidget):
         self._results_overlay_label.clear_requested.connect(self._on_results_overlay_clear)
         self._results_overlay_label.reset_position_requested.connect(self._on_results_overlay_reset_position)
         self._results_overlay_label.pin_toggled.connect(self._on_results_overlay_pin_toggled)
+        self._results_overlay_label.parameter_clicked.connect(self.results_overlay_parameter_clicked.emit)
         self._results_overlay_label.hide()
 
         self._dicom_tags_overlay_label = QLabel(self)
