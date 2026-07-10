@@ -296,20 +296,67 @@ class StructuredReferenceWidget(QWidget):
         self._image_label.setText("Нет изображения")
 
     def _scale_image(self) -> None:
-        if self._original_pixmap is None or self._original_pixmap.isNull():
+        # Guard against recursive calls from resizeEvent
+        if getattr(self, '_scaling', False):
             return
-        label_size = self._image_label.size()
-        if label_size.width() < 10 or label_size.height() < 10:
-            return
-        scaled = self._original_pixmap.scaled(
-            label_size,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._image_label.setPixmap(scaled)
+        self._scaling = True
+        try:
+            label_width = self._image_label.width()
+            if label_width < 10:
+                return
+
+            # Skip if width hasn't changed
+            if getattr(self, '_last_scale_width', None) == label_width:
+                return
+            self._last_scale_width = label_width
+
+            if getattr(self, '_is_svg', False) and self._svg_text:
+                # Render SVG at actual display resolution using QSvgRenderer
+                try:
+                    from PySide6.QtSvg import QSvgRenderer
+                    from PySide6.QtGui import QImage, QPainter
+                    renderer = QSvgRenderer()
+                    renderer.load(self._svg_text.encode("utf-8"))
+                    if renderer.isValid():
+                        vb = renderer.viewBoxF()
+                        if vb.width() > 0 and vb.height() > 0:
+                            aspect = vb.height() / vb.width()
+                        else:
+                            aspect = 1.0
+                        device_ratio = self.devicePixelRatioF()
+                        w = int(label_width * device_ratio)
+                        h = int(w * aspect)
+                        image = QImage(w, h, QImage.Format.Format_ARGB32)
+                        image.setDevicePixelRatio(device_ratio)
+                        image.fill(0)
+                        painter = QPainter(image)
+                        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+                        renderer.render(painter)
+                        painter.end()
+                        pixmap = QPixmap.fromImage(image)
+                        self._image_label.setPixmap(pixmap)
+                        return
+                except ImportError:
+                    pass
+                # Fallback: load from data
+                pixmap = QPixmap()
+                pixmap.loadFromData(self._svg_text.encode("utf-8"))
+                if not pixmap.isNull():
+                    scaled = pixmap.scaledToWidth(label_width, Qt.TransformationMode.SmoothTransformation)
+                    self._image_label.setPixmap(scaled)
+            elif self._original_pixmap is not None and not self._original_pixmap.isNull():
+                if self._original_pixmap.width() > label_width:
+                    scaled = self._original_pixmap.scaledToWidth(label_width, Qt.TransformationMode.SmoothTransformation)
+                    self._image_label.setPixmap(scaled)
+                else:
+                    self._image_label.setPixmap(self._original_pixmap)
+        finally:
+            self._scaling = False
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        self._last_scale_width = None
         self._scale_image()
 
     def resizeEvent(self, event) -> None:
@@ -472,25 +519,27 @@ class StructuredReferenceWidget(QWidget):
             self._image_label.setText(f"Изображение: {self._current_pathology.image_path}")
             return
 
-        pixmap = QPixmap()
         if img_path.suffix.lower() == ".svg":
             # SVG: replace colors with theme-adaptive colors
             p = get_theme_palette()
-            svg_text = img_path.read_text(encoding="utf-8")
-            svg_text = svg_text.replace("currentColor", p.get("text", "#f1f5f9"))
-            svg_text = svg_text.replace("#000000", p.get("text", "#f1f5f9"))
-            svg_text = svg_text.replace("#706f6f", p.get("text_dim", "#94a3b8"))
-            pixmap.loadFromData(svg_text.encode("utf-8"))
+            self._svg_text = img_path.read_text(encoding="utf-8")
+            self._svg_text = self._svg_text.replace("currentColor", p.get("text", "#f1f5f9"))
+            self._svg_text = self._svg_text.replace("#000000", p.get("text", "#f1f5f9"))
+            self._svg_text = self._svg_text.replace("#706f6f", p.get("text_dim", "#94a3b8"))
+            self._is_svg = True
+            self._original_pixmap = None
         else:
-            pixmap = QPixmap(str(img_path))
+            self._is_svg = False
+            self._svg_text = None
+            self._original_pixmap = QPixmap(str(img_path))
 
-        if pixmap.isNull():
+        if not self._is_svg and self._original_pixmap.isNull():
             self._image_label.clear()
             self._image_label.setText("Нет изображения")
             return
 
-        # Store original pixmap for re-scaling on resize
-        self._original_pixmap = pixmap
+        # Reset scale cache so image is re-rendered
+        self._last_scale_width = None
         self._scale_image()
 
     def _update_source(self) -> None:

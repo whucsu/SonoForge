@@ -171,6 +171,7 @@ topics:
             source: "2016, ASE, Recommendations for the Evaluation of Left Ventricular Diastolic Function by Echocardiography"
       - name: Сегменты и кровоснабжение левого желудочка
         slug: lv_segments
+        image_path: coronary.jpeg
         parameters:
           - id: seg_anterior
             name: "Передняя стенка"
@@ -706,7 +707,7 @@ topics:
                 source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
       - name: Аортальная регургитация
         slug: aortic_regurgitation
-        image_path: pisa_ar.png
+        image_path: aortic_insuf.jpeg
         gradations:
           - name: Лёгкая
             parameters:
