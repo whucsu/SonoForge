@@ -6,6 +6,16 @@
 
 ---
 
+## [2026-07-10 16:00] Structured Reference: multi-image + overlay enhancements
+- **Тип:** feature + fix
+- **Файлы:** `reference_data_store.py`, `structured_reference_widget.py`, `ase_reference_dialog.py`, `references_structured.yaml`, `measurement_results_formatter.py`, `viewer_widget.py`, `main_window.py`, `test_structured_reference_widget.py`, `docs/superpowers/specs/`, `docs/superpowers/plans/`, 14 новых PNG в `resources/references/images/`
+- **Суть:**
+  1. **Multi-image поддержка**: `image_path` → `image_paths: list[str]` в PathologyRef; кнопки `<` `>` и счётчик для навигации между изображениями патологии.
+  2. **Реальные изображения**: 14 PNG для 11 патологий (АК, МК, ТК, ЛК, Аорта, ЛЖ); заменены заглушки и SVG.
+  3. **Fix багов**: `_close_doc_tab` неверный индекс после удаления вкладки; мёртвый `_active` атрибут; CSS hover; китайский символ в YAML.
+  4. **Оверлей результатов**: цветовая кодировка значений за пределами нормы (`#ff6b6b` светло-красный); кликабельные ссылки `<a href="param_id">` на параметрах; при клике открывается «Справочник» с навигацией на патологию.
+  5. **Документация**: обновлены spec и plan в `docs/superpowers/`.
+
 ## [2026-07-09 23:00] Bench: exclude 7 bad gold files + finetune norm fix
 - **Тип:** fix + feature
 - **Файлы:** `manifest.json`, `scripts/generate_manifest_from_gold.py`, `scripts/finetune_lv_seg.py`, `scripts/run_lv_auto_bench.py`, `src/echo_personal_tool/infrastructure/onnx_engine.py`
