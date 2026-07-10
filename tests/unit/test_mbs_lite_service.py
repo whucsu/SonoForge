@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -203,7 +204,7 @@ def test_refine_open_arc_contour_smooths_jagged_arc() -> None:
     for index in range(2, len(jagged) - 2, 2):
         x, y = jagged[index]
         jagged[index] = (x + 6.0, y - 4.0)
-    contour.points = jagged
+    contour = replace(contour, points=jagged)
     apex_before = apex
 
     refined, mode = refine_open_arc_contour(frame, contour)
@@ -255,7 +256,7 @@ def test_refine_open_arc_contour_preserves_manual_source() -> None:
         apex=(60.0, 20.0),
         phase="ED",
     )
-    contour.source = "manual"
+    contour = replace(contour, source="manual")
     refined, _mode = refine_open_arc_contour(frame, contour)
     assert refined.source == "manual"
     assert len(refined.points) == DEFAULT_NODE_COUNT

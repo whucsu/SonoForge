@@ -138,9 +138,12 @@ def test_calculate_open_arc_monoplan() -> None:
     assert result.a4c.esv_ml == pytest.approx(16.127083, rel=1e-4)
 
 
+from dataclasses import replace
+
+
 def test_calculate_ignores_review_pending_contours() -> None:
     pending = open_arc_contour(phase="ed", view="A4C", width_px=100.0, height_px=50.0)
-    pending.review_pending = True
+    pending = replace(pending, review_pending=True)
     accepted = open_arc_contour(phase="es", view="A4C", width_px=80.0, height_px=40.0)
     result = calculate((pending, accepted), (0.5, 0.5))
     assert result is not None
@@ -153,7 +156,7 @@ def test_format_contour_overlay_shows_review_prompt_when_pending() -> None:
     from echo_personal_tool.domain.calculations.lvef_simpson import format_contour_overlay
 
     contour = open_arc_contour(phase="ed", view="A4C", width_px=100.0, height_px=50.0)
-    contour.review_pending = True
+    contour = replace(contour, review_pending=True)
 
     text = format_contour_overlay(contour, (0.5, 0.5))
 

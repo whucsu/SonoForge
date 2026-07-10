@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -2544,7 +2544,7 @@ class ViewerWidget(QWidget):
                 view=self._active_contour_view,
                 chamber=self._active_contour_chamber,
             )
-            contour.frame_index = self._contour_frame_index()
+            contour = replace(contour, frame_index=self._contour_frame_index())
         except ValueError as exc:
             self.contour_landmark_rejected.emit(str(exc))
             return False
@@ -2609,9 +2609,12 @@ class ViewerWidget(QWidget):
             except ValueError as exc:
                 self.contour_landmark_rejected.emit(str(exc))
                 return False
-            contour.source = "manual"
-            contour.frame_index = self._contour_frame_index()
-            contour.apex_landmark = apex
+            contour = replace(
+                contour,
+                source="manual",
+                frame_index=self._contour_frame_index(),
+                apex_landmark=apex,
+            )
         else:
             raw_arc = [septal, apex, lateral]
             resampled = resample_open_arc(raw_arc, num_nodes=DEFAULT_NODE_COUNT)
@@ -3296,8 +3299,7 @@ class ViewerWidget(QWidget):
         instance_uid = self._current_instance_uid()
         if instance_uid is None or contour.sop_instance_uid == instance_uid:
             return contour
-        contour.sop_instance_uid = instance_uid
-        return contour
+        return replace(contour, sop_instance_uid=instance_uid)
 
     def _contour_frame_index(self) -> int | None:
         if self._current_state is None:
@@ -3435,7 +3437,7 @@ class ViewerWidget(QWidget):
                 if grab_index == 0:
                     septal = (float(contour.points[0][0]), float(contour.points[0][1]))
                     lateral = contour.mitral_annulus[1]
-                    contour.mitral_annulus = (septal, lateral)
+                    self._contours[contour_index] = replace(contour, mitral_annulus=(septal, lateral))
                     self._refresh_mitral_annulus_line(contour_index)
                     return
                 if grab_index == last_index:
@@ -3444,7 +3446,7 @@ class ViewerWidget(QWidget):
                         float(contour.points[last_index][0]),
                         float(contour.points[last_index][1]),
                     )
-                    contour.mitral_annulus = (septal, lateral)
+                    self._contours[contour_index] = replace(contour, mitral_annulus=(septal, lateral))
                     self._refresh_mitral_annulus_line(contour_index)
                     return
 
@@ -3905,8 +3907,7 @@ class ViewerWidget(QWidget):
         )
         contour = self._contours[contour_index]
         locked_tier = self._drag_session[4] if self._drag_session is not None else 1
-        contour.refine_step = 0
-        contour.refine_locked_indices = ()
+        contour = replace(contour, refine_step=0, refine_locked_indices=())
         if contour.is_open_arc:
             num_nodes = contour.num_nodes or DEFAULT_NODE_COUNT
             if contour.mitral_annulus is not None and len(contour.points) >= 2:
@@ -3915,7 +3916,7 @@ class ViewerWidget(QWidget):
                     float(contour.points[-1][0]),
                     float(contour.points[-1][1]),
                 )
-                contour.mitral_annulus = (septal, lateral)
+                contour = replace(contour, mitral_annulus=(septal, lateral))
                 apex = contour.apex_landmark or apex_point(contour.points, contour.mitral_annulus)
                 resampled = resample_open_arc_landmarks(
                     contour.points,
@@ -3925,11 +3926,11 @@ class ViewerWidget(QWidget):
                     num_nodes=num_nodes,
                 )
                 contour.points[:] = resampled
-                contour.mitral_annulus = (septal, lateral)
-                contour.apex_landmark = apex
+                contour = replace(contour, mitral_annulus=(septal, lateral), apex_landmark=apex)
             else:
                 resampled = resample_open_arc(contour.points, num_nodes=num_nodes)
                 contour.points[:] = resampled
+            self._contours[contour_index] = contour
             weights = self._locked_drag_weights(contour, grab_index, locked_tier)
             self._apply_magnetic_snap_to_contour(
                 contour_index,

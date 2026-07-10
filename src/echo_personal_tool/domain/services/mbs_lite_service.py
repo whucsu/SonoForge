@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from dataclasses import replace
 
 import numpy as np
 
@@ -264,12 +265,15 @@ def refine_open_arc_contour(
             lateral,
             source=contour.source,
         ):
-            contour.points = result.points
-            contour.refine_step = result.step
-            contour.refine_locked_indices = tuple(sorted(result.locked_indices))
-            contour.mitral_annulus = (septal, lateral)
-            if contour.apex_landmark is None:
-                contour.apex_landmark = apex
+            new_apex = apex if contour.apex_landmark is None else contour.apex_landmark
+            contour = replace(
+                contour,
+                points=result.points,
+                refine_step=result.step,
+                refine_locked_indices=tuple(sorted(result.locked_indices)),
+                mitral_annulus=(septal, lateral),
+                apex_landmark=new_apex,
+            )
             return contour, status
         return contour, f"{status} (rejected)"
 
@@ -291,16 +295,19 @@ def refine_open_arc_contour(
                 lateral,
                 source=contour.source,
             ):
-                contour.points = resample_open_arc_landmarks(
-                    refined_points,
-                    septal=septal,
-                    lateral=lateral,
-                    apex=apex,
-                    num_nodes=contour.num_nodes or len(contour.points),
+                new_apex = apex if contour.apex_landmark is None else contour.apex_landmark
+                contour = replace(
+                    contour,
+                    points=resample_open_arc_landmarks(
+                        refined_points,
+                        septal=septal,
+                        lateral=lateral,
+                        apex=apex,
+                        num_nodes=contour.num_nodes or len(contour.points),
+                    ),
+                    mitral_annulus=(septal, lateral),
+                    apex_landmark=new_apex,
                 )
-                contour.mitral_annulus = (septal, lateral)
-                if contour.apex_landmark is None:
-                    contour.apex_landmark = apex
                 return contour, "gradient"
     except (ValueError, FloatingPointError):
         pass
@@ -421,16 +428,19 @@ def _smooth_contour_points(contour: Contour) -> Contour:
         apex=apex,
     )
     num_nodes = contour.num_nodes or DEFAULT_NODE_COUNT
-    contour.points = resample_open_arc_landmarks(
-        smoothed,
-        septal=septal,
-        lateral=lateral,
-        apex=apex,
-        num_nodes=num_nodes,
+    new_apex = apex if contour.apex_landmark is None else contour.apex_landmark
+    contour = replace(
+        contour,
+        points=resample_open_arc_landmarks(
+            smoothed,
+            septal=septal,
+            lateral=lateral,
+            apex=apex,
+            num_nodes=num_nodes,
+        ),
+        mitral_annulus=(septal, lateral),
+        apex_landmark=new_apex,
     )
-    contour.mitral_annulus = (septal, lateral)
-    if contour.apex_landmark is None:
-        contour.apex_landmark = apex
     return contour
 
 
