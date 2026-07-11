@@ -6,6 +6,35 @@ import logging
 import os
 import sys
 
+# Memory diagnostics: log top allocations every 10s when ECHO_FREEZE_DIAG=1
+if os.environ.get("ECHO_FREEZE_DIAG") == "1":
+    import tracemalloc
+    tracemalloc.start(25)  # 25 frames deep for useful traces
+    import threading as _thr
+    _mem_log = logging.getLogger("echo_freeze_diag")
+
+    def _mem_dump() -> None:
+        import gc
+        gc.collect()
+        snap = tracemalloc.take_snapshot()
+        top = snap.statistics("lineno")
+        _mem_log.warning("[mem_top] === Top 10 allocations ===")
+        for stat in top[:10]:
+            _mem_log.warning("[mem_top] %s", stat)
+        import resource
+        rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        # Count live numpy arrays and their total size
+        import numpy as _np
+        np_arrays = [o for o in gc.get_objects() if isinstance(o, _np.ndarray)]
+        np_bytes = sum(a.nbytes for a in np_arrays)
+        _mem_log.warning(
+            "[mem_top] RSS=%.0f MB numpy_arrays=%d numpy_MB=%.0f GC_objects=%d",
+            rss_mb, len(np_arrays), np_bytes / (1024 * 1024), len(gc.get_objects()),
+        )
+        _thr.Timer(10.0, _mem_dump).start()
+
+    _thr.Timer(10.0, _mem_dump).start()
+
 # KDE Sonnet tries to load hspell (Hebrew) on some Linux desktops; ignore if missing.
 # KDE sycoca warns about Cursor's custom MIME type when launched from Cursor terminal.
 os.environ.setdefault(

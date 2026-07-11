@@ -881,6 +881,11 @@ class AppController(QObject):
             partial(self._on_auto_segment_timed_out, instance_path, frame_index)
         , Qt.ConnectionType.QueuedConnection)
 
+        worker.setAutoDelete(False)
+        self._retain_worker(worker)
+        worker.signals.finished.connect(partial(self._release_worker, worker), Qt.ConnectionType.QueuedConnection)
+        worker.signals.failed.connect(partial(self._release_worker, worker), Qt.ConnectionType.QueuedConnection)
+        worker.signals.timed_out.connect(partial(self._release_worker, worker), Qt.ConnectionType.QueuedConnection)
         self._thread_pool.start(worker)
 
     def on_doppler_markers_changed(self, dto: object) -> None:
@@ -2433,6 +2438,11 @@ class AppController(QObject):
             partial(self._on_auto_segment_timed_out, instance_path, frame_index)
         , Qt.ConnectionType.QueuedConnection)
 
+        worker.setAutoDelete(False)
+        self._retain_worker(worker)
+        worker.signals.finished.connect(partial(self._release_worker, worker), Qt.ConnectionType.QueuedConnection)
+        worker.signals.failed.connect(partial(self._release_worker, worker), Qt.ConnectionType.QueuedConnection)
+        worker.signals.timed_out.connect(partial(self._release_worker, worker), Qt.ConnectionType.QueuedConnection)
         self._thread_pool.start(worker)
 
     def _la_segmenter_available(self) -> bool:

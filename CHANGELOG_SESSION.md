@@ -225,3 +225,12 @@
   4. **AppController** — `_live_workers` set с safety cap (8) предотвращает GC QRunnable до обработки QueuedConnection signals. Stale prefetch timeout 1с. `_on_prefetch_batch_loaded` кэширует кадры всегда (даже stale request). `_PREFETCH_TIMEOUT_SEC` 3→1с.
   5. **FrameCache** — `put()` вызывает `_evict()` при переполнении > `evict_window * 2`.
   6. **Диагностика** — `ECHO_FREEZE_DIAG=1` включает tracemalloc + numpy array tracking + VmRSS мониторинг.
+
+## [2026-07-11 19:30] Fix: segmentation stuck + slow scroll
+- **Тип:** fix
+- **Файлы:** `onnx_worker.py`, `app_controller.py`, `viewer_widget.py`, `main.py`
+- **Суть:**
+  1. OnnxWorker `reshape()` был вне try/except → uncaught exception → сигнал не эмитился → `_segment_in_progress` навсегда True → "Сегментация уже выполняется". Теперь внутри try/except.
+  2. OnnxWorker (ED/ES и LA) не имел `_retain_worker`/`_release_worker` + `setAutoDelete(True)` → Qt терял QueuedConnection события → сегментация не запускалась. Исправлено аналогично FrameLoaderWorker.
+  3. `show_frame_fast` grayscale: `_update_levels()` вызывался каждый кадр без `levels_changed` → `np.percentile` O(N log N) на каждом кадре. Добавлена проверка.
+  4. `show_frame` grayscale: двойной `_update_levels()` вызов. Убран дублирующий.

@@ -167,9 +167,9 @@ class OnnxWorker(QRunnable):
 
         try:
             mask_bytes = async_result.get(timeout=0)
+            mask = np.frombuffer(mask_bytes, dtype=np.uint8).reshape(mask_shape)
         except Exception as exc:  # noqa: BLE001
             self.signals.failed.emit(str(exc))
             return
 
-        mask = np.frombuffer(mask_bytes, dtype=np.uint8).reshape(mask_shape)
         self.signals.finished.emit(mask.copy())

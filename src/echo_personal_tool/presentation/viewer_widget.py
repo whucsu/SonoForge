@@ -1498,7 +1498,6 @@ class ViewerWidget(QWidget):
                     self._set_wl_dr_sliders(*saved)
                 else:
                     self._set_wl_dr_sliders(100, 50, 50)
-            self._update_levels()
         self._window_slider.setEnabled(self._window_level_enabled)
         self._level_slider.setEnabled(self._window_level_enabled)
         self._dr_slider.setEnabled(self._window_level_enabled)
@@ -1609,7 +1608,7 @@ class ViewerWidget(QWidget):
             else:
                 self._current_frame = frame[..., 0] if frame.ndim == 3 else frame
             self._image_item.setImage(self._current_frame, autoLevels=False)
-            if self._window_level_enabled:
+            if self._window_level_enabled and levels_changed:
                 self._update_levels()
             elif not self._window_level_enabled:
                 vmin = float(self._current_frame.min()) if self._current_frame.size else 0.0

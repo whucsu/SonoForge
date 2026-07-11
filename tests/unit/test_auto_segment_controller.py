@@ -40,6 +40,9 @@ class _FakeWorker:
             timed_out=_FakeSignal(),
         )
 
+    def setAutoDelete(self, v: bool) -> None:
+        pass
+
 
 class _RecordingThreadPool:
     def __init__(self) -> None:
