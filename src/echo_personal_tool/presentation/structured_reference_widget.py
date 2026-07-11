@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QEvent, QObject, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
@@ -16,6 +17,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -85,7 +88,7 @@ class _ImageContainer(QWidget):
 
 
 class _ParameterCard(QWidget):
-    """Single parameter card showing name, unit, norm, and pathology description."""
+    """Single parameter card with mini-tables for norm and pathology."""
 
     def __init__(self, param, norm_text: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -94,6 +97,7 @@ class _ParameterCard(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         p = get_theme_palette()
+        unit = param.unit or ""
         self.setStyleSheet(
             f"_ParameterCard {{ border: 1px solid {p['border']}; border-radius: 4px; "
             f"background: {p['bg_panel']}; }}"
@@ -102,39 +106,131 @@ class _ParameterCard(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
 
-        # Top row: parameter name + unit + norm
-        top_row = QHBoxLayout()
-        top_row.setSpacing(8)
-
+        # Parameter name header
         name_label = QLabel(f"<b>{param.name}</b>")
         name_label.setStyleSheet(f"font-size: 13px; color: {p['text']}; border: none;")
-        name_label.setWordWrap(True)
-        top_row.addWidget(name_label, stretch=1)
+        layout.addWidget(name_label)
 
-        if param.unit:
-            unit_label = QLabel(param.unit)
-            unit_label.setStyleSheet(f"font-size: 12px; color: {p['text_dim']}; border: none;")
-            top_row.addWidget(unit_label)
-
+        # Norm mini-table (2 columns: Показатель | Значение)
         if norm_text:
-            norm_label = QLabel(f"Норма: {norm_text}")
-            norm_label.setStyleSheet(f"font-size: 12px; color: {p['accent_tab']}; border: none; font-weight: bold;")
-            top_row.addWidget(norm_label)
+            norm_value = f"{norm_text} {unit}".strip() if unit else norm_text
+            norm_table = self._make_table(
+                headers=["Показатель", "Значение"],
+                rows=[[param.name, norm_value]],
+                header_bg=p['bg_control'],
+                value_color=p['accent_tab'],
+            )
+            layout.addWidget(norm_table)
 
-        layout.addLayout(top_row)
-
-        # Bottom row: pathology description
+        # Pathology mini-table (merged header "Патология" + 2 columns)
         desc = param.pathology_desc or ""
         if desc:
-            desc_label = QLabel(desc)
-            desc_label.setStyleSheet(
-                f"font-size: 13px; color: {p['text']}; border: none; "
-                f"background: {p['bg_control']}; border-radius: 3px; padding: 4px 8px;"
-            )
-            desc_label.setWordWrap(True)
-            layout.addWidget(desc_label)
+            patho_rows = self._parse_pathology_rows(desc, unit)
+            patho_table = self._make_pathology_table(patho_rows, p)
+            layout.addWidget(patho_table)
+
+    def _make_table(
+        self,
+        headers: list[str],
+        rows: list[list[str]],
+        header_bg: str = "",
+        value_color: str = "",
+    ) -> QTableWidget:
+        """Create a small 2-column table."""
+        p = get_theme_palette()
+        table = QTableWidget(len(rows), len(headers))
+        table.verticalHeader().hide()
+        table.horizontalHeader().setStretchLastSection(True)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        table.setMaximumHeight(60)
+
+        header_style = f"background: {header_bg or p['bg_control']}; font-weight: bold; font-size: 12px; border: none;"
+        table.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ {header_style} }}")
+        table.setStyleSheet(
+            f"QTableWidget {{ border: 1px solid {p['border']}; gridline-color: {p['border']}; "
+            f"font-size: 13px; background: transparent; }}"
+            f"QTableWidget::item {{ padding: 2px 6px; border: none; }}"
+        )
+        table.setHorizontalHeaderLabels(headers)
+
+        for r, row_data in enumerate(rows):
+            for c, text in enumerate(row_data):
+                item = QTableWidgetItem(text)
+                if c == 1 and value_color:
+                    item.setForeground(QColor(value_color))
+                table.setItem(r, c, item)
+
+        table.resizeColumnsToContents()
+        return table
+
+    def _make_pathology_table(self, rows: list[list[str]], p: dict) -> QWidget:
+        """Create pathology table with merged 'Патология' header spanning both columns."""
+        wrapper = QWidget()
+        vbox = QVBoxLayout(wrapper)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(0)
+
+        # Merged header label
+        header = QLabel("  Патология")
+        header.setStyleSheet(
+            f"font-size: 12px; font-weight: bold; color: {p['text']}; "
+            f"background: {p['bg_control']}; padding: 3px 6px; border: 1px solid {p['border']};"
+        )
+        vbox.addWidget(header)
+
+        # Data rows
+        table = QTableWidget(len(rows), 2)
+        table.verticalHeader().hide()
+        table.horizontalHeader().hide()
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        table.setMaximumHeight(max(60, len(rows) * 28 + 4))
+
+        table.setStyleSheet(
+            f"QTableWidget {{ border: 1px solid {p['border']}; border-top: none; "
+            f"gridline-color: {p['border']}; font-size: 13px; background: transparent; }}"
+            f"QTableWidget::item {{ padding: 2px 6px; border: none; }}"
+        )
+
+        for r, (grad_name, grad_value) in enumerate(rows):
+            name_item = QTableWidgetItem(grad_name)
+            name_item.setForeground(QColor(p['text_dim']))
+            val_item = QTableWidgetItem(grad_value)
+            table.setItem(r, 0, name_item)
+            table.setItem(r, 1, val_item)
+
+        table.resizeColumnsToContents()
+        vbox.addWidget(table)
+        return wrapper
+
+    @staticmethod
+    def _parse_pathology_rows(desc: str, unit: str) -> list[list[str]]:
+        """Parse pathology_desc into gradation rows.
+
+        Handles:
+          - Gradation format: "Лёгкая: <0.20 / Умеренная: 0.20-0.39 / Тяжёлая: ≥0.40"
+          - Simple format: ">115 (м) / >95 (ж) — гипертрофия"
+        """
+        parts = [p.strip() for p in desc.split("/")]
+
+        # Try gradation format first
+        gradations = []
+        for part in parts:
+            m = re.match(r'^([^:]+):\s*(.+)$', part)
+            if m:
+                gradations.append((m.group(1).strip(), m.group(2).strip()))
+
+        if len(gradations) >= 2:
+            return [[g[0], f"{g[1]} {unit}".strip() if unit else g[1]] for g in gradations]
+
+        # Simple format — single row
+        value = f"{desc} {unit}".strip() if unit else desc
+        return [[desc, value]]
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
