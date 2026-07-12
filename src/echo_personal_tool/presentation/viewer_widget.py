@@ -64,6 +64,9 @@ from echo_personal_tool.domain.services.depth_scale_detector import (
 from echo_personal_tool.domain.services.doppler_grid_detector import (
     detect_doppler_grid_lines,
 )
+from echo_personal_tool.domain.services.spectrogram_detector import (
+    detect_spectrogram_roi,
+)
 from echo_personal_tool.domain.models.viewer_state import ViewerState
 from echo_personal_tool.domain.services.contour_edge_snap import (
     EdgeMap,
@@ -2245,8 +2248,25 @@ class ViewerWidget(QWidget):
             return
 
         height, width = self._current_frame.shape[:2]
-        mapping = DopplerAxisMapping.from_frame_size(width, height)
-        self._doppler.set_axis_mapping(mapping)
+        # Try to detect the spectrogram ROI automatically
+        spec_roi = detect_spectrogram_roi(self._current_frame)
+        if spec_roi is not None:
+            x0, y0, x1, y1 = spec_roi
+            roi = DopplerSpectrogramRoi(
+                x0=x0, y0=y0,
+                width=max(1.0, x1 - x0),
+                height=max(1.0, y1 - y0),
+            )
+            baseline_y = roi.y0 + roi.height / 2.0
+            state = calibration_from_roi_and_baseline(
+                roi, baseline_y,
+                velocity_span_cm_s=200.0,
+                kind=DopplerKind.SPECTRAL,
+            )
+            self.apply_doppler_calibration_state(state, persist=False)
+        else:
+            mapping = DopplerAxisMapping.from_frame_size(width, height)
+            self._doppler.set_axis_mapping(mapping)
         self._doppler_axis_calibrated = False
 
     def _handle_doppler_calibration_click(self, ev) -> bool:
