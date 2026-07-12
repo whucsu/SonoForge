@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -189,8 +190,6 @@ class _ParameterCard(QWidget):
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        table.setMaximumHeight(max(60, len(rows) * 28 + 4))
-
         table.setStyleSheet(
             f"QTableWidget {{ border: 1px solid {p['border']}; border-top: none; "
             f"gridline-color: {p['border']}; font-size: 13px; background: transparent; }}"
@@ -445,6 +444,9 @@ class StructuredReferenceWidget(QWidget):
         image_layout.setContentsMargins(0, 0, 0, 0)
         self._image_label = QLabel()
         self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._image_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         self._image_label.setStyleSheet(
             f"border: 1px solid {p['border']}; background: {p['bg_panel']}; font-size: 12px; color: {p['text_dim']};"
         )
@@ -534,8 +536,10 @@ class StructuredReferenceWidget(QWidget):
             return
         self._scaling = True
         try:
-            cw = self._image_container.width()
-            ch = self._image_container.height()
+            # Use the label's actual size, not the container's — the nav bar
+            # below eats ~30 px, so container height overstates available space.
+            cw = self._image_label.width()
+            ch = self._image_label.height()
             if cw < 10 or ch < 10:
                 return
 
@@ -595,16 +599,23 @@ class StructuredReferenceWidget(QWidget):
             self._scaling = False
 
     def _smart_scale_pixmap(self, pixmap: QPixmap, cw: int, ch: int) -> QPixmap:
-        """Scale pixmap to fill the container along the dominant axis.
-
-        Wide images fill the container width; tall images fill the height.
-        Uses KeepAspectRatioByExpanding so images are never smaller than the
-        container in their dominant dimension — avoids the "small image in a
-        big box" problem with pure KeepAspectRatio.
-        """
+        """Scale pixmap along the dominant axis so it fills the container."""
+        pw, ph = pixmap.width(), pixmap.height()
+        if pw <= 0 or ph <= 0:
+            return pixmap
+        img_aspect = ph / pw
+        container_aspect = ch / cw if cw > 0 else 1.0
+        if img_aspect >= container_aspect:
+            # Tall image — fit by height
+            target_h = ch
+            target_w = max(int(ch / img_aspect), 1)
+        else:
+            # Wide image — fit by width
+            target_w = cw
+            target_h = max(int(cw * img_aspect), 1)
         return pixmap.scaled(
-            cw, ch,
-            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            target_w, target_h,
+            Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
 
@@ -716,13 +727,94 @@ class StructuredReferenceWidget(QWidget):
             self._source_label.clear()
 
     def _refresh_table(self) -> None:
-        params = self._get_current_parameters()
         self._clear_cards()
+        if self._current_pathology is None:
+            return
+
+        # When pathology has gradations → render a single summary table
+        if self._current_pathology.gradations:
+            self._render_gradation_table()
+            return
+
+        # Otherwise → one card per parameter (original behaviour)
+        params = self._get_current_parameters()
         for param in params:
             norm = self._format_norm(param)
             card = _ParameterCard(param, norm)
             self._cards_layout.insertWidget(self._cards_layout.count() - 1, card)
             self._param_cards.append(card)
+
+    def _render_gradation_table(self) -> None:
+        """Render a single matrix table: rows = parameters, columns = gradations."""
+        grads = self._current_pathology.gradations
+        grad_names = [g.name for g in grads]
+
+        # Collect unique parameters preserving order
+        seen: dict[str, object] = {}
+        for grad in grads:
+            for param in grad.parameters:
+                if param.id not in seen:
+                    seen[param.id] = param
+        ordered_params = list(seen.values())
+
+        p = get_theme_palette()
+        n_rows = len(ordered_params)
+        n_cols = 1 + len(grad_names)  # param name + gradation columns
+
+        table = QTableWidget(n_rows, n_cols)
+        table.verticalHeader().hide()
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        table.horizontalHeader().setStretchLastSection(True)
+
+        # Headers
+        headers = ["Параметр"] + grad_names
+        table.setHorizontalHeaderLabels(headers)
+        header_style = (
+            f"background: {p['bg_control']}; font-weight: bold; font-size: 12px; "
+            f"color: {p['text']}; border: none;"
+        )
+        table.horizontalHeader().setStyleSheet(
+            f"QHeaderView::section {{ {header_style} padding: 4px 8px; }}"
+        )
+        table.setStyleSheet(
+            f"QTableWidget {{ border: 1px solid {p['border']}; gridline-color: {p['border']}; "
+            f"font-size: 13px; background: transparent; }}"
+            f"QTableWidget::item {{ padding: 4px 8px; border: none; }}"
+        )
+
+        # Fill rows
+        for r, param in enumerate(ordered_params):
+            # Column 0: parameter name + unit
+            name_text = param.name
+            if param.unit:
+                name_text += f" ({param.unit})"
+            name_item = QTableWidgetItem(name_text)
+            name_item.setForeground(QColor(p['text']))
+            font = name_item.font()
+            font.setBold(True)
+            name_item.setFont(font)
+            table.setItem(r, 0, name_item)
+
+            # Gradation columns
+            for g_idx, grad in enumerate(grads):
+                value = ""
+                for gp in grad.parameters:
+                    if gp.id == param.id:
+                        value = gp.pathology_desc or ""
+                        break
+                val_item = QTableWidgetItem(value)
+                val_item.setForeground(QColor(p['text']))
+                table.setItem(r, 1 + g_idx, val_item)
+
+        table.resizeColumnsToContents()
+        # Ensure minimum column widths for readability
+        for c in range(n_cols):
+            if table.columnWidth(c) < 80:
+                table.setColumnWidth(c, 80)
+
+        self._cards_layout.insertWidget(self._cards_layout.count() - 1, table)
 
     def _get_current_parameters(self) -> list:
         if self._current_pathology is None:

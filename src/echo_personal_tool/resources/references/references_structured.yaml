@@ -120,6 +120,7 @@ topics:
         slug: lv_diastolic
         image_paths:
           - Diastolic_dysfunc_LV.png
+          - diastolic_function.png
         parameters:
           - id: ea_ratio
             name: "Соотношение E/A"
@@ -175,6 +176,7 @@ topics:
         image_paths:
           - LV_segments.png
           - Coronar_artery_zone.png
+          - coronary.jpeg
         parameters:
           - id: seg_anterior
             name: "Передняя стенка"
@@ -488,6 +490,7 @@ topics:
         image_paths:
           - Mitral_regurgitation_1.png
           - Mitral_regurgitation_2.png
+          - pisa_mr.png
         gradations:
           - name: Лёгкая
             parameters:
@@ -660,68 +663,126 @@ topics:
                 name: "Vmax"
                 unit: "м/с"
                 norm_male: {low: null, high: 2.5}
-                pathology_desc: "2.6-2.9"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
-              - id: as_mg
-                name: "Средний градиент"
+                pathology_desc: "2.6 – 2.9"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_mg_aha
+                name: "Средний градиент (AHA/ACC)"
                 unit: "мм рт. ст."
                 norm_male: {low: null, high: 10}
-                pathology_desc: "10-19"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
+                pathology_desc: "< 20"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_mg_esc
+                name: "Средний градиент (ESC)"
+                unit: "мм рт. ст."
+                norm_male: {low: null, high: 10}
+                pathology_desc: "< 30"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
               - id: as_ava
                 name: "AVA"
                 unit: "см²"
                 norm_male: {low: 2.5, high: 3.5}
                 norm_female: {low: 2.5, high: 3.5}
-                pathology_desc: "1.5-2.0"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
+                pathology_desc: "> 1.5"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_ava_indexed
+                name: "AVA Indexed"
+                unit: "см²/м²"
+                norm_male: {low: 0.85, high: null}
+                norm_female: {low: 0.85, high: null}
+                pathology_desc: "> 0.85"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_dsi
+                name: "DSI"
+                unit: ""
+                norm_male: {low: 0.5, high: null}
+                pathology_desc: "> 0.5"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
           - name: Умеренный
             parameters:
               - id: as_vmax
                 name: "Vmax"
                 unit: "м/с"
                 norm_male: {low: null, high: 2.5}
-                pathology_desc: "3.0-3.9"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
-              - id: as_mg
-                name: "Средний градиент"
+                pathology_desc: "3.0 – 4.0"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_mg_aha
+                name: "Средний градиент (AHA/ACC)"
                 unit: "мм рт. ст."
                 norm_male: {low: null, high: 10}
-                pathology_desc: "20-39"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
+                pathology_desc: "20 – 40"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_mg_esc
+                name: "Средний градиент (ESC)"
+                unit: "мм рт. ст."
+                norm_male: {low: null, high: 10}
+                pathology_desc: "30 – 50"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
               - id: as_ava
                 name: "AVA"
                 unit: "см²"
                 norm_male: {low: 2.5, high: 3.5}
                 norm_female: {low: 2.5, high: 3.5}
-                pathology_desc: "1.0-1.5"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
+                pathology_desc: "1.0 – 1.5"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_ava_indexed
+                name: "AVA Indexed"
+                unit: "см²/м²"
+                norm_male: {low: 0.85, high: null}
+                norm_female: {low: 0.85, high: null}
+                pathology_desc: "0.6 – 0.85"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_dsi
+                name: "DSI"
+                unit: ""
+                norm_male: {low: 0.5, high: null}
+                pathology_desc: "0.25 – 0.50"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
           - name: Тяжёлый
             parameters:
               - id: as_vmax
                 name: "Vmax"
                 unit: "м/с"
                 norm_male: {low: null, high: 2.5}
-                pathology_desc: "≥4.0"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
-              - id: as_mg
-                name: "Средний градиент"
+                pathology_desc: "> 4.0"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_mg_aha
+                name: "Средний градиент (AHA/ACC)"
                 unit: "мм рт. ст."
                 norm_male: {low: null, high: 10}
-                pathology_desc: "≥40"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
+                pathology_desc: "> 40"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_mg_esc
+                name: "Средний градиент (ESC)"
+                unit: "мм рт. ст."
+                norm_male: {low: null, high: 10}
+                pathology_desc: "> 50"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
               - id: as_ava
                 name: "AVA"
                 unit: "см²"
                 norm_male: {low: 2.5, high: 3.5}
                 norm_female: {low: 2.5, high: 3.5}
-                pathology_desc: "≤1.0"
-                source: "2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease"
+                pathology_desc: "< 1.0"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_ava_indexed
+                name: "AVA Indexed"
+                unit: "см²/м²"
+                norm_male: {low: 0.85, high: null}
+                norm_female: {low: 0.85, high: null}
+                pathology_desc: "< 0.6"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
+              - id: as_dsi
+                name: "DSI"
+                unit: ""
+                norm_male: {low: 0.5, high: null}
+                pathology_desc: "< 0.25"
+                source: "Bonita Anderson, Echo Reference Values, March 2017"
       - name: Аортальная регургитация
         slug: aortic_regurgitation
         image_paths:
           - Aortic_regurgitation_1.png
           - Aortic_regurgitation_2.png
+          - pisa_ar.png
         gradations:
           - name: Лёгкая
             parameters:
@@ -1106,9 +1167,14 @@ topics:
 
   - name: Протезы клапанов
     slug: prosthetic_valves
+    image_paths:
+      - prosthetic_valves.png
     pathologies:
       - name: Митральная позиция
         slug: mitral_position
+        image_paths:
+          - Mitral_prosthetic_1.png
+          - Mitral_prosthetic_2.png
         parameters:
           - id: mv_prosth_gradient_mean
             name: "Средний градиент"
@@ -1136,6 +1202,10 @@ topics:
             source: "2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement"
       - name: Аортальная позиция
         slug: aortic_position
+        image_paths:
+          - Aortic_prosthetic_1.png
+          - Aotric_prosthetic_2.png
+          - Aortic_prosthetic_3.png
         parameters:
           - id: av_prosth_gradient_mean
             name: "Средний градиент"

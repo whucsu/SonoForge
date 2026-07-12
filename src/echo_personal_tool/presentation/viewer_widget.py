@@ -568,9 +568,7 @@ class ResultsOverlayLabel(QLabel):
         elif action == pin_action:
             self._pinned = not self._pinned
             self.pin_toggled.emit(self._pinned)
-            event.accept()
-            return
-        super().contextMenuEvent(event)
+        event.accept()
 
 
 class ViewerWidget(QWidget):
