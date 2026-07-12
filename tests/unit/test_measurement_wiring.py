@@ -79,7 +79,7 @@ def test_main_window_measurement_panel_updates_after_linear_caliper(qtbot) -> No
 
     controller.on_linear_measurements_changed(
         [
-            LinearMeasurement(label="LVEDD", pixel_length=100.0, millimeter_length=50.0),
+            LinearMeasurement(label="LVEDD", pixel_length=100.0, millimeter_length=50.0, sop_instance_uid="1.2.3.4.5"),
         ]
     )
 

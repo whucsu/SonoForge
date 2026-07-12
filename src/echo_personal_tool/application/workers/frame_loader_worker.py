@@ -98,6 +98,8 @@ class FrameLoaderWorker(QRunnable):
             # Sequential decode on a single session.
             session = get_thread_dicom_session()
             session.open(self._path)
+            actual_count = session.frame_count
+            end = min(end, actual_count)
             for i in range(self._frame_index, end):
                 pixels = session.decode_single_frame(i)
                 results.append((i, np.ascontiguousarray(pixels)))

@@ -8,6 +8,13 @@ import logging
 import sys
 from functools import partial
 from pathlib import Path
+
+# Debug file logging for measurement flow tracing
+_LOG_PATH = Path("/home/areatu/ECHO2026/errors_003.txt")
+_file_handler = logging.FileHandler(str(_LOG_PATH), mode="w", encoding="utf-8")
+_file_handler.setLevel(logging.WARNING)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.getLogger("echo_personal_tool.application.app_controller").addHandler(_file_handler)
 from time import perf_counter
 
 import numpy as np
@@ -314,6 +321,10 @@ class AppController(QObject):
         if instance.path is None:
             self.frame_load_failed.emit("Instance has no file path")
             return
+        # Stop playback and clear stale state before switching
+        self._state_manager.set_playing(False)
+        self._invalidate_prefetch()
+        self._playback_warmup_pending = False
         self._current_instance = instance
         self._clear_fusion_state()
         if (
@@ -1088,6 +1099,15 @@ class AppController(QObject):
             raise TypeError("Expected a list of LinearMeasurement objects")
 
         measurement_tuple = tuple(measurements)
+        logger.warning(
+            "on_linear_measurements_changed: %d measurements",
+            len(measurement_tuple),
+        )
+        for m in measurement_tuple:
+            logger.warning(
+                "  -> label=%s uid=%s mm=%.1f",
+                m.label, m.sop_instance_uid, m.millimeter_length or 0,
+            )
         self._state_manager.set_linear_measurements(measurement_tuple, emit=False)
         study_uid = self._resolve_study_uid()
         self._measurement_session.merge_linear_measurements(study_uid, measurement_tuple)
@@ -1246,6 +1266,10 @@ class AppController(QObject):
             return None
         study_uid = self._resolve_study_uid(instance)
         session = self._measurement_session.get(study_uid)
+        logger.warning(
+            "compute_overlay: uid=%s session_linear=%d",
+            instance.sop_instance_uid, len(session.linear_measurements),
+        )
         frame_index = state.current_frame_index
         doppler_dto = self._measurement_session.get_doppler_for_instance(
             study_uid,
@@ -1268,10 +1292,19 @@ class AppController(QObject):
         instance_contours = tuple(
             c for c in session.contours if c.sop_instance_uid == instance_uid
         )
-        contours = instance_contours if instance_contours else session.contours
+        contours = instance_contours
+        from echo_personal_tool.application.study_measurement_session import (
+            linear_measurements_for_instance,
+        )
+        instance_linear = linear_measurements_for_instance(
+            session.linear_measurements, instance_uid,
+        )
+        logger.warning(
+            "compute_overlay: filtered=%d", len(instance_linear),
+        )
         return self._build_measurement_snapshot(
             contours=contours,
-            linear_measurements=session.linear_measurements,
+            linear_measurements=instance_linear,
             doppler_dto=doppler_dto,
             state=state,
             session=session,
@@ -1282,15 +1315,27 @@ class AppController(QObject):
         study_uid = self._resolve_study_uid()
         session = self._measurement_session.get(study_uid)
         doppler_dto = self._current_doppler_dto(session)
+        # Filter linear measurements to current instance only
+        instance_uid = state.instance.sop_instance_uid if state.instance else ""
+        from echo_personal_tool.application.study_measurement_session import (
+            linear_measurements_for_instance,
+        )
+        instance_linear = linear_measurements_for_instance(
+            session.linear_measurements, instance_uid,
+        )
+        logger.warning(
+            "_recompute: uid=%s session_total=%d filtered=%d",
+            instance_uid, len(session.linear_measurements), len(instance_linear),
+        )
         snapshot = self._build_measurement_snapshot(
             contours=session.contours,
-            linear_measurements=session.linear_measurements,
+            linear_measurements=instance_linear,
             doppler_dto=doppler_dto,
             state=state,
             session=session,
         )
         self._state_manager.set_measurement_snapshot(snapshot, emit=False)
-        self._state_manager.set_linear_measurements(session.linear_measurements, emit=False)
+        self._state_manager.set_linear_measurements(instance_linear, emit=False)
         self._state_manager.emit_state()
 
     def _build_measurement_snapshot(

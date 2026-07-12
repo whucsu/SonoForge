@@ -107,17 +107,25 @@ def merge_linear_measurements(
     existing: tuple[LinearMeasurement, ...],
     incoming: tuple[LinearMeasurement, ...],
 ) -> tuple[LinearMeasurement, ...]:
-    """Replace linear measurements by label and frame; clear when incoming is empty."""
+    """Replace linear measurements by label, frame, and instance; clear when incoming is empty."""
     if not incoming:
         return ()
-    by_key: dict[tuple[str, int], LinearMeasurement] = {}
+    by_key: dict[tuple[str, int, str], LinearMeasurement] = {}
     for measurement in existing:
         frame_key = measurement.frame_index if measurement.frame_index is not None else -1
-        by_key[(measurement.label, frame_key)] = measurement
+        by_key[(measurement.label, frame_key, measurement.sop_instance_uid)] = measurement
     for measurement in incoming:
         frame_key = measurement.frame_index if measurement.frame_index is not None else -1
-        by_key[(measurement.label, frame_key)] = measurement
+        by_key[(measurement.label, frame_key, measurement.sop_instance_uid)] = measurement
     return tuple(by_key.values())
+
+
+def linear_measurements_for_instance(
+    measurements: tuple[LinearMeasurement, ...],
+    sop_instance_uid: str,
+) -> tuple[LinearMeasurement, ...]:
+    """Return only measurements belonging to the given instance."""
+    return tuple(m for m in measurements if m.sop_instance_uid == sop_instance_uid)
 
 
 @dataclass(frozen=True)

@@ -28,6 +28,7 @@ class LinearMeasurement:
     frame_index: int | None = None
     start: tuple[float, float] | None = None
     end: tuple[float, float] | None = None
+    sop_instance_uid: str = ""
 
     def display_text(self, *, length_unit: str = "mm") -> str:
         i18n_key = _LABEL_I18N_KEY.get(self.label)

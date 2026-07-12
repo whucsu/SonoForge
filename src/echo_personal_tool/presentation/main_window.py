@@ -8,6 +8,13 @@ import os
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+# Debug file logging
+_LOG_PATH = Path("/home/areatu/ECHO2026/errors_003.txt")
+_file_handler = logging.FileHandler(str(_LOG_PATH), mode="a", encoding="utf-8")
+_file_handler.setLevel(logging.WARNING)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.getLogger("echo_personal_tool.presentation.main_window").addHandler(_file_handler)
 from time import perf_counter
 from typing import Literal
 
@@ -1308,6 +1315,8 @@ class MainWindow(QMainWindow):
 
     @_prof
     def _sync_results_overlay(self, state: ViewerState) -> None:
+        import logging
+        _dbg = logging.getLogger(__name__)
         time_calibrated = self._viewer.is_doppler_time_calibrated()
         instance = state.instance
         instance_uid = instance.sop_instance_uid if instance is not None else None
@@ -1317,6 +1326,11 @@ class MainWindow(QMainWindow):
             overlay_snapshot,
             time_calibrated=time_calibrated,
             length_display_unit=self._user_preferences.length_display_unit,
+        )
+        _dbg.warning(
+            "_sync_overlay: uid=%s html_len=%d linear=%d",
+            instance_uid, len(fresh_html),
+            len(overlay_snapshot.linear_measurements) if overlay_snapshot else 0,
         )
 
         if instance_uid is not None:
@@ -2179,6 +2193,10 @@ class MainWindow(QMainWindow):
                 event.accept()
                 return True
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            if v._delete_selected_caliper():
+                self._show_status(tr("status.caliper_deleted"))
+                event.accept()
+                return True
             if v.delete_contour_for_current_phase():
                 self._controller.on_contours_changed(v.contours())
                 self._show_status(tr("status.contour_deleted"))

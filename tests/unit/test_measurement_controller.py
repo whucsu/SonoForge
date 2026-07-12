@@ -71,8 +71,8 @@ def _sample_contours() -> tuple[Contour, ...]:
 
 def _sample_linear_measurements() -> tuple[LinearMeasurement, ...]:
     return (
-        LinearMeasurement(label="LVEDD", pixel_length=100.0, millimeter_length=50.0),
-        LinearMeasurement(label="LVESD", pixel_length=80.0, millimeter_length=40.0),
+        LinearMeasurement(label="LVEDD", pixel_length=100.0, millimeter_length=50.0, sop_instance_uid="1.2.3.4.5"),
+        LinearMeasurement(label="LVESD", pixel_length=80.0, millimeter_length=40.0, sop_instance_uid="1.2.3.4.5"),
     )
 
 

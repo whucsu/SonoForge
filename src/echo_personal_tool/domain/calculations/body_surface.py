@@ -14,8 +14,6 @@ _INDEXED_LINEAR_LABELS = frozenset(
     {
         "lvedd",
         "lvesd",
-        "ivsd",
-        "lvpwd",
         "la",
         "lal",
         "ra",

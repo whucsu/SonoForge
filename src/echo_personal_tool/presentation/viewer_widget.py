@@ -1601,7 +1601,7 @@ class ViewerWidget(QWidget):
                 self._last_color_frame_ptr = frame_data_ptr
             self._current_frame = to_grayscale_array(frame)
             self._image_item.setImage(self._color_source_rgb, autoLevels=False)
-            if self._window_level_enabled and levels_changed:
+            if self._window_level_enabled:
                 self._update_levels()
             elif not self._window_level_enabled:
                 self._image_item.setLevels((0, 255))
@@ -1615,7 +1615,7 @@ class ViewerWidget(QWidget):
             else:
                 self._current_frame = frame[..., 0] if frame.ndim == 3 else frame
             self._image_item.setImage(self._current_frame, autoLevels=False)
-            if self._window_level_enabled and levels_changed:
+            if self._window_level_enabled:
                 self._update_levels()
             elif not self._window_level_enabled:
                 vmin = float(self._current_frame.min()) if self._current_frame.size else 0.0
@@ -1657,6 +1657,8 @@ class ViewerWidget(QWidget):
             self._pending_viewer_state = viewer_state
             return
         self._syncing_state = True
+        # Reset overlay cleared flag so measurements can reappear after state changes
+        self._results_overlay_cleared = False
         previous_instance = self._current_state.instance if self._current_state else None
         previous_frame = self._current_state.current_frame_index if self._current_state else None
         frame_changed = previous_frame != viewer_state.current_frame_index
@@ -1674,7 +1676,6 @@ class ViewerWidget(QWidget):
             self._clear_persistent_linear_calipers()
             self._clear_contours()
             self._stored_linear_measurements = {}
-            self._results_overlay_cleared = False
             self._dist_serial = 1
             if self._doppler_cal_step is not None:
                 self._doppler_cal_step = None
@@ -2942,19 +2943,16 @@ class ViewerWidget(QWidget):
         return True
 
     def delete_contour_for_current_phase(self, view: str = "A4C") -> bool:
-        """Remove contour for the current frame, resolved phase, and view."""
+        """Remove contour for the current frame and view."""
         if self._current_state is None:
             return False
-        phase = self._resolve_contour_phase()
         frame_index = self._current_state.current_frame_index
         before = len(self._stored_contours)
         self._stored_contours = [
             contour
             for contour in self._stored_contours
             if not (
-                contour.phase.casefold() == phase.casefold()
-                and contour.view.casefold() == view.casefold()
-                and contour.chamber.casefold() == "LV"
+                contour.view.casefold() == view.casefold()
                 and contour.frame_index == frame_index
             )
         ]
@@ -4186,9 +4184,10 @@ class ViewerWidget(QWidget):
         pen = self._caliper_pen("#29b6f6")
         line_item = pg.PlotDataItem(pen=pen)
         line_item.setZValue(24)
-        line_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-        line_item.setAcceptHoverEvents(False)
+        line_item.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+        line_item.setAcceptHoverEvents(True)
         line_item.setData([start[0], end[0]], [start[1], end[1]])
+        line_item.sigClicked.connect(lambda _, k=caliper_key: self._select_caliper(k))
         self._view.addItem(line_item)
         start_node = _CaliperNodeItem(
             self, caliper_key, 0, start, pen,
@@ -4690,6 +4689,7 @@ class ViewerWidget(QWidget):
                 if pixel_spacing is not None
                 else None
             )
+        instance_uid = self._current_state.instance.sop_instance_uid if self._current_state and self._current_state.instance else ""
         return LinearMeasurement(
             label=label,
             pixel_length=pixel_length,
@@ -4697,6 +4697,7 @@ class ViewerWidget(QWidget):
             frame_index=self._contour_frame_index(),
             start=start,
             end=end,
+            sop_instance_uid=instance_uid,
         )
 
     def _update_linear_caliper_label_preview(
