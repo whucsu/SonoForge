@@ -56,6 +56,11 @@ class PropertiesPanel(QWidget):
         series_desc: str = "",
         frame_rate: float | None = None,
         pixel_spacing: str = "",
+        number_of_frames: int = 0,
+        patient_height_m: float | None = None,
+        patient_weight_kg: float | None = None,
+        media_format: str = "",
+        frame_time_ms: float | None = None,
     ) -> None:
         """Update the instance information section."""
         self._clear_form(self._instance_form)
@@ -64,12 +69,25 @@ class PropertiesPanel(QWidget):
             return
         if modality:
             self._instance_form.addRow("Modality:", QLabel(modality))
+        if media_format and media_format != "dicom":
+            self._instance_form.addRow("Format:", QLabel(media_format.upper()))
         if series_desc:
             self._instance_form.addRow("Series:", QLabel(series_desc))
         if frame_rate and frame_rate > 0:
             self._instance_form.addRow("Frame rate:", QLabel(f"{frame_rate:.1f} fps"))
+        if frame_time_ms and frame_time_ms > 0:
+            self._instance_form.addRow("Frame time:", QLabel(f"{frame_time_ms:.1f} ms"))
+        if number_of_frames > 1:
+            self._instance_form.addRow("Frames:", QLabel(str(number_of_frames)))
         if pixel_spacing:
             self._instance_form.addRow("Spacing:", QLabel(pixel_spacing))
+        if patient_height_m is not None and patient_height_m > 0:
+            self._instance_form.addRow("Height:", QLabel(f"{patient_height_m * 100:.0f} cm"))
+        if patient_weight_kg is not None and patient_weight_kg > 0:
+            self._instance_form.addRow("Weight:", QLabel(f"{patient_weight_kg:.1f} kg"))
+        if patient_height_m and patient_weight_kg and patient_height_m > 0 and patient_weight_kg > 0:
+            bmi = patient_weight_kg / (patient_height_m ** 2)
+            self._instance_form.addRow("BMI:", QLabel(f"{bmi:.1f}"))
         self._instance_group.show()
 
     def update_measurement_info(

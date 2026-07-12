@@ -1207,6 +1207,11 @@ class MainWindow(QMainWindow):
             series_desc=inst.series_description or "",
             frame_rate=1000.0 / inst.frame_time_ms if inst.frame_time_ms else None,
             pixel_spacing=f"{inst.pixel_spacing[0]:.2f}×{inst.pixel_spacing[1]:.2f} mm" if inst.pixel_spacing else "",
+            number_of_frames=inst.number_of_frames,
+            patient_height_m=inst.patient_height_m,
+            patient_weight_kg=inst.patient_weight_kg,
+            media_format=inst.media_format or "",
+            frame_time_ms=inst.frame_time_ms,
         )
         # Latest measurement
         if state.linear_measurements:
