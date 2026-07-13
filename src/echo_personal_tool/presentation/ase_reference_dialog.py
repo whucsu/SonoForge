@@ -553,6 +553,8 @@ class AseReferenceDialog(QDialog):
         file_menu = QMenu(tr("ase_refs.file_menu"), menu_bar)
         file_menu.addAction(tr("ase_refs.add_document"), self._add_document)
         file_menu.addSeparator()
+        file_menu.addAction("Конструктор", self._open_constructor)
+        file_menu.addSeparator()
         file_menu.addAction(tr("ase_refs.reload"), self._reload_active_document)
         menu_bar.addMenu(file_menu)
 
@@ -561,6 +563,10 @@ class AseReferenceDialog(QDialog):
         menu_bar.addMenu(settings_menu)
 
         return menu_bar
+
+    def _open_constructor(self) -> None:
+        from echo_personal_tool.constructor.constructor_dialog import show_constructor_dialog
+        show_constructor_dialog(self)
 
     # ── Documents ─────────────────────────────────────────────────
 
