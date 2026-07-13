@@ -1167,8 +1167,6 @@ topics:
 
   - name: Протезы клапанов
     slug: prosthetic_valves
-    image_paths:
-      - prosthetic_valves.png
     pathologies:
       - name: Митральная позиция
         slug: mitral_position
