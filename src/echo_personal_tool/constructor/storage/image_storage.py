@@ -27,6 +27,8 @@ class ImageStorage:
         src = Path(src)
         name = filename or src.name
         dest = self._dir / name
+        if src.resolve() == dest.resolve():
+            return name  # Already in the right place
         shutil.copy2(src, dest)
         return name
 

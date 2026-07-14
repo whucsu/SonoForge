@@ -321,8 +321,8 @@ topics:
 - name: Левое предсердие
   slug: left_atrium
   pathologies:
-  - name: Объем левого предсердия
-    slug: la_volume
+  - name: Размеры и объём левого предсердия
+    slug: la_dimensions
     parameters:
     - id: lav
       name: Объём левого предсердия (LAV)
@@ -345,23 +345,6 @@ topics:
         high: 34
       pathology_desc: 35-41 лёгкое, 42-48 умеренное, >48 выраженное
       source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-  - name: Индекс объема левого предсердия
-    slug: la_volume_index
-    parameters:
-    - id: lavi_idx
-      name: Индекс объёма ЛП (LAVi)
-      unit: мл/м²
-      norm_male:
-        low: null
-        high: 34
-      norm_female:
-        low: null
-        high: 34
-      pathology_desc: ≥34 — повышение
-      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-  - name: Линейные размеры левого предсердия
-    slug: la_dimensions
-    parameters:
     - id: la_lax
       name: Длина ЛП (ПЗК)
       unit: мм
@@ -395,7 +378,7 @@ topics:
 - name: Правый желудочек
   slug: right_ventricle
   pathologies:
-  - name: Размеры правого желудочка
+  - name: Размеры, объёмы и площадь правого желудочка
     slug: rv_dimensions
     parameters:
     - id: rvd1
@@ -441,6 +424,39 @@ topics:
         low: null
         high: 5
       pathology_desc: ≥5 — гипертрофия
+      source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
+    - id: rvedv
+      name: Конечно-диастолический объём ПЖ (RVEDV)
+      unit: мл
+      norm_male:
+        low: 56
+        high: 133
+      norm_female:
+        low: 46
+        high: 106
+      pathology_desc: '>133 (м) / >106 (ж) — дилатация'
+      source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
+    - id: rvesv
+      name: Конечно-систолический объём ПЖ (RVESV)
+      unit: мл
+      norm_male:
+        low: 19
+        high: 56
+      norm_female:
+        low: 16
+        high: 46
+      pathology_desc: '>56 (м) / >46 (ж)'
+      source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
+    - id: rv_area
+      name: Площадь ПЖ в 4-камерной позиции
+      unit: см²
+      norm_male:
+        low: null
+        high: 18
+      norm_female:
+        low: null
+        high: 18
+      pathology_desc: '>18 — дилатация'
       source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
   - name: Систолическая функция правого желудочка
     slug: rv_systolic
@@ -526,42 +542,6 @@ topics:
         low: null
         high: null
       pathology_desc: Зависит от возраста
-      source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
-  - name: Площадь и объем правого желудочка
-    slug: rv_volume
-    parameters:
-    - id: rvedv
-      name: Конечно-диастолический объём ПЖ (RVEDV)
-      unit: мл
-      norm_male:
-        low: 56
-        high: 133
-      norm_female:
-        low: 46
-        high: 106
-      pathology_desc: '>133 (м) / >106 (ж) — дилатация'
-      source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
-    - id: rvesv
-      name: Конечно-систолический объём ПЖ (RVESV)
-      unit: мл
-      norm_male:
-        low: 19
-        high: 56
-      norm_female:
-        low: 16
-        high: 46
-      pathology_desc: '>56 (м) / >46 (ж)'
-      source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
-    - id: rv_area
-      name: Площадь ПЖ в 4-камерной позиции
-      unit: см²
-      norm_male:
-        low: null
-        high: 18
-      norm_female:
-        low: null
-        high: 18
-      pathology_desc: '>18 — дилатация'
       source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
   - name: Давление в легочной артерии
     slug: pulmonary_pressure
@@ -891,7 +871,7 @@ topics:
         high: 150
       pathology_desc: 150-220 умеренный, >220 тяжёлый
       source: 2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease
-  - name: Сегменты митрального калпана
+  - name: Анатомия митрального клапана
     slug: mitral_segments
     parameters:
     - id: p1
@@ -1507,90 +1487,6 @@ topics:
         high: null
       pathology_desc: Наличие — осложнение типа A
       source: 2022, ACC/AHA, 2022 ACC/AHA Guideline for the Diagnosis and Management of Aortic Disease
-- name: Прочее
-  slug: other
-  pathologies:
-  - name: Общие показатели
-    slug: general
-    parameters:
-    - id: heart_rate
-      name: Частота сердечных сокращений (ЧСС)
-      unit: уд/мин
-      norm_male:
-        low: 60
-        high: 100
-      norm_female:
-        low: 60
-        high: 100
-      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-    - id: bsa
-      name: Площадь поверхности тела (ППТ)
-      unit: м²
-      norm_male:
-        low: null
-        high: null
-      pathology_desc: 'Расчёт по DuBois: 0.007184 × рост^0.725 × вес^0.425'
-      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-    - id: blood_pressure
-      name: Артериальное давление (АД)
-      unit: мм рт. ст.
-      norm_male:
-        low: null
-        high: null
-      pathology_desc: Систолическое / Диастолическое
-      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-  - name: Параметры протезов
-    slug: prosthetic_params
-    parameters:
-    - id: prosth_type
-      name: Тип протеза
-      unit: ''
-      norm_male:
-        low: null
-        high: null
-      pathology_desc: Механический / Биологический
-      source: 2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease
-    - id: prosth_size
-      name: Размер протеза
-      unit: мм
-      norm_male:
-        low: null
-        high: null
-      pathology_desc: Зависит от модели
-      source: 2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease
-    - id: prosth_year
-      name: Год имплантации
-      unit: ''
-      norm_male:
-        low: null
-        high: null
-  - name: Методика измерений
-    slug: measurement_technique
-    parameters:
-    - id: simpson_method
-      name: Метод Симпсона (модифицированный)
-      unit: ''
-      norm_male:
-        low: null
-        high: null
-      pathology_desc: 2D или 3D, 4-камерная + 2-камерная позиции
-      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-    - id: doppler_angle
-      name: Угол допплера
-      unit: °
-      norm_male:
-        low: null
-        high: null
-      pathology_desc: <20° — точное измерение
-      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-    - id: pisa_radius
-      name: Радиус PISA
-      unit: мм
-      norm_male:
-        low: null
-        high: null
-      pathology_desc: Измерение от митральной/аортальной створки
-      source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement
 - name: Протезы клапанов
   slug: prosthetic_valves
   pathologies:
@@ -1670,4 +1566,63 @@ topics:
         low: null
         high: null
       pathology_desc: VC <3 лёгкая, 3-6 умеренная, >6 тяжёлая
+      source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement
+- name: Прочее
+  slug: other
+  pathologies:
+  - name: Общие показатели
+    slug: general
+    parameters:
+    - id: heart_rate
+      name: Частота сердечных сокращений (ЧСС)
+      unit: уд/мин
+      norm_male:
+        low: 60
+        high: 100
+      norm_female:
+        low: 60
+        high: 100
+      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
+    - id: bsa
+      name: Площадь поверхности тела (ППТ)
+      unit: м²
+      norm_male:
+        low: null
+        high: null
+      pathology_desc: 'Расчёт по DuBois: 0.007184 × рост^0.725 × вес^0.425'
+      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
+    - id: blood_pressure
+      name: Артериальное давление (АД)
+      unit: мм рт. ст.
+      norm_male:
+        low: null
+        high: null
+      pathology_desc: Систолическое / Диастолическое
+      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
+  - name: Методика измерений
+    slug: measurement_technique
+    parameters:
+    - id: simpson_method
+      name: Метод Симпсона (модифицированный)
+      unit: ''
+      norm_male:
+        low: null
+        high: null
+      pathology_desc: 2D или 3D, 4-камерная + 2-камерная позиции
+      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
+    - id: doppler_angle
+      name: Угол допплера
+      unit: °
+      norm_male:
+        low: null
+        high: null
+      pathology_desc: <20° — точное измерение
+      source: 2015, ASE, Guidelines for the Standardization in Echocardiography
+    - id: pisa_radius
+      name: Радиус PISA
+      unit: мм
+      norm_male:
+        low: null
+        high: null
+      pathology_desc: Измерение от митральной/аортальной створки
       source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement

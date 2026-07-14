@@ -54,6 +54,7 @@ class ConstructorWidget(QWidget):
         self._yaml_storage = yaml_storage
         self._validator = validator
         self._images_storage = ImageStorage(yaml_storage.path.parent / "images")
+        self._current_pathology: PathologyModel | None = None
 
         # Load working copy
         raw = yaml_storage.load()
@@ -127,7 +128,7 @@ class ConstructorWidget(QWidget):
         self._param_table.parameters_changed.connect(self._mark_dirty)
         self._param_table.parameter_selected.connect(self._on_parameter_selected)
 
-        self._image_editor.images_changed.connect(self._mark_dirty)
+        self._image_editor.images_changed.connect(self._on_images_changed)
         self._metadata_editor.metadata_changed.connect(self._mark_dirty)
 
         self._search_bar.textChanged.connect(self._on_search)
@@ -146,15 +147,23 @@ class ConstructorWidget(QWidget):
         for topic in self._model.topics:
             for patho in topic.pathologies:
                 if patho.slug == pathology_slug:
+                    self._current_pathology = patho
                     self._param_table.set_pathology(patho)
                     self._image_editor.set_images(patho.image_paths)
                     return
+        self._current_pathology = None
 
     def _on_parameter_selected(self, param_id: str) -> None:
         result = self._model.find_parameter(param_id)
         if result:
             _, patho, param = result
             self._metadata_editor.set_parameter(param)
+
+    def _on_images_changed(self) -> None:
+        """Sync image list from editor back to pathology model."""
+        if self._current_pathology is not None:
+            self._current_pathology.image_paths = list(self._image_editor._images)
+            self._mark_dirty()
 
     # ── Search ──
 
