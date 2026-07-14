@@ -809,8 +809,8 @@ class ViewerWidget(QWidget):
         self._scroll_debounce_timer.setSingleShot(True)
         self._scroll_debounce_timer.timeout.connect(self._emit_pending_scroll)
 
-        self._step_back_button = QPushButton("⏮")
-        self._step_back_button.setFixedWidth(32)
+        self._step_back_button = QPushButton("|<")
+        self._step_back_button.setFixedWidth(36)
         self._step_back_button.setToolTip("Step back (Previous frame)")
         self._step_back_button.clicked.connect(self._step_back)
 
@@ -818,8 +818,8 @@ class ViewerWidget(QWidget):
         self._play_button.setFixedWidth(self._play_button.sizeHint().width() + 12)
         self._play_button.clicked.connect(self.play_pause_requested.emit)
 
-        self._step_forward_button = QPushButton("⏭")
-        self._step_forward_button.setFixedWidth(32)
+        self._step_forward_button = QPushButton(">|")
+        self._step_forward_button.setFixedWidth(36)
         self._step_forward_button.setToolTip("Step forward (Next frame)")
         self._step_forward_button.clicked.connect(self._step_forward)
 

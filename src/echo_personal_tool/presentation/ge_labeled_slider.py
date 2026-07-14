@@ -120,12 +120,12 @@ class GeLabeledSlider(QWidget):
         super().__init__(parent)
         self._label = label
 
-        self._decrement = QPushButton("◀")
-        self._decrement.setFixedSize(22, 28)
+        self._decrement = QPushButton("<")
+        self._decrement.setFixedSize(24, 28)
         self._decrement.clicked.connect(lambda: self.setValue(self.value() - 1))
 
-        self._increment = QPushButton("▶")
-        self._increment.setFixedSize(22, 28)
+        self._increment = QPushButton(">")
+        self._increment.setFixedSize(24, 28)
         self._increment.clicked.connect(lambda: self.setValue(self.value() + 1))
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
