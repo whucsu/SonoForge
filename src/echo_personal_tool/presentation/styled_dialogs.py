@@ -15,6 +15,7 @@ def styled_open_file(
 ) -> tuple[str, str]:
     """Open file dialog with dark theme styling."""
     dialog = QFileDialog(parent, title, directory, filter)
+    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
     _style_dialog(dialog)
     if dialog.exec() == QFileDialog.DialogCode.Accepted:
         files = dialog.selectedFiles()
@@ -31,6 +32,7 @@ def styled_open_files(
     """Open multiple files dialog with dark theme styling."""
     dialog = QFileDialog(parent, title, directory, filter)
     dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
     _style_dialog(dialog)
     if dialog.exec() == QFileDialog.DialogCode.Accepted:
         return dialog.selectedFiles()
@@ -46,6 +48,7 @@ def styled_save_file(
     """Save file dialog with dark theme styling."""
     dialog = QFileDialog(parent, title, directory, filter)
     dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
     _style_dialog(dialog)
     if dialog.exec() == QFileDialog.DialogCode.Accepted:
         files = dialog.selectedFiles()
@@ -61,6 +64,7 @@ def styled_select_directory(
     """Select directory dialog with dark theme styling."""
     dialog = QFileDialog(parent, title, directory)
     dialog.setFileMode(QFileDialog.FileMode.Directory)
+    dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
     _style_dialog(dialog)
     if dialog.exec() == QFileDialog.DialogCode.Accepted:
         files = dialog.selectedFiles()
@@ -70,15 +74,61 @@ def styled_select_directory(
 
 def _style_dialog(dialog: QFileDialog) -> None:
     """Apply dark theme styling to file dialog."""
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QColor, QPalette, QIcon, QPixmap
+    from PySide6.QtCore import Qt
     p = get_theme_palette()
+
+    # Apply palette to all child widgets recursively
+    palette = QPalette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(p['bg_panel']))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(p['text']))
+    palette.setColor(QPalette.ColorRole.Base, QColor(p['bg_panel']))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(p['bg_control']))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(p['bg_control']))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(p['text']))
+    palette.setColor(QPalette.ColorRole.Text, QColor(p['text']))
+    palette.setColor(QPalette.ColorRole.Button, QColor(p['bg_control']))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(p['text']))
+    palette.setColor(QPalette.ColorRole.BrightText, QColor(p['accent_tab']))
+    palette.setColor(QPalette.ColorRole.Link, QColor(p['accent_tab']))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(p['accent_tab']))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor('white'))
+    dialog.setPalette(palette)
+
+    # Recursively apply palette to all children
+    def apply_palette(widget):
+        widget.setPalette(palette)
+        for child in widget.findChildren(QWidget):
+            child.setPalette(palette)
+            # For buttons with icons, recolor icon to text color
+            if child.__class__.__name__ in ('QToolButton', 'QPushButton'):
+                old_icon = child.icon()
+                if not old_icon.isNull():
+                    pixmap = old_icon.pixmap(16, 16)
+                    if not pixmap.isNull():
+                        from PySide6.QtGui import QPainter, QImage
+                        image = QImage(16, 16, QImage.Format.Format_ARGB32)
+                        image.fill(Qt.GlobalColor.transparent)
+                        painter = QPainter(image)
+                        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+                        painter.drawPixmap(0, 0, pixmap)
+                        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                        painter.fillRect(image.rect(), QColor(p['text']))
+                        painter.end()
+                        child.setIcon(QIcon(QPixmap.fromImage(image)))
+
+    apply_palette(dialog)
+
     dialog.setStyleSheet(f"""
+        * {{
+            color: {p['text']};
+        }}
         QFileDialog {{
             background: {p['bg_panel']};
-            color: {p['text']};
         }}
         QTreeView {{
             background: {p['bg_panel']};
-            color: {p['text']};
             border: 1px solid {p['border']};
         }}
         QTreeView::item {{
@@ -93,13 +143,11 @@ def _style_dialog(dialog: QFileDialog) -> None:
         }}
         QTreeView::section {{
             background: {p['bg_control']};
-            color: {p['text']};
             border: 1px solid {p['border']};
             padding: 4px;
         }}
         QPushButton {{
             background: {p['bg_control']};
-            color: {p['text']};
             border: 1px solid {p['border']};
             border-radius: 4px;
             padding: 6px 12px;
@@ -113,7 +161,6 @@ def _style_dialog(dialog: QFileDialog) -> None:
         }}
         QToolButton {{
             background: {p['bg_control']};
-            color: {p['text']};
             border: 1px solid {p['border']};
             border-radius: 4px;
             padding: 4px;
@@ -128,17 +175,12 @@ def _style_dialog(dialog: QFileDialog) -> None:
         }}
         QLineEdit {{
             background: {p['bg_panel']};
-            color: {p['text']};
             border: 1px solid {p['border']};
             border-radius: 4px;
             padding: 4px 8px;
         }}
-        QLabel {{
-            color: {p['text']};
-        }}
         QComboBox {{
             background: {p['bg_control']};
-            color: {p['text']};
             border: 1px solid {p['border']};
             border-radius: 4px;
             padding: 4px 8px;
@@ -148,18 +190,6 @@ def _style_dialog(dialog: QFileDialog) -> None:
         }}
         QComboBox QAbstractItemView {{
             background: {p['bg_control']};
-            color: {p['text']};
             selection-background-color: {p['accent_tab']};
-        }}
-        QSidebar {{
-            background: {p['bg_panel']};
-            color: {p['text']};
-        }}
-        QSidebar::item {{
-            padding: 4px;
-        }}
-        QSidebar::item:selected {{
-            background: {p['accent_tab']};
-            color: white;
         }}
     """)

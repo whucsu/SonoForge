@@ -131,6 +131,7 @@ class GeLabeledSlider(QWidget):
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(minimum, maximum)
         self._slider.setValue(value)
+        p = get_theme_palette()
         self._slider.setStyleSheet(
             f"""
             QSlider::groove:horizontal {{
@@ -145,10 +146,13 @@ class GeLabeledSlider(QWidget):
                 background: transparent;
             }}
             QSlider::handle:horizontal {{
-                background: {ACCENT_BRIGHT};
+                background: {p['accent_bright']};
                 width: 6px;
                 margin: -2px 0;
                 border-radius: 2px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: {p['accent_tab']};
             }}
             """
         )
