@@ -114,6 +114,21 @@ def _style_dialog(dialog: QFileDialog) -> None:
         QPushButton:pressed {{
             background: {p['bg_button_pressed']};
         }}
+        QToolButton {{
+            background: {p['bg_control']};
+            color: {p['text']};
+            border: 1px solid {p['border']};
+            border-radius: 4px;
+            padding: 4px;
+            min-width: 24px;
+            min-height: 24px;
+        }}
+        QToolButton:hover {{
+            background: {p['bg_button_hover']};
+        }}
+        QToolButton:pressed {{
+            background: {p['bg_button_pressed']};
+        }}
         QLineEdit {{
             background: {p['bg_panel']};
             color: {p['text']};
@@ -138,5 +153,16 @@ def _style_dialog(dialog: QFileDialog) -> None:
             background: {p['bg_control']};
             color: {p['text']};
             selection-background-color: {p['accent_tab']};
+        }}
+        QSidebar {{
+            background: {p['bg_panel']};
+            color: {p['text']};
+        }}
+        QSidebar::item {{
+            padding: 4px;
+        }}
+        QSidebar::item:selected {{
+            background: {p['accent_tab']};
+            color: white;
         }}
     """)
