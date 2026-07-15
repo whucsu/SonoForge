@@ -168,6 +168,12 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
             _btn("menu.speckle_tracking", MeasurementAction.SPECKLE_TRACKING, view="A4C"),
         ),
     ),
+    (
+        "menu.mmode_group",
+        (
+            _btn("menu.mmode_anatomic", MeasurementAction.MMODE),
+        ),
+    ),
 )
 
 

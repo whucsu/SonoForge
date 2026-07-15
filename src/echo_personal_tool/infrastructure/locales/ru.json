@@ -226,6 +226,8 @@
   "menu.spline_volume": "Объём",
   "menu.strain": "Стрейн",
   "menu.strain_group": "Стрейн",
+  "menu.mmode_group": "М-режим",
+  "menu.mmode_anatomic": "Анатомический М-режим",
   "menu.tapse": "TAPSE",
   "menu.trace_ar": "Trace AR",
   "menu.trace_av": "Trace AV",

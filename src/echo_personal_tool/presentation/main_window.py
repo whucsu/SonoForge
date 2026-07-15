@@ -389,23 +389,32 @@ class MainWindow(QMainWindow):
         self._mmode_vertical_splitter.setStretchFactor(0, 1)
         self._mmode_vertical_splitter.setStretchFactor(1, 1)
 
-        index = self._content_splitter.indexOf(self._viewer)
-        if index >= 0:
-            self._content_splitter.insertWidget(index, self._mmode_vertical_splitter)
-            self._content_splitter.setStretchFactor(index, 1)
-            self._mmode_vertical_splitter.show()
+        # Find viewer's current position in content splitter
+        idx = self._content_splitter.indexOf(self._viewer)
+        if idx < 0:
+            # Viewer is not directly in content_splitter (e.g. already wrapped)
+            # Find the vertical splitter that contains the viewer
+            for i in range(self._content_splitter.count()):
+                w = self._content_splitter.widget(i)
+                if isinstance(w, QSplitter) and w.indexOf(self._viewer) >= 0:
+                    idx = i
+                    break
+        if idx >= 0:
+            self._content_splitter.insertWidget(idx, self._mmode_vertical_splitter)
+            self._content_splitter.setStretchFactor(idx, 1)
+        self._mmode_vertical_splitter.show()
 
     def _deactivate_mmode(self) -> None:
         if self._mmode_vertical_splitter is None:
             return
-        index = self._content_splitter.indexOf(self._mmode_vertical_splitter)
-        if index >= 0:
-            self._content_splitter.insertWidget(index, self._viewer)
-            self._content_splitter.setStretchFactor(index, 1)
+        # Explicitly reparent viewer BEFORE deleting the splitter
+        self._viewer.setParent(self._content_widget)
+        # Now safe to delete the splitter
         self._mmode_vertical_splitter.deleteLater()
         self._mmode_vertical_splitter = None
         if self._mmode_widget is not None:
             self._mmode_widget.clear_buffer()
+        self._rebuild_layout()
 
     def _toggle_maximize(self) -> None:
         if self.isMaximized():
@@ -1538,6 +1547,7 @@ class MainWindow(QMainWindow):
             MeasurementAction.RV_FAC: self._on_rv_fac,
             MeasurementAction.AUTO_SEGMENT: self._request_auto_segment_shortcut,
             MeasurementAction.SPECKLE_TRACKING: self._on_speckle_tracking_requested,
+            MeasurementAction.MMODE: self._toggle_mmode,
         }
         if action == MeasurementAction.CALIPER:
             self._on_caliper_requested(extra or None)

@@ -226,6 +226,8 @@
   "menu.spline_volume": "Spline Volume",
   "menu.strain": "Strain",
   "menu.strain_group": "Strain",
+  "menu.mmode_group": "M-Mode",
+  "menu.mmode_anatomic": "Anatomic M-Mode",
   "menu.tapse": "TAPSE",
   "menu.trace_ar": "Trace AR",
   "menu.trace_av": "Trace AV",

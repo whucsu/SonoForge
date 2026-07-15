@@ -35,3 +35,4 @@ class MeasurementAction(StrEnum):
     AUTO_SEGMENT = "auto_segment"
     LAV_4C_AUTO = "lav_4c_auto"
     SPECKLE_TRACKING = "speckle_tracking"
+    MMODE = "mmode"
