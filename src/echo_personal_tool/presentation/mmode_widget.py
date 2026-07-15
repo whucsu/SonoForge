@@ -139,3 +139,7 @@ class MModeWidget(QWidget):
     def set_depth_calibration_mm_per_pixel(self, mm_per_pixel: float) -> None:
         self._depth_mm_per_pixel = mm_per_pixel
         self._plot.setLabel("left", "Depth", units="mm")
+
+    def set_depth_calibration_cm_per_pixel(self, cm_per_pixel: float) -> None:
+        self._depth_mm_per_pixel = cm_per_pixel * 10.0
+        self._plot.setLabel("left", "Depth", units="cm")

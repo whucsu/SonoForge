@@ -870,6 +870,15 @@ class MainWindow(QMainWindow):
             cached_frames = self._controller.get_cached_frames() if hasattr(self._controller, 'get_cached_frames') else []
             if cached_frames:
                 self._mmode_widget.recalculate_from_frames(cached_frames, start, end)
+            # Apply DICOM calibration to axes
+            state = self._controller.state_manager.snapshot
+            instance = state.instance if state else None
+            if instance is not None:
+                if instance.pixel_spacing is not None:
+                    row_spacing_mm = instance.pixel_spacing[0]
+                    self._mmode_widget.set_depth_calibration_cm_per_pixel(row_spacing_mm / 10.0)
+                if instance.frame_time_ms is not None:
+                    self._mmode_widget.set_time_calibration_ms_per_pixel(instance.frame_time_ms)
             self._show_status(tr("status.mmode_line_placed"))
 
     def _wire_wl_persistence(self) -> None:
