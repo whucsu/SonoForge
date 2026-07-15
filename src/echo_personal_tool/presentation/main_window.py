@@ -390,7 +390,6 @@ class MainWindow(QMainWindow):
     def _activate_mmode(self) -> None:
         if self._mmode_widget is None:
             self._mmode_widget = MModeWidget()
-            self._mmode_widget.close_requested.connect(self._toggle_mmode)
         self._mmode_vertical_splitter = QSplitter(Qt.Orientation.Vertical)
         self._mmode_vertical_splitter.setHandleWidth(4)
         self._mmode_vertical_splitter.addWidget(self._viewer)
@@ -870,24 +869,20 @@ class MainWindow(QMainWindow):
             cached_frames = self._controller.get_cached_frames() if hasattr(self._controller, 'get_cached_frames') else []
             if cached_frames:
                 self._mmode_widget.recalculate_from_frames(cached_frames, start, end)
-            # Apply DICOM calibration to axes
+            # Apply B-mode calibration to M-mode depth axis
             state = self._controller.state_manager.snapshot
-            instance = state.instance if state else None
-            if instance is not None:
-                if instance.pixel_spacing is not None:
-                    import math
-                    row_spacing_mm = instance.pixel_spacing[0]
-                    col_spacing_mm = instance.pixel_spacing[1]
-                    # Calculate scan line length in pixels
-                    dx = float(end[0]) - float(start[0])
-                    dy = float(end[1]) - float(start[1])
-                    line_len_px = math.sqrt(dx * dx + dy * dy)
-                    if line_len_px > 0 and 0.01 <= row_spacing_mm <= 2.0:
-                        # Depth per pixel along the scan line
-                        depth_mm = line_len_px * row_spacing_mm
-                        self._mmode_widget.set_depth_range_mm(depth_mm)
-                if instance.frame_time_ms is not None and instance.frame_time_ms > 0:
-                    self._mmode_widget.set_time_calibration_ms_per_pixel(instance.frame_time_ms)
+            spacing = state.effective_pixel_spacing
+            if spacing is not None:
+                import math
+                row_spacing_mm = spacing[0]
+                dx = float(end[0]) - float(start[0])
+                dy = float(end[1]) - float(start[1])
+                line_len_px = math.sqrt(dx * dx + dy * dy)
+                if line_len_px > 0:
+                    depth_mm = line_len_px * row_spacing_mm
+                    self._mmode_widget.set_depth_range_mm(depth_mm)
+            if state.instance is not None and state.instance.frame_time_ms is not None and state.instance.frame_time_ms > 0:
+                self._mmode_widget.set_time_calibration_ms_per_pixel(state.instance.frame_time_ms)
             self._show_status(tr("status.mmode_line_placed"))
 
     def _wire_wl_persistence(self) -> None:
@@ -1017,6 +1012,11 @@ class MainWindow(QMainWindow):
         run_dicom_upload_dialog(self, studies, load_server_settings())
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        # If M-mode is active, close it instead of closing the app
+        if self._mmode_active:
+            self._toggle_mmode()
+            event.ignore()
+            return
         self._stop_viewer2_playback()
         self._viewer.disconnect_display_controls()
         # Wait briefly for pending workers to finish so signals don't fire

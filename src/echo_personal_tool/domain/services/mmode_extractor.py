@@ -10,6 +10,9 @@ def extract_mmode_column(
     end: tuple[float, float],
     num_samples: int = 256,
 ) -> np.ndarray:
+    # Convert to 2D grayscale if needed
+    if frame.ndim == 3:
+        frame = np.mean(frame[..., :3], axis=2).astype(frame.dtype)
     t = np.linspace(0.0, 1.0, num_samples)
     xs = start[0] + t * (end[0] - start[0])
     ys = start[1] + t * (end[1] - start[1])

@@ -633,6 +633,12 @@ class AppController(QObject):
     def toggle_mmode(self) -> None:
         self._mmode_active = not self._mmode_active
 
+    def get_cached_frames(self) -> list:
+        frames = self._frame_cache.frames
+        if frames is None:
+            return []
+        return [frames[i] for i in range(frames.shape[0])]
+
     def set_playback_speed_multiplier(self, multiplier: float) -> None:
         self._playback_speed_multiplier = max(0.25, min(4.0, float(multiplier)))
         self._on_state_changed(self._state_manager.snapshot)

@@ -3,13 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from echo_personal_tool.domain.services.mmode_extractor import extract_mmode_column
 
@@ -23,7 +17,6 @@ _SWEEP_SPEEDS: dict[str, int] = {
 class MModeWidget(QWidget):
     caliper_measurement_added = Signal(object)
     sweep_speed_changed = Signal(int)
-    close_requested = Signal()
 
     def __init__(self, buffer_width: int = 512, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -58,23 +51,6 @@ class MModeWidget(QWidget):
         self._view_box.addItem(self._sweep_line)
         self._sweep_line.setValue(0)
 
-        # Title bar: label + close button
-        title_bar = QHBoxLayout()
-        title_bar.setContentsMargins(6, 2, 2, 2)
-        title_bar.setSpacing(4)
-        title_label = QLabel("M-Mode")
-        title_label.setStyleSheet("font-weight: bold; font-size: 11px;")
-        title_bar.addWidget(title_label)
-        title_bar.addStretch(1)
-        self._close_btn = QPushButton("×")
-        self._close_btn.setFixedSize(20, 20)
-        self._close_btn.setStyleSheet(
-            "QPushButton { border: none; font-size: 14px; font-weight: bold; }"
-            "QPushButton:hover { color: red; }"
-        )
-        self._close_btn.clicked.connect(self.close_requested.emit)
-        title_bar.addWidget(self._close_btn)
-
         # Speed selector toolbar
         self._speed_buttons: dict[str, QPushButton] = {}
         toolbar = QHBoxLayout()
@@ -96,7 +72,6 @@ class MModeWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addLayout(title_bar)
         layout.addLayout(toolbar)
         layout.addWidget(self._plot)
 
