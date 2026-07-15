@@ -875,10 +875,17 @@ class MainWindow(QMainWindow):
             instance = state.instance if state else None
             if instance is not None:
                 if instance.pixel_spacing is not None:
+                    import math
                     row_spacing_mm = instance.pixel_spacing[0]
-                    # Sanity check: typical echo pixel_spacing is 0.05-1.0 mm/pixel
-                    if 0.01 <= row_spacing_mm <= 2.0:
-                        self._mmode_widget.set_depth_calibration_mm_per_pixel(row_spacing_mm)
+                    col_spacing_mm = instance.pixel_spacing[1]
+                    # Calculate scan line length in pixels
+                    dx = float(end[0]) - float(start[0])
+                    dy = float(end[1]) - float(start[1])
+                    line_len_px = math.sqrt(dx * dx + dy * dy)
+                    if line_len_px > 0 and 0.01 <= row_spacing_mm <= 2.0:
+                        # Depth per pixel along the scan line
+                        depth_mm = line_len_px * row_spacing_mm
+                        self._mmode_widget.set_depth_range_mm(depth_mm)
                 if instance.frame_time_ms is not None and instance.frame_time_ms > 0:
                     self._mmode_widget.set_time_calibration_ms_per_pixel(instance.frame_time_ms)
             self._show_status(tr("status.mmode_line_placed"))

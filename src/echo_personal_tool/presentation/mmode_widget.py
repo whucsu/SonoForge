@@ -5,8 +5,8 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QLabel,
     QPushButton,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -58,6 +58,24 @@ class MModeWidget(QWidget):
         self._view_box.addItem(self._sweep_line)
         self._sweep_line.setValue(0)
 
+        # Title bar: label + close button
+        title_bar = QHBoxLayout()
+        title_bar.setContentsMargins(6, 2, 2, 2)
+        title_bar.setSpacing(4)
+        title_label = QLabel("M-Mode")
+        title_label.setStyleSheet("font-weight: bold; font-size: 11px;")
+        title_bar.addWidget(title_label)
+        title_bar.addStretch(1)
+        self._close_btn = QPushButton("×")
+        self._close_btn.setFixedSize(20, 20)
+        self._close_btn.setStyleSheet(
+            "QPushButton { border: none; font-size: 14px; font-weight: bold; }"
+            "QPushButton:hover { color: red; }"
+        )
+        self._close_btn.clicked.connect(self.close_requested.emit)
+        title_bar.addWidget(self._close_btn)
+
+        # Speed selector toolbar
         self._speed_buttons: dict[str, QPushButton] = {}
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(4, 0, 4, 0)
@@ -71,12 +89,6 @@ class MModeWidget(QWidget):
             toolbar.addWidget(btn)
         toolbar.addStretch(1)
 
-        self._close_btn = QPushButton("×")
-        self._close_btn.setFixedWidth(24)
-        self._close_btn.setFixedHeight(22)
-        self._close_btn.clicked.connect(self.close_requested.emit)
-        toolbar.addWidget(self._close_btn)
-
         # Set default speed
         default_label = "100 mm/s"
         self._speed_buttons[default_label].setChecked(True)
@@ -84,6 +96,7 @@ class MModeWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        layout.addLayout(title_bar)
         layout.addLayout(toolbar)
         layout.addWidget(self._plot)
 
@@ -156,3 +169,7 @@ class MModeWidget(QWidget):
     def set_depth_calibration_cm_per_pixel(self, cm_per_pixel: float) -> None:
         self._depth_mm_per_pixel = cm_per_pixel * 10.0
         self._plot.setLabel("left", "Depth", units="cm")
+
+    def set_depth_range_mm(self, total_depth_mm: float) -> None:
+        self._depth_mm_per_pixel = total_depth_mm / max(self._num_samples, 1)
+        self._plot.setLabel("left", "Depth", units="mm")
