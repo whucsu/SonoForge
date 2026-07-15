@@ -8,15 +8,16 @@ from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 from echo_personal_tool.domain.services.mmode_extractor import extract_mmode_column
 
 _SWEEP_SPEEDS: dict[str, int] = {
+    "25 mm/s": 128,
     "50 mm/s": 256,
     "100 mm/s": 512,
-    "200 mm/s": 1024,
 }
 
 
 class MModeWidget(QWidget):
     caliper_measurement_added = Signal(object)
     sweep_speed_changed = Signal(int)
+    deactivate_requested = Signal()
 
     def __init__(self, buffer_width: int = 512, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -65,8 +66,14 @@ class MModeWidget(QWidget):
             toolbar.addWidget(btn)
         toolbar.addStretch(1)
 
+        self._close_btn = QPushButton("×")
+        self._close_btn.setFixedWidth(24)
+        self._close_btn.setFixedHeight(22)
+        self._close_btn.clicked.connect(self.deactivate_requested.emit)
+        toolbar.addWidget(self._close_btn)
+
         # Set default speed
-        default_label = "100 mm/s"
+        default_label = "50 mm/s"
         self._speed_buttons[default_label].setChecked(True)
 
         layout = QVBoxLayout(self)

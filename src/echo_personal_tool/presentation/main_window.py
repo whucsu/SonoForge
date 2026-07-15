@@ -385,11 +385,14 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             self._deactivate_mmode()
+            self.setFocus()
+            self.activateWindow()
             self._show_status(tr("status.mmode_deactivated"))
 
     def _activate_mmode(self) -> None:
         if self._mmode_widget is None:
             self._mmode_widget = MModeWidget()
+            self._mmode_widget.deactivate_requested.connect(self._toggle_mmode)
         self._mmode_vertical_splitter = QSplitter(Qt.Orientation.Vertical)
         self._mmode_vertical_splitter.setHandleWidth(4)
         self._mmode_vertical_splitter.addWidget(self._viewer)
@@ -872,15 +875,17 @@ class MainWindow(QMainWindow):
             # Apply B-mode calibration to M-mode depth axis
             state = self._controller.state_manager.snapshot
             spacing = state.effective_pixel_spacing
-            if spacing is not None:
-                import math
-                row_spacing_mm = spacing[0]
-                dx = float(end[0]) - float(start[0])
-                dy = float(end[1]) - float(start[1])
-                line_len_px = math.sqrt(dx * dx + dy * dy)
-                if line_len_px > 0:
-                    depth_mm = line_len_px * row_spacing_mm
-                    self._mmode_widget.set_depth_range_mm(depth_mm)
+            if spacing is None:
+                # Fallback: assume 0.1 mm/pixel (typical echo)
+                spacing = (0.1, 0.1)
+            import math
+            row_spacing_mm = spacing[0]
+            dx = float(end[0]) - float(start[0])
+            dy = float(end[1]) - float(start[1])
+            line_len_px = math.sqrt(dx * dx + dy * dy)
+            if line_len_px > 0:
+                depth_mm = line_len_px * row_spacing_mm
+                self._mmode_widget.set_depth_range_mm(depth_mm)
             if state.instance is not None and state.instance.frame_time_ms is not None and state.instance.frame_time_ms > 0:
                 self._mmode_widget.set_time_calibration_ms_per_pixel(state.instance.frame_time_ms)
             self._show_status(tr("status.mmode_line_placed"))
@@ -1016,6 +1021,8 @@ class MainWindow(QMainWindow):
         if self._mmode_active:
             self._toggle_mmode()
             event.ignore()
+            self.setFocus()
+            self.activateWindow()
             return
         self._stop_viewer2_playback()
         self._viewer.disconnect_display_controls()

@@ -1532,11 +1532,8 @@ class ViewerWidget(QWidget):
                 and self._mmode_line_item.is_complete
             ):
                 start, end = self._mmode_line_item.get_endpoints()
-                # Invert Y: view has invertY=True, frame has row 0 at top
-                h = self._current_frame.shape[0]
-                start_inv = (start[0], h - start[1])
-                end_inv = (end[0], h - end[1])
-                col = extract_mmode_column(self._current_frame, start_inv, end_inv, num_samples=256)
+                # Coordinates are already in image space (converted at click time)
+                col = extract_mmode_column(self._current_frame, start, end, num_samples=256)
                 frame_idx = self._current_state.current_frame_index if self._current_state else 0
                 self.mmode_column_ready.emit(col, frame_idx)
         self._update_debug_overlay()
@@ -1654,11 +1651,8 @@ class ViewerWidget(QWidget):
             and self._mmode_line_item.is_complete
         ):
             start, end = self._mmode_line_item.get_endpoints()
-            # Invert Y: view has invertY=True, frame has row 0 at top
-            h = self._current_frame.shape[0]
-            start_inv = (start[0], h - start[1])
-            end_inv = (end[0], h - end[1])
-            col = extract_mmode_column(self._current_frame, start_inv, end_inv, num_samples=256)
+            # Coordinates are already in image space (converted at click time)
+            col = extract_mmode_column(self._current_frame, start, end, num_samples=256)
             frame_idx = self._current_state.current_frame_index if self._current_state else 0
             self.mmode_column_ready.emit(col, frame_idx)
 
@@ -2168,12 +2162,15 @@ class ViewerWidget(QWidget):
     def _handle_mmode_line_click(self, x: float, y: float) -> bool:
         if not self._mmode_line_active or self._mmode_line_item is None:
             return False
+        # Convert view coordinates (invertY=True) to image coordinates (Y=0 at top)
+        h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
+        img_y = h - y
         if self._mmode_line_click_step == "start":
-            self._mmode_line_item.set_start((x, y))
+            self._mmode_line_item.set_start((x, img_y))
             self._mmode_line_click_step = "end"
             return True
         elif self._mmode_line_click_step == "end":
-            self._mmode_line_item.set_end((x, y))
+            self._mmode_line_item.set_end((x, img_y))
             self._mmode_line_item.add_to_view(self._view)
             self._mmode_line_active = False
             self._mmode_line_click_step = None
