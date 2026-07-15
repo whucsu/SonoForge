@@ -878,7 +878,7 @@ class MainWindow(QMainWindow):
                     row_spacing_mm = instance.pixel_spacing[0]
                     # Sanity check: typical echo pixel_spacing is 0.05-1.0 mm/pixel
                     if 0.01 <= row_spacing_mm <= 2.0:
-                        self._mmode_widget.set_depth_calibration_cm_per_pixel(row_spacing_mm / 10.0)
+                        self._mmode_widget.set_depth_calibration_mm_per_pixel(row_spacing_mm)
                 if instance.frame_time_ms is not None and instance.frame_time_ms > 0:
                     self._mmode_widget.set_time_calibration_ms_per_pixel(instance.frame_time_ms)
             self._show_status(tr("status.mmode_line_placed"))
