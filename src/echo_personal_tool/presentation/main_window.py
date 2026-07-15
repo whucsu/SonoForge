@@ -407,13 +407,16 @@ class MainWindow(QMainWindow):
     def _deactivate_mmode(self) -> None:
         if self._mmode_vertical_splitter is None:
             return
-        # Explicitly reparent viewer BEFORE deleting the splitter
-        self._viewer.setParent(self._content_widget)
-        # Now safe to delete the splitter (destroys MModeWidget as child)
+        # Remove viewer from vertical splitter and add directly to content_splitter
+        self._viewer.setParent(None)
+        idx = self._content_splitter.indexOf(self._mmode_vertical_splitter)
+        if idx >= 0:
+            self._content_splitter.insertWidget(idx, self._viewer)
+            self._content_splitter.setStretchFactor(idx, 1)
         self._mmode_vertical_splitter.deleteLater()
         self._mmode_vertical_splitter = None
         self._mmode_widget = None
-        self._rebuild_layout()
+        self._viewer.show()
 
     def _toggle_maximize(self) -> None:
         if self.isMaximized():
