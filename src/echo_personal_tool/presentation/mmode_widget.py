@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from echo_personal_tool.domain.services.mmode_extractor import extract_mmode_column
 
@@ -17,6 +17,7 @@ _SWEEP_SPEEDS: dict[str, int] = {
 class MModeWidget(QWidget):
     caliper_measurement_added = Signal(object)
     sweep_speed_changed = Signal(int)
+    close_requested = Signal()
 
     def __init__(self, buffer_width: int = 512, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -63,6 +64,13 @@ class MModeWidget(QWidget):
             self._speed_buttons[label] = btn
             toolbar.addWidget(btn)
         toolbar.addStretch(1)
+
+        self._close_btn = QPushButton("×")
+        self._close_btn.setFixedHeight(22)
+        self._close_btn.setFixedWidth(24)
+        self._close_btn.setToolTip("Close M-Mode")
+        self._close_btn.clicked.connect(self.close_requested.emit)
+        toolbar.addWidget(self._close_btn)
 
         # Set default speed
         default_label = "100 mm/s"
