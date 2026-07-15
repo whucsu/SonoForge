@@ -1532,7 +1532,11 @@ class ViewerWidget(QWidget):
                 and self._mmode_line_item.is_complete
             ):
                 start, end = self._mmode_line_item.get_endpoints()
-                col = extract_mmode_column(self._current_frame, start, end, num_samples=256)
+                # Invert Y: view has invertY=True, frame has row 0 at top
+                h = self._current_frame.shape[0]
+                start_inv = (start[0], h - start[1])
+                end_inv = (end[0], h - end[1])
+                col = extract_mmode_column(self._current_frame, start_inv, end_inv, num_samples=256)
                 frame_idx = self._current_state.current_frame_index if self._current_state else 0
                 self.mmode_column_ready.emit(col, frame_idx)
         self._update_debug_overlay()
@@ -1650,7 +1654,11 @@ class ViewerWidget(QWidget):
             and self._mmode_line_item.is_complete
         ):
             start, end = self._mmode_line_item.get_endpoints()
-            col = extract_mmode_column(self._current_frame, start, end, num_samples=256)
+            # Invert Y: view has invertY=True, frame has row 0 at top
+            h = self._current_frame.shape[0]
+            start_inv = (start[0], h - start[1])
+            end_inv = (end[0], h - end[1])
+            col = extract_mmode_column(self._current_frame, start_inv, end_inv, num_samples=256)
             frame_idx = self._current_state.current_frame_index if self._current_state else 0
             self.mmode_column_ready.emit(col, frame_idx)
 
