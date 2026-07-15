@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import Qt
+import pyqtgraph as pg
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QWidget
+
+
+class _MModeNodeItem(pg.ScatterPlotItem):
+    """Single draggable M-mode scan line endpoint node."""
+
+    def __init__(
+        self,
+        viewer_widget: QWidget | None,
+        endpoint_index: int,
+        position: tuple[float, float],
+    ) -> None:
+        super().__init__(symbol="o", size=10, pen=pg.mkPen("cyan"), brush=pg.mkBrush("cyan"))
+        self._viewer_widget = viewer_widget
+        self._endpoint_index = endpoint_index
+        self.setZValue(30)
+        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+        self.setAcceptHoverEvents(True)
+        self.setData([position[0]], [position[1]])
+
+    def hoverEvent(self, ev) -> None:  # type: ignore[override]
+        if ev.isEnter():
+            self.setSymbol("o")
+            self.setSize(12)
+            self.setPen(pg.mkPen("#ffb300", width=2))
+            self.setBrush(pg.mkBrush("#ffb300"))
+        elif ev.isExit():
+            self.setSymbol("o")
+            self.setSize(10)
+            self.setPen(pg.mkPen("cyan"))
+            self.setBrush(pg.mkBrush("cyan"))
+
+    def mousePressEvent(self, ev) -> None:  # type: ignore[override]
+        if ev.button() != Qt.MouseButton.LeftButton:
+            super().mousePressEvent(ev)
+            return
+        ev.accept()
+        if self._viewer_widget is not None:
+            self._viewer_widget._begin_mmode_node_drag(self._endpoint_index)
+
+    def mouseDragEvent(self, ev) -> None:  # type: ignore[override]
+        if ev.button() != Qt.MouseButton.LeftButton:
+            return
+        ev.accept()
+        if self._viewer_widget is not None and hasattr(ev, "scenePos"):
+            view_box = self.getViewBox()
+            if view_box is not None:
+                pos = view_box.mapSceneToView(ev.scenePos())
+                self._viewer_widget._mmode_node_dragging(
+                    self._endpoint_index, (float(pos.x()), float(pos.y()))
+                )
+
+    def mouseReleaseEvent(self, ev) -> None:  # type: ignore[override]
+        if ev.button() != Qt.MouseButton.LeftButton:
+            super().mouseReleaseEvent(ev)
+            return
+        ev.accept()
+        if self._viewer_widget is not None:
+            self._viewer_widget._end_mmode_node_drag(self._endpoint_index)
+
+
+class MModeScanLineItem:
+    """Manages M-mode scan line graphics on the 2D viewer.
+
+    Not a QWidget -- created by ViewerWidget and added to ContourViewBox via view.addItem().
+    Follows the _CaliperNodeItem pattern: PlotDataItem for line, ScatterPlotItem for endpoints.
+    """
+
+    def __init__(self, viewer_widget: QWidget | None) -> None:
+        self._viewer_widget = viewer_widget
+        self.line_start: tuple[float, float] | None = None
+        self.line_end: tuple[float, float] | None = None
+        self._line_item: pg.PlotDataItem | None = None
+        self._start_node: _MModeNodeItem | None = None
+        self._end_node: _MModeNodeItem | None = None
+
+    @property
+    def is_complete(self) -> bool:
+        return self.line_start is not None and self.line_end is not None
+
+    def set_start(self, pos: tuple[float, float]) -> None:
+        self.line_start = pos
+        self.line_end = None
+        self._remove_graphics()
+
+    def set_end(self, pos: tuple[float, float]) -> None:
+        self.line_end = pos
+        self._create_graphics()
+
+    def get_endpoints(self) -> tuple[tuple[float, float], tuple[float, float]]:
+        assert self.line_start is not None and self.line_end is not None
+        return self.line_start, self.line_end
+
+    def move_start_to(self, pos: tuple[float, float]) -> None:
+        self.line_start = pos
+        self._update_graphics()
+
+    def move_end_to(self, pos: tuple[float, float]) -> None:
+        self.line_end = pos
+        self._update_graphics()
+
+    def clear(self) -> None:
+        self.line_start = None
+        self.line_end = None
+        self._remove_graphics()
+
+    def update_preview(self, mouse_pos: tuple[float, float]) -> None:
+        if self.line_start is not None:
+            self.line_end = mouse_pos
+            self._update_graphics()
+
+    def add_to_view(self, view: pg.ViewBox) -> None:
+        if self._line_item is not None:
+            view.addItem(self._line_item)
+        if self._start_node is not None:
+            view.addItem(self._start_node)
+        if self._end_node is not None:
+            view.addItem(self._end_node)
+
+    def remove_from_view(self, view: pg.ViewBox) -> None:
+        self._remove_graphics(view)
+
+    def _create_graphics(self) -> None:
+        self._remove_graphics()
+        pen = pg.mkPen(color="cyan", style=Qt.PenStyle.DashLine, width=1.5)
+        self._line_item = pg.PlotDataItem(pen=pen, antialias=True)
+        self._line_item.setZValue(24)
+        self._start_node = _MModeNodeItem(self._viewer_widget, 0, self.line_start)
+        self._end_node = _MModeNodeItem(self._viewer_widget, 1, self.line_end)
+        self._sync_line_data()
+
+    def _update_graphics(self) -> None:
+        if self._line_item is not None and self.line_start is not None and self.line_end is not None:
+            self._sync_line_data()
+        if self._start_node is not None and self.line_start is not None:
+            self._start_node.setData([self.line_start[0]], [self.line_start[1]])
+        if self._end_node is not None and self.line_end is not None:
+            self._end_node.setData([self.line_end[0]], [self.line_end[1]])
+
+    def _sync_line_data(self) -> None:
+        if self._line_item is not None and self.line_start is not None and self.line_end is not None:
+            self._line_item.setData(
+                [self.line_start[0], self.line_end[0]],
+                [self.line_start[1], self.line_end[1]],
+            )
+
+    def _remove_graphics(self, view: pg.ViewBox | None = None) -> None:
+        for item in (self._line_item, self._start_node, self._end_node):
+            if item is not None and view is not None:
+                view.removeItem(item)
+        self._line_item = None
+        self._start_node = None
+        self._end_node = None
