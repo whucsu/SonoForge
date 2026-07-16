@@ -11,6 +11,7 @@ from echo_personal_tool.domain.services.mmode_smoothing import (
     spatial_smooth,
     temporal_smooth,
 )
+from echo_personal_tool.presentation.mmode_measurement import MModeMeasurementTool
 
 _SWEEP_SPEEDS: dict[str, int] = {
     "25 mm/s": 128,
@@ -23,6 +24,7 @@ class MModeWidget(QWidget):
     caliper_measurement_added = Signal(object)
     sweep_speed_changed = Signal(int)
     deactivate_requested = Signal()
+    measurement_added = Signal(object)
 
     def __init__(self, buffer_width: int = 512, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -58,6 +60,14 @@ class MModeWidget(QWidget):
         self._view_box.addItem(self._sweep_line)
         self._sweep_line.setValue(0)
 
+        # Measurement tool
+        self._measurement_tool = MModeMeasurementTool()
+        self._measurement_tool.set_view_box(self._view_box)
+        self._measurement_tool.measurement_added.connect(self.measurement_added.emit)
+
+        # Enable mouse clicks on plot for measurements
+        self._plot.scene().sigMouseClicked.connect(self._on_plot_clicked)
+
         # Speed selector toolbar
         self._speed_buttons: dict[str, QPushButton] = {}
         toolbar = QHBoxLayout()
@@ -71,6 +81,23 @@ class MModeWidget(QWidget):
             self._speed_buttons[label] = btn
             toolbar.addWidget(btn)
         toolbar.addStretch(1)
+
+        # Measurement buttons
+        self._measure_btns: dict[str, QPushButton] = {}
+        for label, slot in [("▼ Вертикаль", self._start_vertical_measurement),
+                           ("◄ Горизонталь", self._start_horizontal_measurement),
+                           ("↗ Произвольное", self._start_arbitrary_measurement)]:
+            btn = QPushButton(label)
+            btn.setFixedHeight(22)
+            btn.setCheckable(True)
+            btn.clicked.connect(slot)
+            self._measure_btns[label] = btn
+            toolbar.addWidget(btn)
+
+        self._clear_meas_btn = QPushButton("Очистить")
+        self._clear_meas_btn.setFixedHeight(22)
+        self._clear_meas_btn.clicked.connect(self._clear_measurements)
+        toolbar.addWidget(self._clear_meas_btn)
 
         self._close_btn = QPushButton("×")
         self._close_btn.setFixedWidth(24)
@@ -102,6 +129,44 @@ class MModeWidget(QWidget):
         self._image_item.setImage(self._image_buffer, autoLevels=True)
         self._apply_image_rect()
         self.sweep_speed_changed.emit(new_width)
+
+    def _on_plot_clicked(self, event) -> None:
+        """Handle mouse clicks for measurements."""
+        if self._measurement_tool._active_mode is None:
+            return
+        pos = event.scenePos()
+        if pos is None:
+            return
+        mapped = self._view_box.mapSceneToView(pos)
+        if mapped is None:
+            return
+        self._measurement_tool.on_click(float(mapped.x()), float(mapped.y()))
+
+    def _start_vertical_measurement(self) -> None:
+        self._measurement_tool.cancel()
+        for btn in self._measure_btns.values():
+            btn.setChecked(False)
+        self._measure_btns["▼ Вертикаль"].setChecked(True)
+        self._measurement_tool.start_vertical()
+
+    def _start_horizontal_measurement(self) -> None:
+        self._measurement_tool.cancel()
+        for btn in self._measure_btns.values():
+            btn.setChecked(False)
+        self._measure_btns["◄ Горизонталь"].setChecked(True)
+        self._measurement_tool.start_horizontal()
+
+    def _start_arbitrary_measurement(self) -> None:
+        self._measurement_tool.cancel()
+        for btn in self._measure_btns.values():
+            btn.setChecked(False)
+        self._measure_btns["↗ Произвольное"].setChecked(True)
+        self._measurement_tool.start_arbitrary()
+
+    def _clear_measurements(self) -> None:
+        self._measurement_tool.clear()
+        for btn in self._measure_btns.values():
+            btn.setChecked(False)
 
     def set_scan_line(
         self,
@@ -195,3 +260,8 @@ class MModeWidget(QWidget):
         self._sweep_line.setPos(0)
         self._view_box.setYRange(0, y_size)
         self._view_box.setXRange(0, x_size)
+        # Update measurement tool calibration
+        if self._depth_mm_per_pixel is not None and self._time_ms_per_pixel is not None:
+            self._measurement_tool.set_calibration(
+                self._depth_mm_per_pixel, self._time_ms_per_pixel, self._num_samples
+            )
