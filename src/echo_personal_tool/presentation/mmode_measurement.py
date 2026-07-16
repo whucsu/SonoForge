@@ -190,6 +190,9 @@ class MModeMeasurementTool(QWidget):
         # Apply vertical lock: second point uses first point's X
         if self._active_mode == "vertical":
             end = (start[0], end[1])
+        # Apply horizontal lock: second point uses first point's Y
+        elif self._active_mode == "horizontal":
+            end = (end[0], start[1])
 
         m = MModeMeasurement(kind=self._active_mode, start=start, end=end)
 
@@ -233,6 +236,9 @@ class MModeMeasurementTool(QWidget):
         # For vertical mode, fix X to first point
         if self._active_mode == "vertical":
             x = sx
+        # For horizontal mode, fix Y to first point
+        elif self._active_mode == "horizontal":
+            y = sy
         m = MModeMeasurement(kind="arbitrary", start=(sx, sy), end=(x, y))
         self._preview_item.set_measurement(m)
 
