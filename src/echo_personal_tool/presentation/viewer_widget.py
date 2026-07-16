@@ -648,6 +648,7 @@ class ViewerWidget(QWidget):
         self._mmode_line_active = False
         self._mmode_line_item: MModeScanLineItem | None = None
         self._mmode_line_click_step: Literal["start", "end"] | None = None
+        self._mmode_stored_lines: list[MModeScanLineItem] = []
         self._vertical_caliper_labels = frozenset({"TAPSE"})
         self._current_frame: np.ndarray | None = None
         self._current_state: ViewerState | None = None
@@ -2160,6 +2161,9 @@ class ViewerWidget(QWidget):
     def cancel_mmode_line(self) -> None:
         if self._mmode_line_item is not None:
             self._mmode_line_item.remove_from_view(self._view)
+        for item in self._mmode_stored_lines:
+            item.remove_from_view(self._view)
+        self._mmode_stored_lines.clear()
         self._mmode_line_active = False
         self._mmode_line_click_step = None
         self._mmode_line_item = None
@@ -2179,8 +2183,13 @@ class ViewerWidget(QWidget):
         elif self._mmode_line_click_step == "end":
             self._mmode_line_item.set_end((x, img_y))
             self._mmode_line_item.update_graphics_for_view(self._view, h)
-            self.setCursor(Qt.CursorShape.CrossCursor)
+            # Store completed caliper
+            self._mmode_stored_lines.append(self._mmode_line_item)
             self.mmode_line_completed.emit(*self._mmode_line_item.get_endpoints())
+            # Create fresh item for next caliper
+            self._mmode_line_item = MModeScanLineItem(viewer_widget=self)
+            self._mmode_line_click_step = "start"
+            self.setCursor(Qt.CursorShape.CrossCursor)
             return True
         return False
 
