@@ -119,7 +119,11 @@ class MModeWidget(QWidget):
         self._image_buffer[:n, self._sweep_x] = column[:n]
         self._sweep_x = (self._sweep_x + 1) % self._buffer_width
         self._image_item.setImage(self._image_buffer, autoLevels=True)
-        self._sweep_line.setValue(self._sweep_x)
+        # Sweep line position in physical X units
+        if self._time_ms_per_pixel is not None and self._time_ms_per_pixel > 0:
+            self._sweep_line.setValue(self._sweep_x * self._time_ms_per_pixel)
+        else:
+            self._sweep_line.setValue(self._sweep_x)
 
     def clear_buffer(self) -> None:
         self._image_buffer[:] = 0
@@ -142,16 +146,39 @@ class MModeWidget(QWidget):
 
     def set_time_calibration_ms_per_pixel(self, ms_per_pixel: float) -> None:
         self._time_ms_per_pixel = ms_per_pixel
-        self._plot.setLabel("bottom", "Time", units="ms")
+        self._apply_image_rect()
 
     def set_depth_calibration_mm_per_pixel(self, mm_per_pixel: float) -> None:
         self._depth_mm_per_pixel = mm_per_pixel
-        self._plot.setLabel("left", "Depth", units="mm")
+        self._apply_image_rect()
 
     def set_depth_calibration_cm_per_pixel(self, cm_per_pixel: float) -> None:
         self._depth_mm_per_pixel = cm_per_pixel * 10.0
-        self._plot.setLabel("left", "Depth", units="cm")
+        self._apply_image_rect()
 
     def set_depth_range_mm(self, total_depth_mm: float) -> None:
         self._depth_mm_per_pixel = total_depth_mm / max(self._num_samples, 1)
-        self._plot.setLabel("left", "Depth", units="mm")
+        self._apply_image_rect()
+
+    def _apply_image_rect(self) -> None:
+        """Scale ImageItem so axes show real physical units (mm / ms)."""
+        width_px = self._buffer_width
+        height_px = self._num_samples
+        # X: time axis
+        if self._time_ms_per_pixel is not None and self._time_ms_per_pixel > 0:
+            x_size = width_px * self._time_ms_per_pixel
+            self._plot.setLabel("bottom", "Time", units="ms")
+        else:
+            x_size = float(width_px)
+            self._plot.setLabel("bottom", "Time", units="px")
+        # Y: depth axis
+        if self._depth_mm_per_pixel is not None and self._depth_mm_per_pixel > 0:
+            y_size = height_px * self._depth_mm_per_pixel
+            self._plot.setLabel("left", "Depth", units="mm")
+        else:
+            y_size = float(height_px)
+            self._plot.setLabel("left", "Depth", units="px")
+        self._image_item.setRect(0, 0, x_size, y_size)
+        self._sweep_line.setPos(0)
+        self._view_box.setYRange(0, y_size)
+        self._view_box.setXRange(0, x_size)
