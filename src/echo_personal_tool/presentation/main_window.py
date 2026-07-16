@@ -872,18 +872,24 @@ class MainWindow(QMainWindow):
             cached_frames = self._controller.get_cached_frames() if hasattr(self._controller, 'get_cached_frames') else []
             if cached_frames:
                 self._mmode_widget.recalculate_from_frames(cached_frames, start, end)
-            # Apply B-mode calibration to M-mode depth axis
-            state = self._controller.state_manager.snapshot
-            spacing = state.effective_pixel_spacing
-            if spacing is None:
-                spacing = (0.1, 0.1)
-            import math
-            row_spacing_mm, col_spacing_mm = spacing[0], spacing[1]
-            dx = float(end[0]) - float(start[0])
-            dy = float(end[1]) - float(start[1])
-            depth_mm = math.sqrt((dx * col_spacing_mm) ** 2 + (dy * row_spacing_mm) ** 2)
+            # Apply calibration to M-mode depth axis
+            # Priority: M-mode specific calibration > B-mode pixel spacing > fallback
+            mmode_cal = self._viewer.get_mmode_calibration_state() if hasattr(self._viewer, 'get_mmode_calibration_state') else None
+            if mmode_cal is not None and mmode_cal.is_complete():
+                depth_mm = self._mmode_widget._num_samples * mmode_cal.vertical_mm_per_pixel
+            else:
+                state = self._controller.state_manager.snapshot
+                spacing = state.effective_pixel_spacing
+                if spacing is None:
+                    spacing = (0.1, 0.1)
+                import math
+                row_spacing_mm, col_spacing_mm = spacing[0], spacing[1]
+                dx = float(end[0]) - float(start[0])
+                dy = float(end[1]) - float(start[1])
+                depth_mm = math.sqrt((dx * col_spacing_mm) ** 2 + (dy * row_spacing_mm) ** 2)
             if depth_mm > 0:
                 self._mmode_widget.set_depth_range_mm(depth_mm)
+            state = self._controller.state_manager.snapshot
             if state.instance is not None and state.instance.frame_time_ms is not None and state.instance.frame_time_ms > 0:
                 self._mmode_widget.set_time_calibration_ms_per_pixel(state.instance.frame_time_ms)
             self._show_status(tr("status.mmode_line_placed"))
