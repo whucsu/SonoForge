@@ -318,6 +318,8 @@ class DicomSession:
         """Load raw pixel data bytes, avoiding a second pydicom parse when possible."""
         if self._pixel_data_raw is not None:
             return
+        if self._raw_bytes is None:
+            return
         extracted = _extract_pixel_data_from_bytes(self._raw_bytes)
         if extracted is not None:
             self._pixel_data_raw = extracted

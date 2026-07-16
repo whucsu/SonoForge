@@ -81,6 +81,7 @@ class MModeScanLineItem:
         self._line_item: pg.PlotDataItem | None = None
         self._start_node: _MModeNodeItem | None = None
         self._end_node: _MModeNodeItem | None = None
+        self._view: pg.ViewBox | None = None
 
     @property
     def is_complete(self) -> bool:
@@ -130,6 +131,7 @@ class MModeScanLineItem:
         self.add_to_view(view)
 
     def add_to_view(self, view: pg.ViewBox) -> None:
+        self._view = view
         if self._line_item is not None:
             view.addItem(self._line_item)
         if self._start_node is not None:
@@ -187,9 +189,10 @@ class MModeScanLineItem:
             )
 
     def _remove_graphics(self, view: pg.ViewBox | None = None) -> None:
+        v = view or self._view
         for item in (self._line_item, self._start_node, self._end_node):
-            if item is not None and view is not None:
-                view.removeItem(item)
+            if item is not None and v is not None:
+                v.removeItem(item)
         self._line_item = None
         self._start_node = None
         self._end_node = None
