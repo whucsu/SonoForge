@@ -184,16 +184,12 @@ class MModeMeasurementTool(QWidget):
 
         m = MModeMeasurement(kind=self._active_mode, start=start, end=end)
 
-        # Calculate values based on calibration
+        # Coordinates are already in physical units (mm/ms) because
+        # ImageItem.setRect() maps the ViewBox to physical dimensions.
         if self._active_mode in ("vertical", "arbitrary"):
-            dx = abs(end[0] - start[0])
-            dy = abs(end[1] - start[1])
-            if self._depth_mm_per_pixel is not None:
-                m.value_mm = dy * self._depth_mm_per_pixel
+            m.value_mm = abs(end[1] - start[1])
         if self._active_mode in ("horizontal", "arbitrary"):
-            dx = abs(end[0] - start[0])
-            if self._time_ms_per_pixel is not None:
-                m.value_ms = dx * self._time_ms_per_pixel
+            m.value_ms = abs(end[0] - start[0])
 
         self.measurements.append(m)
         item = MModeMeasurementItem(self._view_box)
