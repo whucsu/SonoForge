@@ -393,6 +393,14 @@ class MainWindow(QMainWindow):
         if self._mmode_widget is None:
             self._mmode_widget = MModeWidget()
             self._mmode_widget.deactivate_requested.connect(self._toggle_mmode)
+        # Find viewer's current position BEFORE reparenting
+        idx = self._content_splitter.indexOf(self._viewer)
+        if idx < 0:
+            for i in range(self._content_splitter.count()):
+                w = self._content_splitter.widget(i)
+                if isinstance(w, QSplitter) and w.indexOf(self._viewer) >= 0:
+                    idx = i
+                    break
         self._mmode_vertical_splitter = QSplitter(Qt.Orientation.Vertical)
         self._mmode_vertical_splitter.setHandleWidth(4)
         self._mmode_vertical_splitter.addWidget(self._viewer)
@@ -401,16 +409,6 @@ class MainWindow(QMainWindow):
         self._mmode_vertical_splitter.setStretchFactor(0, 1)
         self._mmode_vertical_splitter.setStretchFactor(1, 1)
 
-        # Find viewer's current position in content splitter
-        idx = self._content_splitter.indexOf(self._viewer)
-        if idx < 0:
-            # Viewer is not directly in content_splitter (e.g. already wrapped)
-            # Find the vertical splitter that contains the viewer
-            for i in range(self._content_splitter.count()):
-                w = self._content_splitter.widget(i)
-                if isinstance(w, QSplitter) and w.indexOf(self._viewer) >= 0:
-                    idx = i
-                    break
         if idx >= 0:
             self._content_splitter.insertWidget(idx, self._mmode_vertical_splitter)
             self._content_splitter.setStretchFactor(idx, 1)
