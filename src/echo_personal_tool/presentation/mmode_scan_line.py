@@ -217,6 +217,7 @@ class MModeScanLineItem:
         self._line_item = None
         self._start_node = None
         self._end_node = None
+        self._remove_guide_graphics()
 
     def _create_guide_graphics(self) -> None:
         """Create perpendicular guide lines for vertical lock mode."""
