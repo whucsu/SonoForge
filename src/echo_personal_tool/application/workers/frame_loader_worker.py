@@ -60,9 +60,15 @@ class FrameLoaderWorker(QRunnable):
                 self._run_batch()
             else:
                 self._run_single()
+        except RuntimeError:
+            # Signal receiver deleted during background work — safe to ignore.
+            pass
         except Exception as exc:  # noqa: BLE001
             logger.exception("FrameLoader failed for %s", self._path)
-            self.signals.failed.emit(str(exc))
+            try:
+                self.signals.failed.emit(str(exc))
+            except RuntimeError:
+                pass
         if _FREEZE_DIAG:
             _diag_log.warning(
                 "[loader] fmt=%s start=%d size=%d elapsed=%.1fms",
@@ -82,7 +88,10 @@ class FrameLoaderWorker(QRunnable):
             session.open(self._path)
             pixels = session.decode_single_frame(self._frame_index)
             session.release_heavy()
-        self.signals.finished.emit(np.ascontiguousarray(pixels))
+        try:
+            self.signals.finished.emit(np.ascontiguousarray(pixels))
+        except RuntimeError:
+            pass
 
     def _run_batch(self) -> None:
         end = min(self._frame_index + self._batch_size, self._total_frames)
@@ -105,4 +114,7 @@ class FrameLoaderWorker(QRunnable):
                 results.append((i, np.ascontiguousarray(pixels)))
             session.release_heavy()
 
-        self.signals.batch_finished.emit(results)
+        try:
+            self.signals.batch_finished.emit(results)
+        except RuntimeError:
+            pass
