@@ -1,4 +1,4 @@
-"""Smart M-mode smoothing: log compression, spatial Gaussian, temporal EMA."""
+"""Smart M-mode smoothing: contrast enhancement, spatial Gaussian, temporal EMA."""
 
 from __future__ import annotations
 
@@ -6,17 +6,26 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
 
-def log_compress(column: np.ndarray) -> np.ndarray:
-    """Logarithmic compression like real ultrasound machines.
+def enhance_contrast(column: np.ndarray, clip_pct: float = 1.0) -> np.ndarray:
+    """Percentile-based contrast stretching.
 
-    Maps wide dynamic range to perceptual brightness scale.
+    Maps [p_low, p_high] → [0, 255], clipping outliers.
+    Preserves original brightness relationships while maximizing contrast.
     """
     f32 = column.astype(np.float32)
-    return np.log1p(f32) * (255.0 / np.log1p(255.0))
+    p_low = np.percentile(f32, clip_pct)
+    p_high = np.percentile(f32, 100.0 - clip_pct)
+    if p_high - p_low < 1.0:
+        return column
+    stretched = (f32 - p_low) / (p_high - p_low) * 255.0
+    return np.clip(stretched, 0, 255).astype(np.uint8)
 
 
-def spatial_smooth(column: np.ndarray, sigma: float = 1.5) -> np.ndarray:
-    """1D Gaussian smoothing along depth (axis=0) to remove pixel jaggedness."""
+def spatial_smooth(column: np.ndarray, sigma: float = 0.8) -> np.ndarray:
+    """1D Gaussian smoothing along depth (axis=0) to remove pixel jaggedness.
+
+    Small sigma preserves edges while removing single-pixel noise.
+    """
     return gaussian_filter1d(column.astype(np.float32), sigma=sigma, axis=0, mode="nearest")
 
 
