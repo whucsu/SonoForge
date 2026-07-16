@@ -94,7 +94,7 @@ class MModeWidget(QWidget):
         )
         self._sweep_x = 0
         self._image_item.setImage(self._image_buffer, autoLevels=True)
-        self._sweep_line.setValue(0)
+        self._apply_image_rect()
         self.sweep_speed_changed.emit(new_width)
 
     def set_scan_line(
