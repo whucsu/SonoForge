@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+import pytest
+import pyqtgraph as pg
+
+from echo_personal_tool.presentation.mmode_scan_line import MModeScanLineItem
+
+
+def test_vertical_lock_default_false():
+    item = MModeScanLineItem(viewer_widget=None)
+    assert item.vertical_lock is False
+
+
+def test_vertical_lock_can_set():
+    item = MModeScanLineItem(viewer_widget=None)
+    item.vertical_lock = True
+    assert item.vertical_lock is True
+
+
+def test_guide_items_default_none():
+    item = MModeScanLineItem(viewer_widget=None)
+    assert item._guide_h is None
+    assert item._guide_v is None
+
+
+def test_guide_graphics_created():
+    item = MModeScanLineItem(viewer_widget=None)
+    item._create_guide_graphics()
+    assert item._guide_h is not None
+    assert item._guide_v is not None
+    assert isinstance(item._guide_h, pg.PlotDataItem)
+    assert isinstance(item._guide_v, pg.PlotDataItem)
+
+
+def test_guide_graphics_removed():
+    item = MModeScanLineItem(viewer_widget=None)
+    item._create_guide_graphics()
+    item._remove_guide_graphics()
+    assert item._guide_h is None
+    assert item._guide_v is None
+
+
+def test_guide_graphics_created_on_set_end_with_vertical_lock():
+    item = MModeScanLineItem(viewer_widget=None)
+    item.vertical_lock = True
+    item.set_start((10.0, 20.0))
+    item.set_end((100.0, 200.0))
+    assert item._guide_h is not None
+    assert item._guide_v is not None

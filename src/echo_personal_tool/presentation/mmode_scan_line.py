@@ -54,8 +54,16 @@ class _MModeNodeItem(pg.ScatterPlotItem):
             view_box = self.getViewBox()
             if view_box is not None:
                 pos = view_box.mapSceneToView(ev.scenePos())
+                new_pos = (float(pos.x()), float(pos.y()))
+                if self._viewer_widget._mmode_line_item is not None and \
+                   self._viewer_widget._mmode_line_item.vertical_lock:
+                    original = self._viewer_widget._mmode_line_item.line_start \
+                        if self._endpoint_index == 0 \
+                        else self._viewer_widget._mmode_line_item.line_end
+                    if original is not None:
+                        new_pos = (original[0], new_pos[1])
                 self._viewer_widget._mmode_node_dragging(
-                    self._endpoint_index, (float(pos.x()), float(pos.y()))
+                    self._endpoint_index, new_pos
                 )
 
     def mouseReleaseEvent(self, ev) -> None:  # type: ignore[override]
@@ -82,6 +90,9 @@ class MModeScanLineItem:
         self._start_node: _MModeNodeItem | None = None
         self._end_node: _MModeNodeItem | None = None
         self._view: pg.ViewBox | None = None
+        self.vertical_lock: bool = False
+        self._guide_h: pg.PlotDataItem | None = None
+        self._guide_v: pg.PlotDataItem | None = None
 
     @property
     def is_complete(self) -> bool:
@@ -112,6 +123,7 @@ class MModeScanLineItem:
         self.line_start = None
         self.line_end = None
         self._remove_graphics()
+        self._remove_guide_graphics()
 
     def update_preview(self, mouse_pos: tuple[float, float]) -> None:
         if self.line_start is not None:
@@ -153,6 +165,8 @@ class MModeScanLineItem:
         self._end_node = _MModeNodeItem(self._viewer_widget, 1, view_end)
         self._sync_line_data_view(view_start, view_end)
         self.add_to_view(view)
+        if self.vertical_lock:
+            self._create_guide_graphics()
 
     def _sync_line_data_view(self, view_start: tuple[float, float], view_end: tuple[float, float]) -> None:
         if self._line_item is not None:
@@ -172,6 +186,8 @@ class MModeScanLineItem:
         self._start_node = _MModeNodeItem(self._viewer_widget, 0, self.line_start)
         self._end_node = _MModeNodeItem(self._viewer_widget, 1, self.line_end)
         self._sync_line_data()
+        if self.vertical_lock:
+            self._create_guide_graphics()
 
     def _update_graphics(self) -> None:
         if self._line_item is not None and self.line_start is not None and self.line_end is not None:
@@ -180,6 +196,11 @@ class MModeScanLineItem:
             self._start_node.setData([self.line_start[0]], [self.line_start[1]])
         if self._end_node is not None and self.line_end is not None:
             self._end_node.setData([self.line_end[0]], [self.line_end[1]])
+        if self.vertical_lock and self._view is not None and self.line_end is not None:
+            h = self._viewer_widget._current_frame.shape[0] \
+                if self._viewer_widget is not None \
+                and self._viewer_widget._current_frame is not None else 1.0
+            self._update_guides(self.line_end, h)
 
     def _sync_line_data(self) -> None:
         if self._line_item is not None and self.line_start is not None and self.line_end is not None:
@@ -196,3 +217,32 @@ class MModeScanLineItem:
         self._line_item = None
         self._start_node = None
         self._end_node = None
+
+    def _create_guide_graphics(self) -> None:
+        """Create perpendicular guide lines for vertical lock mode."""
+        pen = pg.mkPen("#9e9e9e", width=1, style=Qt.PenStyle.DashLine)
+        self._guide_h = pg.PlotDataItem(pen=pen, antialias=True)
+        self._guide_h.setZValue(23)
+        self._guide_v = pg.PlotDataItem(pen=pen, antialias=True)
+        self._guide_v.setZValue(23)
+
+    def _remove_guide_graphics(self) -> None:
+        """Remove guide lines."""
+        v = self._view
+        for item in (self._guide_h, self._guide_v):
+            if item is not None and v is not None:
+                v.removeItem(item)
+        self._guide_h = None
+        self._guide_v = None
+
+    def _update_guides(self, pos: tuple[float, float], frame_height: float) -> None:
+        """Update perpendicular guides at given position (image coords)."""
+        if self._guide_h is None or self._guide_v is None or self._view is None:
+            return
+        view_y = frame_height - pos[1]
+        self._guide_h.setData([0, self._view.width()], [view_y, view_y])
+        self._guide_v.setData([pos[0], pos[0]], [0, frame_height])
+        if self._guide_h not in self._view.addedItems:
+            self._view.addItem(self._guide_h)
+        if self._guide_v not in self._view.addedItems:
+            self._view.addItem(self._guide_v)
