@@ -124,6 +124,10 @@ class MModeMeasurementItem:
             parts.append(f"{m.value_mm:.1f} mm")
         if m.value_ms is not None:
             parts.append(f"{m.value_ms:.1f} ms")
+            # Heart rate from interval
+            if m.value_ms > 0:
+                hr = 60000.0 / m.value_ms
+                parts.append(f"ЧСС {hr:.0f}")
         text = "  ".join(parts)
         mid_x = (sx + ex) / 2
         mid_y = (sy + ey) / 2
