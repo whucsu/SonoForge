@@ -873,18 +873,29 @@ class MainWindow(QMainWindow):
             if cached_frames:
                 self._mmode_widget.recalculate_from_frames(cached_frames, start, end)
             # Apply calibration to M-mode depth axis
-            # Priority: M-mode specific calibration > B-mode pixel spacing > fallback
+            # Priority: M-mode specific calibration > depth ticks > B-mode pixel spacing > fallback
+            depth_mm = 0.0
             mmode_cal = self._viewer.get_mmode_calibration_state() if hasattr(self._viewer, 'get_mmode_calibration_state') else None
             if mmode_cal is not None and mmode_cal.is_complete():
                 depth_mm = self._mmode_widget._num_samples * mmode_cal.vertical_mm_per_pixel
             else:
-                state = self._controller.state_manager.snapshot
-                spacing = state.effective_pixel_spacing
-                if spacing is None:
-                    spacing = (0.1, 0.1)
-                row_spacing_mm = spacing[0]
-                dy = abs(float(end[1]) - float(start[1]))
-                depth_mm = dy * row_spacing_mm
+                # Try depth ticks: assume 5 cm between consecutive ticks
+                ticks = self._viewer._depth_tick_y_positions if hasattr(self._viewer, '_depth_tick_y_positions') else []
+                if len(ticks) >= 2:
+                    tick_spacing_px = abs(ticks[1] - ticks[0])
+                    if tick_spacing_px > 0:
+                        mm_per_pixel = 50.0 / tick_spacing_px  # 5 cm = 50 mm between ticks
+                        dy = abs(float(end[1]) - float(start[1]))
+                        depth_mm = dy * mm_per_pixel
+                # Fallback to DICOM pixel spacing
+                if depth_mm <= 0:
+                    state = self._controller.state_manager.snapshot
+                    spacing = state.effective_pixel_spacing
+                    if spacing is None:
+                        spacing = (0.1, 0.1)
+                    row_spacing_mm = spacing[0]
+                    dy = abs(float(end[1]) - float(start[1]))
+                    depth_mm = dy * row_spacing_mm
             if depth_mm > 0:
                 self._mmode_widget.set_depth_range_mm(depth_mm)
             state = self._controller.state_manager.snapshot
