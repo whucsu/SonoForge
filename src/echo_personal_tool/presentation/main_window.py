@@ -430,9 +430,18 @@ class MainWindow(QMainWindow):
             self._content_splitter.insertWidget(idx, self._viewer)
         elif self._content_splitter.indexOf(self._viewer) < 0:
             self._content_splitter.insertWidget(0, self._viewer)
-        self._content_splitter.setStretchFactor(0, 1)
+        # Ensure tool_panel is in the splitter
+        if self._content_splitter.indexOf(self._tool_panel) < 0:
+            self._content_splitter.addWidget(self._tool_panel)
+        self._content_splitter.setStretchFactor(
+            self._content_splitter.indexOf(self._viewer), 1,
+        )
+        self._content_splitter.setStretchFactor(
+            self._content_splitter.indexOf(self._tool_panel), 0,
+        )
         self._content_splitter.setSizes([800, _TOOL_PANEL_WIDTH])
         self._viewer.show()
+        self._tool_panel.show()
 
     def _toggle_maximize(self) -> None:
         if self.isMaximized():
