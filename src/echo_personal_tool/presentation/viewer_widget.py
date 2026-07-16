@@ -2237,6 +2237,9 @@ class ViewerWidget(QWidget):
             self._mmode_line_item.move_end_to(img_pos)
         # Update graphics in view coords
         self._mmode_line_item.update_graphics_for_view(self._view, h)
+        # Update guides
+        if self._mmode_vertical_lock and self._mmode_line_item._guide_h is not None:
+            self._mmode_line_item._update_guides(img_pos, h)
         self.mmode_line_completed.emit(*self._mmode_line_item.get_endpoints())
 
     def _end_mmode_node_drag(self, endpoint_index: int) -> None:

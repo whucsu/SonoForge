@@ -167,6 +167,8 @@ class MModeScanLineItem:
         self.add_to_view(view)
         if self.vertical_lock:
             self._create_guide_graphics()
+            if self._guide_h is not None and self._guide_v is not None:
+                self._update_guides(self.line_end, frame_height)
 
     def _sync_line_data_view(self, view_start: tuple[float, float], view_end: tuple[float, float]) -> None:
         if self._line_item is not None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 import pyqtgraph as pg
 
@@ -84,3 +86,18 @@ def test_viewer_widget_set_mmode_vertical_lock_no_item():
     viewer._mmode_line_item = None
     viewer.set_mmode_vertical_lock(True)
     assert viewer._mmode_vertical_lock is True
+
+
+def test_guides_visible_during_drag():
+    item = MModeScanLineItem(viewer_widget=None)
+    item.vertical_lock = True
+    # Mock view
+    item._view = MagicMock()
+    item._view.width.return_value = 800
+    item._guide_h = MagicMock()
+    item._guide_v = MagicMock()
+    # Simulate drag update
+    item.line_end = (100.0, 200.0)
+    item._update_guides((100.0, 200.0), 600.0)
+    item._guide_h.setData.assert_called_once()
+    item._guide_v.setData.assert_called_once()
