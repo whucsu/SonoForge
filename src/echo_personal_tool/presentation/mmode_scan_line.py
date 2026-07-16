@@ -125,6 +125,28 @@ class MModeScanLineItem:
         if self._end_node is not None:
             view.addItem(self._end_node)
 
+    def update_graphics_for_view(self, view: pg.ViewBox, frame_height: float) -> None:
+        """Convert image coords to view coords (invertY) and update graphics."""
+        if self.line_start is None or self.line_end is None:
+            return
+        view_start = (self.line_start[0], frame_height - self.line_start[1])
+        view_end = (self.line_end[0], frame_height - self.line_end[1])
+        self._remove_graphics()
+        pen = pg.mkPen(color="cyan", style=Qt.PenStyle.DashLine, width=1.5)
+        self._line_item = pg.PlotDataItem(pen=pen, antialias=True)
+        self._line_item.setZValue(24)
+        self._start_node = _MModeNodeItem(self._viewer_widget, 0, view_start)
+        self._end_node = _MModeNodeItem(self._viewer_widget, 1, view_end)
+        self._sync_line_data_view(view_start, view_end)
+        self.add_to_view(view)
+
+    def _sync_line_data_view(self, view_start: tuple[float, float], view_end: tuple[float, float]) -> None:
+        if self._line_item is not None:
+            self._line_item.setData(
+                [view_start[0], view_end[0]],
+                [view_start[1], view_end[1]],
+            )
+
     def remove_from_view(self, view: pg.ViewBox) -> None:
         self._remove_graphics(view)
 

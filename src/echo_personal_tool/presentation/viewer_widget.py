@@ -1532,8 +1532,11 @@ class ViewerWidget(QWidget):
                 and self._mmode_line_item.is_complete
             ):
                 start, end = self._mmode_line_item.get_endpoints()
-                # Coordinates are already in image space (converted at click time)
-                col = extract_mmode_column(self._current_frame, start, end, num_samples=256)
+                # Convert view coords (invertY=True) to image coords (Y=0 at top)
+                h = self._current_frame.shape[0]
+                start_img = (start[0], h - start[1])
+                end_img = (end[0], h - end[1])
+                col = extract_mmode_column(self._current_frame, start_img, end_img, num_samples=256)
                 frame_idx = self._current_state.current_frame_index if self._current_state else 0
                 self.mmode_column_ready.emit(col, frame_idx)
         self._update_debug_overlay()
@@ -1651,8 +1654,11 @@ class ViewerWidget(QWidget):
             and self._mmode_line_item.is_complete
         ):
             start, end = self._mmode_line_item.get_endpoints()
-            # Coordinates are already in image space (converted at click time)
-            col = extract_mmode_column(self._current_frame, start, end, num_samples=256)
+            # Convert view coords (invertY=True) to image coords (Y=0 at top)
+            h = self._current_frame.shape[0]
+            start_img = (start[0], h - start[1])
+            end_img = (end[0], h - end[1])
+            col = extract_mmode_column(self._current_frame, start_img, end_img, num_samples=256)
             frame_idx = self._current_state.current_frame_index if self._current_state else 0
             self.mmode_column_ready.emit(col, frame_idx)
 
@@ -2162,7 +2168,7 @@ class ViewerWidget(QWidget):
     def _handle_mmode_line_click(self, x: float, y: float) -> bool:
         if not self._mmode_line_active or self._mmode_line_item is None:
             return False
-        # Convert view coordinates (invertY=True) to image coordinates (Y=0 at top)
+        # Convert view coords (invertY=True) to image coords (Y=0 at top) for storage
         h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
         img_y = h - y
         if self._mmode_line_click_step == "start":
@@ -2171,7 +2177,7 @@ class ViewerWidget(QWidget):
             return True
         elif self._mmode_line_click_step == "end":
             self._mmode_line_item.set_end((x, img_y))
-            self._mmode_line_item.add_to_view(self._view)
+            self._mmode_line_item.update_graphics_for_view(self._view, h)
             self._mmode_line_active = False
             self._mmode_line_click_step = None
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -2185,10 +2191,15 @@ class ViewerWidget(QWidget):
     def _mmode_node_dragging(self, endpoint_index: int, pos: tuple[float, float]) -> None:
         if self._mmode_line_item is None:
             return
+        # Convert view coords to image coords
+        h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
+        img_pos = (pos[0], h - pos[1])
         if endpoint_index == 0:
-            self._mmode_line_item.move_start_to(pos)
+            self._mmode_line_item.move_start_to(img_pos)
         else:
-            self._mmode_line_item.move_end_to(pos)
+            self._mmode_line_item.move_end_to(img_pos)
+        # Update graphics in view coords
+        self._mmode_line_item.update_graphics_for_view(self._view, h)
         self.mmode_line_completed.emit(*self._mmode_line_item.get_endpoints())
 
     def _end_mmode_node_drag(self, endpoint_index: int) -> None:
