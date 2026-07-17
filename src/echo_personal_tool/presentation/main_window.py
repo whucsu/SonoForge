@@ -1117,6 +1117,8 @@ class MainWindow(QMainWindow):
             self._viewer.cancel_mmode_line()
             if self._mmode_widget is not None:
                 self._mmode_widget.clear_buffer()
+            # Restart M-mode line placement for new file
+            self._viewer.start_mmode_line()
 
         label = _loaded_file_label(selected)
         self._system_bar.set_study_context(label)
