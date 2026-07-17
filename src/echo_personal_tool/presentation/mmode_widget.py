@@ -15,8 +15,8 @@ from echo_personal_tool.presentation.mmode_measurement import MModeMeasurementTo
 
 _SWEEP_SPEEDS: dict[str, int] = {
     "25 mm/s": 128,
+    "37.5 mm/s": 192,
     "50 mm/s": 256,
-    "100 mm/s": 512,
 }
 
 
