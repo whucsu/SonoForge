@@ -414,16 +414,9 @@ class MainWindow(QMainWindow):
             self._content_splitter.setStretchFactor(idx, 1)
         self._mmode_vertical_splitter.show()
 
-        # Redirect WL/DR sliders to M-mode when active
-        self._viewer.set_mmode_wl_callback(self._mmode_widget.set_wl_dr)
-        # Enable post-processing when video is stopped
-        self._mmode_widget.set_post_process_enabled(True)
-
     def _deactivate_mmode(self) -> None:
         if self._mmode_vertical_splitter is None:
             return
-        # Clear WL/DR callback
-        self._viewer.set_mmode_wl_callback(None)
         # Find the vertical splitter position in content_splitter
         idx = self._content_splitter.indexOf(self._mmode_vertical_splitter)
         # Remove viewer from vertical splitter (reparent to content_widget)
@@ -1325,9 +1318,6 @@ class MainWindow(QMainWindow):
     def _on_state_changed(self, state: object) -> None:
         if not isinstance(state, ViewerState):
             return
-        # Update post-processing based on playback state
-        if self._mmode_widget is not None:
-            self._mmode_widget.set_post_process_enabled(not state.is_playing)
         instance_uid = state.instance.sop_instance_uid if state.instance else None
         instance_changed = instance_uid != self._overlay_sync_instance_uid
         content_changed = False

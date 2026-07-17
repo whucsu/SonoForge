@@ -38,7 +38,6 @@ class MModeWidget(QWidget):
         self._time_ms_per_pixel: float | None = None
         self._depth_mm_per_pixel: float | None = None
         self._previous_column: np.ndarray | None = None
-        self._post_process_enabled: bool = False
 
         self._image_buffer = np.zeros(
             (self._num_samples, self._buffer_width), dtype=np.uint8
@@ -203,12 +202,11 @@ class MModeWidget(QWidget):
     def on_new_column(self, column: np.ndarray) -> None:
         n = min(column.shape[0], self._num_samples)
         col = column[:n]
-        # Post-processing only when video is stopped/frozen
-        if self._post_process_enabled:
-            col = enhance_contrast(col, clip_pct=1.0)
-            col = adjust_brightness(col, shift=-15)
-            col = gamma_correct(col, gamma=1.3)
-            col = spatial_smooth(col, sigma=1.0)
+        # Post-processing pipeline: contrast → brightness → gamma → spatial → temporal
+        col = enhance_contrast(col, clip_pct=1.0)
+        col = adjust_brightness(col, shift=-15)
+        col = gamma_correct(col, gamma=1.3)
+        col = spatial_smooth(col, sigma=1.0)
         col = temporal_smooth(col, self._previous_column, alpha=0.3)
         self._previous_column = col.copy()
         self._image_buffer[:n, self._sweep_x] = col.astype(np.uint8)
@@ -255,24 +253,6 @@ class MModeWidget(QWidget):
     def set_depth_range_mm(self, total_depth_mm: float) -> None:
         self._depth_mm_per_pixel = total_depth_mm / max(self._num_samples, 1)
         self._apply_image_rect()
-
-    def set_wl_dr(self, window: int, level: int, dr: int) -> None:
-        """Apply window/level/DR to M-mode image display."""
-        if self._image_buffer is None:
-            return
-        from echo_personal_tool.infrastructure.pixel_utils import apply_wl_lut
-        display = apply_wl_lut(
-            self._image_buffer,
-            dr_low_pct=dr_percentiles_from_slider(dr)[0],
-            dr_high_pct=dr_percentiles_from_slider(dr)[1],
-            window_scale=window / 100.0,
-            level_offset=(level - 50) / 50.0,
-        )
-        self._image_item.setImage(display, autoLevels=False)
-
-    def set_post_process_enabled(self, enabled: bool) -> None:
-        """Enable/disable post-processing pipeline (brightness, gamma, smoothing)."""
-        self._post_process_enabled = enabled
 
     def _apply_image_rect(self) -> None:
         """Scale ImageItem so axes show real physical units (mm / ms)."""

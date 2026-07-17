@@ -649,7 +649,6 @@ class ViewerWidget(QWidget):
         self._mmode_line_item: MModeScanLineItem | None = None
         self._mmode_line_click_step: Literal["start", "end"] | None = None
         self._mmode_vertical_lock: bool = False
-        self._mmode_wl_callback = None
         self._vertical_caliper_labels = frozenset({"TAPSE"})
         self._current_frame: np.ndarray | None = None
         self._current_state: ViewerState | None = None
@@ -2212,10 +2211,6 @@ class ViewerWidget(QWidget):
         self._mmode_vertical_lock = enabled
         if self._mmode_line_item is not None:
             self._mmode_line_item.vertical_lock = enabled
-
-    def set_mmode_wl_callback(self, callback) -> None:
-        """Set callback for window/level/DR changes when M-mode is active."""
-        self._mmode_wl_callback = callback
 
     def _begin_mmode_node_drag(self, endpoint_index: int) -> None:
         pass
@@ -5197,13 +5192,6 @@ class ViewerWidget(QWidget):
 
     @_prof
     def _update_levels(self) -> None:
-        # When M-mode is active, also update M-mode display
-        if self._mmode_line_active and self._mmode_wl_callback is not None:
-            self._mmode_wl_callback(
-                self._window_slider.value(),
-                self._level_slider.value(),
-                self._dr_slider.value(),
-            )
         if self._current_frame is None or not self._window_level_enabled:
             return
         frame = np.asarray(self._current_frame)
