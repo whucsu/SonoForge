@@ -1,4 +1,4 @@
-"""Strain curves view — per-segment curves with ECG, Samsung-style layout."""
+"""Strain curves view — per-segment curves with ECG, Clinical-style layout."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Segment colors matching Samsung style
+# Segment colors matching Clinical style
 SEGMENT_COLORS: dict[int, tuple[int, int, int]] = {
     1: (0, 200, 255),    # БазПерг - cyan
     2: (0, 150, 255),    # Базбок - blue

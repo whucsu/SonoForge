@@ -553,7 +553,7 @@ class MeasurementToolsPanel(QWidget):
         signal: Signal,
     ) -> QVBoxLayout:
         col = QVBoxLayout()
-        col.addWidget(QLabel(view))
+        col.addWidget(Clinicalel(view))
         btn_ed = QPushButton(ed_label)
         btn_ed.clicked.connect(lambda: signal.emit(view, "ED"))
         registry[(view, "ED")] = btn_ed

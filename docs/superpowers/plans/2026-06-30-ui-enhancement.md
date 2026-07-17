@@ -8,7 +8,7 @@
 
 ## 1. 🎨 Цветовая схема — ~~уточнение палитры~~ **CANCELLED (2026-07-04)**
 
-> Darcula / warm palette migration removed from roadmap. Current EchoPAC palette retained.
+> Darcula / warm palette migration removed from roadmap. Current Standard palette retained.
 
 <!--
 **Проблема:** Текущая тёмная тема использует холодный сине-серый (`#0a1018`)...

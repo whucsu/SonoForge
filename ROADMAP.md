@@ -61,11 +61,11 @@
 
 - [x] Stepped border refine + edge snap для ai/manual
 - [x] Lamé template только для `source=model` LV
-- [ ] AI validation gate ±3% LVEF vs EchoPAC (не release gate v1)
+- [ ] AI validation gate ±3% LVEF vs Standard (не release gate v1)
 
 ---
 
-## EchoPac UI и отчёты
+## Clinical UI и отчёты
 
 - [x] SystemBar, Measures accordion, ToolPanel (Controls)
 - [x] Нормативы ASE (`ase_reference_dialog`)

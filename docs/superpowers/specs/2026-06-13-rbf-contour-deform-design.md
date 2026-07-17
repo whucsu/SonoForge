@@ -2,12 +2,12 @@
 
 **Date:** 2026-06-13  
 **Status:** Approved  
-**Reference:** `B-plane-IDW-⁄RBF.md` (QLAB Philips–style editing)  
+**Reference:** `B-plane-IDW-⁄RBF.md` (Clinical Philips–style editing)  
 **Predecessor:** [2026-06-13-mbs-advanced-design.md](./2026-06-13-mbs-advanced-design.md)
 
 ## Goal
 
-Replace index-based local node drag (`drag_node_local`) with **Gaussian RBF weighted displacement** from cursor position. Nodes remain visible and are the only drag handles (variant C). Behavior targets QLAB Philips soft-brush contour editing.
+Replace index-based local node drag (`drag_node_local`) with **Gaussian RBF weighted displacement** from cursor position. Nodes remain visible and are the only drag handles (variant C). Behavior targets Clinical Philips soft-brush contour editing.
 
 ## Decisions (approved)
 
@@ -15,7 +15,7 @@ Replace index-based local node drag (`drag_node_local`) with **Gaussian RBF weig
 |-------|--------|
 | Interaction | **C** — visible nodes; drag starts on node; weights from cursor only |
 | Open-arc MA endpoints | **A** — pinned (`w = 0`); interior nodes only |
-| Weight kernel | **Gaussian RBF** (QLAB-like soft brush; not IDW in v1) |
+| Weight kernel | **Gaussian RBF** (Clinical-like soft brush; not IDW in v1) |
 | σ (influence radius) | **C** — zoom-adaptive: constant screen brush, σ in image px |
 | Contour scope | **C** — all contours (open-arc LV/MBS + closed LA/AI/manual) |
 | Visual feedback | **A** — highlight nodes with `w_i > 0.1` during drag |

@@ -70,7 +70,7 @@ class SpeckleConfig:
     closure_error_threshold: float = 0.5
 
     @classmethod
-    def preset_echo_pac(cls) -> SpeckleConfig:
+    def preset_standard(cls) -> SpeckleConfig:
         return cls(
             kernel_size=12,
             search_radius=8,
@@ -82,7 +82,7 @@ class SpeckleConfig:
         )
 
     @classmethod
-    def preset_tomtec(cls) -> SpeckleConfig:
+    def preset_research(cls) -> SpeckleConfig:
         return cls(
             kernel_size=18,
             search_radius=18,
@@ -132,7 +132,7 @@ class StrainResult:
     drift_compensation_applied: bool = False
     tracking_quality_mean: float = 0.0
     cycle_count: int = 1
-    config_preset: str = "echo_pac"
+    config_preset: str = "standard"
     tracking_window_start: int = 0
     tracking_window_end: int = 0
     ncc_threshold: float = 0.3

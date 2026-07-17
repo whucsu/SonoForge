@@ -57,7 +57,7 @@ from echo_personal_tool.infrastructure.user_preferences import (
     save_user_preferences,
 )
 from echo_personal_tool.presentation.ase_reference_dialog import show_ase_reference_dialog
-from echo_personal_tool.presentation.echopac_theme import apply_echopac_theme
+from echo_personal_tool.presentation.dark_theme import apply_clinical_theme
 from echo_personal_tool.presentation.measurement_action import MeasurementAction
 from echo_personal_tool.presentation.measurement_results_dialog import MeasurementResultsDialog
 from echo_personal_tool.presentation.orthanc_study_dialog import OrthancStudyDialog
@@ -114,7 +114,7 @@ def apply_maximized_to_work_area(window: QMainWindow) -> None:
 
 
 class MainWindow(QMainWindow):
-    """EchoPac-style layout: thumbnails | viewer | tool panel."""
+    """Clinical-style layout: thumbnails | viewer | tool panel."""
 
     @property
     def _browser(self):
@@ -170,7 +170,7 @@ class MainWindow(QMainWindow):
         self._controller.frame_load_failed.connect(self._on_frame_load_failed)
         self._controller.scroll_settled.connect(self._on_scroll_settled)
         self._controller.status_message.connect(self._show_status)
-        apply_echopac_theme(
+        apply_clinical_theme(
             font_size=self._user_preferences.ui_font_size,
             theme=self._user_preferences.theme_mode,
         )
@@ -812,7 +812,7 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             app.setFont(ui_font(point_size=preferences.ui_font_size))
-        apply_echopac_theme(
+        apply_clinical_theme(
             font_size=preferences.ui_font_size,
             theme=preferences.theme_mode,
         )
@@ -1910,8 +1910,8 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _format_speckle_preset_name(preset_name: str) -> str:
         mapping = {
-            "echo_pac": "EchoPAC",
-            "tomtec": "TomTec",
+            "standard": "Standard",
+            "research": "Research",
             "debug": "Debug",
         }
         return mapping.get(preset_name, preset_name)

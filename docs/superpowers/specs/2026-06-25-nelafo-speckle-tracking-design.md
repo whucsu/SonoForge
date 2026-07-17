@@ -324,7 +324,7 @@ A small MLP branch from the last Fourier layer outputs:
 
 | Method | Notes |
 |--------|-------|
-| Clinical STE (EchoPAC/AF GA) | Gold standard |
+| Clinical STE (Standard/AF GA) | Gold standard |
 | NeuralCMF | INR-based, closest DL competitor |
 | EchoTracker | Point-tracking-based |
 | Block-matching (NCC, 31×31) | Classic baseline |

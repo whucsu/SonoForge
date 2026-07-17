@@ -19,7 +19,7 @@ Reliable **LV endocardial segmentation** and **automatic LVEF** (Simpson monopla
 
 ## Success gates (Tier-1 bench, ≥50 DICOM studies)
 
-Gold reference = **expert contours + MA** on selected ED/ES frames; LVEF_gold computed with **same** `lvef_simpson` monoplane A4C in-app. EchoPAC comparison optional later (`echopac_lvef` field); **not required** for release gate.
+Gold reference = **expert contours + MA** on selected ED/ES frames; LVEF_gold computed with **same** `lvef_simpson` monoplane A4C in-app. Standard comparison optional later (`echopac_lvef` field); **not required** for release gate.
 
 | Gate | Metric | Release target | Stretch |
 |------|--------|----------------|---------|
@@ -63,7 +63,7 @@ Gold reference = **expert contours + MA** on selected ED/ES frames; LVEF_gold co
 | LA / RA auto segmentation | v2.1+ |
 | STE as required path to LVEF | Per-frame must work first |
 | Temporal fusion default-on | Off until Gate A met; v1.6 remains flag |
-| EchoPAC import / SR parsing | Optional manifest field only |
+| Standard import / SR parsing | Optional manifest field only |
 | int8 ONNX / TTA ensemble | After fp32 gates pass |
 | A2C auto model | Separate spec |
 | Full ED→ES tracking | Future |
@@ -402,7 +402,7 @@ python scripts/run_lv_auto_bench.py --manifest bench/tier1/manifest.yaml --repor
 | 224 model slower | Accept for accuracy; int8 later |
 | Sector trim clips apex | Apex guard + A/B on Tier-1 |
 | Fine-tune overfits 50 studies | Strong aug + frozen backbone + hold-out 10 studies |
-| No EchoPAC | Gold Simpson LVEF is primary gate; EchoPAC optional later |
+| No Standard | Gold Simpson LVEF is primary gate; Standard optional later |
 
 ---
 

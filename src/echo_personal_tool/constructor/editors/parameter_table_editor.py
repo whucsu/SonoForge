@@ -28,7 +28,7 @@ from echo_personal_tool.constructor.models import (
     ParameterModel,
     PathologyModel,
 )
-from echo_personal_tool.presentation.echopac_theme import get_theme_palette
+from echo_personal_tool.presentation.dark_theme import get_theme_palette
 
 
 class ParameterTableEditor(BaseEditor):

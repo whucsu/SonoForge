@@ -1,4 +1,4 @@
-"""GE EchoPac-inspired themes for the presentation layer."""
+"""Dark clinical theme for the presentation layer."""
 
 from __future__ import annotations
 
@@ -197,7 +197,7 @@ def _resolve_theme(mode: str) -> dict[str, str]:
     return _DARK
 
 
-def build_echopac_stylesheet(font_size: int = 13, *, theme: str = "dark") -> str:
+def build_clinical_stylesheet(font_size: int = 13, *, theme: str = "dark") -> str:
     p = _resolve_theme(theme)
     return f"""
 /* ── Global ──────────────────────────────────────────────────── */
@@ -645,7 +645,7 @@ QHeaderView::section:hover {{
 """
 
 
-def apply_echopac_theme(
+def apply_clinical_theme(
     widget: QWidget | None = None,
     *,
     font_size: int = 13,
@@ -670,7 +670,7 @@ def _apply_theme_direct(
     font_size: int,
     theme: str,
 ) -> None:
-    app.setStyleSheet(build_echopac_stylesheet(font_size, theme=theme))
+    app.setStyleSheet(build_clinical_stylesheet(font_size, theme=theme))
     p = _resolve_theme(theme)
     palette = QPalette()
     palette.setColor(QPalette.ColorRole.Window, QColor(p["bg_panel"]))

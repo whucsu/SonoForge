@@ -1,4 +1,4 @@
-"""GE-style 2-column thumbnail gallery (index, cine, DICOM badges)."""
+"""Clinical-style 2-column thumbnail gallery (index, cine, DICOM badges)."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from echo_personal_tool.application.thumbnail_scheduler import ThumbnailPriority
 from echo_personal_tool.domain.models import InstanceMetadata, StudyMetadata
 from echo_personal_tool.infrastructure.i18n import tr
-from echo_personal_tool.presentation.echopac_theme import ACCENT_BRIGHT, BG_DARK, TEXT
+from echo_personal_tool.presentation.dark_theme import ACCENT_BRIGHT, BG_DARK, TEXT
 
 _ITEM_ROLE = Qt.ItemDataRole.UserRole
 _VISIBLE_PADDING = 8
@@ -145,7 +145,7 @@ def _gallery_width(cell_w: int) -> int:
 
 
 class ThumbnailGalleryWidget(QListWidget):
-    """Two-column vertical thumbnail strip (EchoPac left panel)."""
+    """Two-column vertical thumbnail strip (Clinical left panel)."""
 
     instance_selected = Signal(object)
     export_mp4_requested = Signal(object)

@@ -35,8 +35,8 @@ class SpeckleSettingsDialog(QDialog):
         self.setWindowTitle("Speckle Settings")
 
         self._preset_combo = QComboBox(self)
-        self._preset_combo.addItem("EchoPAC", "echo_pac")
-        self._preset_combo.addItem("TomTec", "tomtec")
+        self._preset_combo.addItem("Standard", "standard")
+        self._preset_combo.addItem("Research", "research")
         self._preset_combo.addItem("Debug", "debug")
 
         self._drift_compensation_check = QCheckBox(self)
@@ -105,12 +105,12 @@ class SpeckleSettingsDialog(QDialog):
     def get_config(self) -> SpeckleConfig:
         """Build SpeckleConfig from selected preset and UI overrides."""
         preset_name = self.selected_preset_name()
-        if preset_name == "tomtec":
-            base = SpeckleConfig.preset_tomtec()
+        if preset_name == "research":
+            base = SpeckleConfig.preset_research()
         elif preset_name == "debug":
             base = SpeckleConfig.preset_debug()
         else:
-            base = SpeckleConfig.preset_echo_pac()
+            base = SpeckleConfig.preset_standard()
 
         return dataclasses.replace(
             base,

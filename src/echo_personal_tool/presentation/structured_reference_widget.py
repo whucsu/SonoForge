@@ -31,7 +31,7 @@ from echo_personal_tool.domain.services.reference_data_store import (
     ReferenceDataStore,
     TopicRef,
 )
-from echo_personal_tool.presentation.echopac_theme import get_theme_palette
+from echo_personal_tool.presentation.dark_theme import get_theme_palette
 
 _IMAGES_DIR = Path(__file__).resolve().parents[1] / "resources" / "references" / "images"
 _ICONS_DIR = Path(__file__).resolve().parents[1] / "resources" / "icons"

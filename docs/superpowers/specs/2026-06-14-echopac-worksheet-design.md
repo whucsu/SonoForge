@@ -1,8 +1,8 @@
-# EchoPac Worksheet + SystemBar (Phase 2 Sprint A)
+# Clinical Worksheet + SystemBar (Phase 2 Sprint A)
 
 ## Goals
 
-Replace flat measurement button panel with EchoPac-style hierarchical worksheet and top system bar.
+Replace flat measurement button panel with Clinical-style hierarchical worksheet and top system bar.
 
 ## SystemBar
 

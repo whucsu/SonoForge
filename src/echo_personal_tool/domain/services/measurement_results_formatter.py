@@ -1,4 +1,4 @@
-"""Compact GE-style measurement results text for on-image overlay."""
+"""Compact Clinical-style measurement results text for on-image overlay."""
 
 from __future__ import annotations
 

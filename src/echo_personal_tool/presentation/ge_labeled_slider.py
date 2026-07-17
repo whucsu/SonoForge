@@ -1,4 +1,4 @@
-"""GE EchoPac-style wide labeled slider with fill indicator."""
+"""Clinical-style wide labeled slider with fill indicator."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
-from echo_personal_tool.presentation.echopac_theme import (
+from echo_personal_tool.presentation.dark_theme import (
     ACCENT_BRIGHT,
     SLIDER_FILL,
     SLIDER_TRACK,
@@ -104,7 +104,7 @@ class TopLabeledSlider(QWidget):
 
 
 class GeLabeledSlider(QWidget):
-    """Wide slider with centered label and blue fill (GE Controls style)."""
+    """Wide slider with centered label and blue fill (Clinical controls style)."""
 
     valueChanged = Signal(int)
 

@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Add a VS Code-inspired **Customize Layout** system to the EchoPAC main window. Five toggleable modes (Swap Places, Horizontal Gallery, Activity Bar, Status Bar, Multiview) accessed via a popup menu from a single toolbar button. Layout state persists between sessions via `QSettings`.
+Add a VS Code-inspired **Customize Layout** system to the Standard main window. Five toggleable modes (Swap Places, Horizontal Gallery, Activity Bar, Status Bar, Multiview) accessed via a popup menu from a single toolbar button. Layout state persists between sessions via `QSettings`.
 
 ---
 

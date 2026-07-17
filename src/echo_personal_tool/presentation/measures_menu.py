@@ -1,4 +1,4 @@
-"""EchoPac-style Measures tab menu (from Measures-block.md)."""
+"""Clinical-style Measures tab menu (from Measures-block.md)."""
 
 from __future__ import annotations
 

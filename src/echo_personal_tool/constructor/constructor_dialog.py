@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from echo_personal_tool.constructor.constructor_widget import ConstructorWidget
 from echo_personal_tool.constructor.storage import SchemaValidator, YamlStorage
-from echo_personal_tool.presentation.echopac_theme import get_theme_palette
+from echo_personal_tool.presentation.dark_theme import get_theme_palette
 from echo_personal_tool.resources.bundled_fonts import FONT_FAMILY_UI
 
 _YAML_PATH = Path(__file__).resolve().parents[2] / "echo_personal_tool" / "resources" / "references" / "references_structured.yaml"

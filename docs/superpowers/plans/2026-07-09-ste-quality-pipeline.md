@@ -3,13 +3,13 @@
 **Дата:** 2026-07-09
 **Статус:** Partially Complete (9/11 phases done, pending issues documented)
 **Ветка:** `feature/ste-clinical-parity` (paused)
-**Референс:** Samsung RS85 «Деформация+» (`/home/areatu/ECHO2026-other/strain_example/`)
+**Референс:** Reference device «Деформация+» (`/home/areatu/ECHO2026-other/strain_example/`)
 
 ---
 
 ## Цель
 
-Довести STE с текущих ~62% quality до ~75-80% клинической полезности **без ML-допобучения** + создать отдельное окно **Strain Window** с Quad-view компоновкой по образцу Samsung RS85.
+Довести STE с текущих ~62% quality до ~75-80% клинической полезности **без ML-допобучения** + создать отдельное окно **Strain Window** с Quad-view компоновкой по образцу Reference device.
 
 ## Ключевое архитектурное решение
 
@@ -17,7 +17,7 @@
 
 ---
 
-## Samsung RS85 — детальный анализ (референс)
+## Reference device — детальный анализ (референс)
 
 ### Компоновка окон (Quad View)
 
@@ -227,7 +227,7 @@ StrainWindow (QMainWindow)
 ### Phase 4: Myocardial Contour + Tracking Kernels Visualization
 
 **Effort:** 2-3 дня
-**Цель:** Визуализация контура миокарда и tracking kernels по образцу Samsung.
+**Цель:** Визуализация контура миокарда и tracking kernels по образцу референсных систем.
 
 **Задачи:**
 
@@ -321,7 +321,7 @@ StrainWindow (QMainWindow)
 ### Phase 6: Summary Table
 
 **Effort:** 1-2 дня
-**Цель:** Агрегация всех ключевых метрик в одну таблицу (как в Samsung).
+**Цель:** Агрегация всех ключевых метрик в одну таблицу (как в референсных системах).
 
 **Задачи:**
 
@@ -338,7 +338,7 @@ StrainWindow (QMainWindow)
   9. ЧСС (heart rate)
 
 #### 6.2 Форматирование
-- [ ] Значения: bold, yellow (как в Samsung)
+- [ ] Значения: bold, yellow (как в референсных системах)
 - [ ] Параметры: normal weight, white
 - [ ] Формат: % для strain/EF, мл для volumes, мс для timing, bpm для HR
 - [ ] Auto-update при изменении данных
@@ -570,8 +570,8 @@ StrainWindow (QMainWindow)
 |--------|---------|--------|
 | STE quality (clinical usefulness) | ~62% | ~75-80% |
 | Kernels accepted (NCC ≥ 0.3) | ~80% | > 90% |
-| GLS accuracy vs EchoPAC | ~15% error | < 10% error |
-| Samsung feature parity | 0% | ~80% (all major features) |
+| GLS accuracy vs Standard | ~15% error | < 10% error |
+| Device feature parity | 0% | ~80% (all major features) |
 | User satisfaction (qualitative) | - | 「clinically useful」 |
 
 ---
@@ -582,7 +582,7 @@ StrainWindow (QMainWindow)
 - **Circumferential strain** — Radial + GLS для v1
 - **3D STE** — требует 3D данных
 - **Real-time tracking** — offline processing only
-- **Multi-frame DICOM export** — Samsung-specific format
+- **Multi-frame DICOM export** — Device-specific format
 
 ---
 
@@ -638,4 +638,4 @@ StrainWindow (QMainWindow)
 - `src/echo_personal_tool/domain/services/speckle_metrics.py` — strain computation
 - `src/echo_personal_tool/ui/speckle_overlay.py` — visualization
 - `docs/superpowers/specs/2026-06-27-ste-clinical-parity.md` — clinical parity spec
-- `/home/areatu/ECHO2026-other/strain_example/` — Samsung RS85 reference DICOMs
+- `/home/areatu/ECHO2026-other/strain_example/` — Reference device reference DICOMs

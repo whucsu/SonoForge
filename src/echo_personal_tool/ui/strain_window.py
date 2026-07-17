@@ -36,7 +36,7 @@ from echo_personal_tool.ui.strain_curves_view import StrainCurvesView
 
 logger = logging.getLogger(__name__)
 
-# Russian AHA segment names (Samsung style)
+# Russian AHA segment names (Clinical style)
 AHA_SEGMENT_NAMES_RU: dict[int, str] = {
     1: "БазПерг",   # Basal septal
     2: "Базбок",    # Basal lateral
@@ -669,7 +669,7 @@ class BullseyeWidget(QWidget):
 
 
 class SummaryTable(QWidget):
-    """Summary metrics table — Samsung-style layout with 9 rows."""
+    """Summary metrics table — Clinical-style layout with 9 rows."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -767,7 +767,7 @@ class ControlPanel(QWidget):
         group_view_mode.setLayout(view_mode_layout)
         layout.addWidget(group_view_mode)
 
-        # Strain metric (Samsung-style: Deformation / SR / Peak)
+        # Strain metric (Clinical-style: Deformation / SR / Peak)
         group_metric = QGroupBox("Параметр")
         group_metric.setStyleSheet("QGroupBox { font-weight: bold; color: #e0e0e0; }")
         metric_layout = QVBoxLayout()

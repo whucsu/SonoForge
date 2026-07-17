@@ -40,7 +40,7 @@ from echo_personal_tool.domain.services.ase_reference_parser import (
 )
 from echo_personal_tool.domain.services.reference_data_store import ReferenceDataStore
 from echo_personal_tool.infrastructure.i18n import tr
-from echo_personal_tool.presentation.echopac_theme import get_theme_palette
+from echo_personal_tool.presentation.dark_theme import get_theme_palette
 from echo_personal_tool.presentation.structured_reference_widget import StructuredReferenceWidget
 from echo_personal_tool.resources.bundled_fonts import FONT_FAMILY_UI
 
@@ -425,7 +425,7 @@ class AseReferenceDialog(QDialog):
         layout.addWidget(title)
         layout.addStretch(1)
 
-        # Window controls — use object names so theme CSS from echopac_theme applies
+        # Window controls — use object names so theme CSS from dark_theme applies
         window_controls = QWidget()
         window_controls.setObjectName("windowControls")
         window_controls.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)

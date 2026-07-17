@@ -2904,7 +2904,7 @@ class AppController(QObject):
         contour: object | None = None,
         *,
         config: SpeckleConfig | None = None,
-        config_preset: str = "echo_pac",
+        config_preset: str = "standard",
         manual_ed: int | None = None,
         manual_es: int | None = None,
     ) -> None:
@@ -2936,7 +2936,7 @@ class AppController(QObject):
         pixel_spacing = self._state_manager.snapshot.effective_pixel_spacing or (1.0, 1.0)
         endo_points = __import__("numpy").array(contour.points, dtype=__import__("numpy").float64)
 
-        active_config = config or SpeckleConfig.preset_echo_pac()
+        active_config = config or SpeckleConfig.preset_standard()
         zone = create_myocardial_zone(
             endo_points,
             pixel_spacing,

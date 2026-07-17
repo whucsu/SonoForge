@@ -14,7 +14,7 @@ The MVP in this spec is **preview-only thumbnails** (64-96 px). No second high-q
 
 1. User navigates chronologically and may need to start from an arbitrary item (for example, around item 15).
 2. Thumbnail visibility is mandatory to confirm required view (for example, 4C vs LAX LV) before loading into the main window.
-3. Samsung export can include still first-frame files before each cine; these files remain in the folder and cannot be removed.
+3. Device export can include still first-frame files before each cine; these files remain in the folder and cannot be removed.
 4. "Ready to work" means:
    - thumbnails in visible region are quickly usable,
    - selected file can load into main viewer immediately without waiting for full-folder thumbnail completion.
@@ -32,7 +32,7 @@ The MVP in this spec is **preview-only thumbnails** (64-96 px). No second high-q
 ### Out of scope (MVP)
 
 - High-quality thumbnail second pass.
-- Automatic hiding/grouping of Samsung still duplicates.
+- Automatic hiding/grouping of Device still duplicates.
 - Persistent thumbnail cache on disk.
 - Major DICOM decode backend replacement.
 
@@ -184,4 +184,4 @@ These metrics are required to verify improvements against the current ~22s workf
 After this spec is approved:
 - create detailed task plan with `writing-plans`,
 - implement MVP preview-only scheduler path first,
-- evaluate whether Samsung still/cine dedup UX should be next-phase spec.
+- evaluate whether Device still/cine dedup UX should be next-phase spec.

@@ -80,7 +80,7 @@ class SpeckleTrackingWorker(QRunnable):
         pixel_spacing: tuple[float, float],
         frame_time_ms: float = 33.3,
         config: SpeckleConfig | None = None,
-        config_preset: str = "echo_pac",
+        config_preset: str = "standard",
         manual_ed: int | None = None,
         manual_es: int | None = None,
     ) -> None:
@@ -98,7 +98,7 @@ class SpeckleTrackingWorker(QRunnable):
 
     def run(self) -> None:
         try:
-            config = self._config or SpeckleConfig.preset_echo_pac()
+            config = self._config or SpeckleConfig.preset_standard()
             n_frames = int(self._frames.shape[0])
 
             lv_center = tuple(np.mean(self._zone.endo_points, axis=0).tolist())

@@ -1,6 +1,6 @@
 # ECHO Personal Tool
 
-Персональный десктопный инструмент для просмотра и количественного анализа эхокардиографических исследований: **DICOM**, **MP4**, **JPEG/PNG**. Интерфейс и workflow ориентированы на EchoPAC / ASE — без облака, локально на вашей машине.
+Персональный десктопный инструмент для просмотра и количественного анализа эхокардиографических исследований: **DICOM**, **MP4**, **JPEG/PNG**. Интерфейс и workflow ориентированы на Standard / ASE — без облака, локально на вашей машине.
 
 **Стек:** PySide6, PyQtGraph, pydicom, OpenCV, NumPy, SciPy, httpx, ONNX Runtime (optional) — **Clean Architecture** (`domain` / `infrastructure` / `application` / `presentation`).
 
@@ -23,7 +23,7 @@
 | **Speckle tracking (STE)** | NCC block-matching, GLS, AHA 17 segments, strain curves, QC |
 | **ONNX** | EchoNet LV A4C (hotkey `I`), review + gradient refine (`R`) |
 | **Отчёты** | Study overlay, индексы BSA, нормативы ASE, PDF export |
-| **UX** | EchoPAC theme (dark/light), blink «следующей кнопки», настраиваемые preferences |
+| **UX** | Standard theme (dark/light), blink «следующей кнопки», настраиваемые preferences |
 
 ---
 
@@ -43,7 +43,7 @@
 - При ручной калибровке — **magnetic snap** к тикам шкалы глубины.
 - DICOM: spacing из тегов (`PixelSpacing`, ultrasound regions, functional groups).
 
-### Линейные калиперы EchoPAC-style
+### Линейные калиперы Standard-style
 
 - Формат подписи на линейке: `LVEDD 52.3 mm`, `Dist1 12.0 mm` — обновление **в реальном времени** при перетаскивании.
 - Текст **вдоль линейки**, без переворота; для TAPSE — сбоку от вертикали.
@@ -54,7 +54,7 @@
 
 - Двухконтурная зона миокарда, NCC block-matching, **bidirectional ED-anchored** трекинг.
 - **GLS**, segment strain по AHA, график strain ED…ES, таблица QC (NCC / quality).
-- Преprocessing (CLAHE + log), drift compensation, пресеты (`echo_pac`, incremental).
+- Преprocessing (CLAHE + log), drift compensation, пресеты (`standard`, incremental).
 - Диалог ED/ES (auto-detect + ручной ввод), overlay спеклов по кадрам в окне цикла.
 
 ### Контуры и AI

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Upgrade manual Simpson to EchoPAC/QLAB-style open endocardial arc (septum → apex → lateral, base on mitral annulus line) with B-spline display, equal arc-length node spacing on drag, and correct MA→apex long axis for 20-disk volume.
+**Goal:** Upgrade manual Simpson to Standard/Clinical-style open endocardial arc (septum → apex → lateral, base on mitral annulus line) with B-spline display, equal arc-length node spacing on drag, and correct MA→apex long axis for 20-disk volume.
 
 **Architecture:** Extend `Contour` with optional `mitral_annulus` (septal, lateral). New pure-domain module `contour_geometry.py` handles B-spline evaluation, equal arc-length resampling, apex/long-axis helpers. `lvef_simpson.py` uses closed polygon (arc + MA chord) with perpendicular widths along MA-midpoint→apex axis. `ViewerWidget` gains staged click workflow (MA septal → MA lateral → arc clicks) and resamples on every node drag.
 

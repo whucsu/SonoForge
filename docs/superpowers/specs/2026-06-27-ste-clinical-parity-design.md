@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Current STE is **forward-only NCC block matching** with minimal post-processing. Commercial systems (EchoPAC, TomTec 2D CPA, Philips Qlab) achieve clinical repeatability through a **standard post-tracking pipeline**: bidirectional ED-anchored tracking, spatial/temporal spline smoothing with quality weights, drift compensation, Green–Lagrange strain, AHA segment aggregation, and mandatory quality visualization.
+Current STE is **forward-only NCC block matching** with minimal post-processing. Commercial systems (Standard, Research 2D CPA, Philips Clinical) achieve clinical repeatability through a **standard post-tracking pipeline**: bidirectional ED-anchored tracking, spatial/temporal spline smoothing with quality weights, drift compensation, Green–Lagrange strain, AHA segment aggregation, and mandatory quality visualization.
 
 **Strategy 1 — Clinical Parity Patch:** implement Tier A methods (A1–A8) plus determinism prerequisites. No ML, no RF, no TDA. Target: GLS std dev < 0.5% on 10 repeated runs with identical inputs.
 
@@ -282,7 +282,7 @@ class SpeckleConfig:
     contour_resample_points: int = 128
 
     @classmethod
-    def preset_echo_pac(cls) -> SpeckleConfig:
+    def preset_standard(cls) -> SpeckleConfig:
         return cls(
             kernel_size=20, search_radius=20,
             spatial_smoothing=1.0, temporal_smoothing=1.0,
@@ -305,7 +305,7 @@ class SpeckleConfig:
         )
 ```
 
-Default in production: `SpeckleConfig.preset_echo_pac()`.
+Default in production: `SpeckleConfig.preset_standard()`.
 
 ### 7.2 Extended `StrainResult`
 
@@ -318,7 +318,7 @@ class StrainResult:
     drift_compensation_applied: bool = False
     tracking_quality_mean: float = 0.0
     cycle_count: int = 1
-    config_preset: str = "echo_pac"
+    config_preset: str = "standard"
 ```
 
 ### 7.3 Extended `TrackingKernel`
@@ -340,7 +340,7 @@ class TrackingKernel:
 
 ```python
 def run(self) -> None:
-    config = self._config or SpeckleConfig.preset_echo_pac()
+    config = self._config or SpeckleConfig.preset_standard()
     resampled_endo = resample_contour(self._zone.endo_points, config.contour_resample_points)
     zone = replace_zone_endo(self._zone, resampled_endo)
     kernels = sample_kernels_in_zone(zone)
@@ -371,7 +371,7 @@ def run(self) -> None:
 ### 9.1 Speckle settings dialog (new)
 
 Minimal dialog before tracking:
-- Preset dropdown: EchoPAC / TomTec / Debug
+- Preset dropdown: Standard / Research / Debug
 - Drift compensation checkbox (default ON)
 - Wall thickness spinbox (6–12 mm)
 
@@ -388,7 +388,7 @@ Wire existing `StrainCurveWidget` to `main_window` — show after tracking compl
 
 ### 9.4 Status bar
 
-Show: `GLS: -20.1% | Quality: 82% | Drift comp: ON | Preset: EchoPAC`
+Show: `GLS: -20.1% | Quality: 82% | Drift comp: ON | Preset: Standard`
 
 ---
 
@@ -439,7 +439,7 @@ Generate cine with known affine deformation of contour:
 
 - `track_cine()` kept; delegates to bidirectional when `config.bidirectional=True`.
 - Existing `StrainResult` consumers receive new optional fields with defaults.
-- `SpeckleConfig()` defaults change to EchoPAC preset values (kernel 20, search 20).
+- `SpeckleConfig()` defaults change to Standard preset values (kernel 20, search 20).
 - TDA plan (`2026-06-25-tda-speckle-enhancement.md`) **superseded** for this milestone — do not implement.
 
 ---

@@ -20,7 +20,7 @@ Improve endocardial contour quality from **LV Auto → LVEF Simpson EDV/ESV** (A
 | Annulus endpoint error | < 8 px median at native resolution |
 | MP4 ROI regression | 0 cases with full-frame crop (UI bars in ONNX input) |
 
-Stretch goal (ROADMAP): ±3% LVEF vs EchoPAC — not a release blocker for v1.5.
+Stretch goal (ROADMAP): ±3% LVEF vs Standard — not a release blocker for v1.5.
 
 ---
 
@@ -345,7 +345,7 @@ Not in this spec — track separately:
 - 224×224 ONNX re-export
 - int8 vs fp32 model selection
 - TTA horizontal flip ensemble
-- ±3% EchoPAC validation gate as release criterion
+- ±3% Standard validation gate as release criterion
 
 ---
 

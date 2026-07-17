@@ -124,8 +124,8 @@ topics:
 | Topic nav | `QPushButton` in `QButtonGroup` | 11 тем; клик → обновить список патологий |
 | Pathology list | `QListWidget` | Патологии для выбранной темы |
 | Parameter table | `QTableWidget` (4 колонки: Параметр, Ед.изм, Норма, Патология) | При градациях — все градации в одной таблице с префиксами |
-| Source | `QLabel` | Ссылки на источники |
-| Image panel | `QLabel` в контейнере (max-width: 320px) | Фиксированная ширина, не растягивает таблицу |
+| Source | `Clinicalel` | Ссылки на источники |
+| Image panel | `Clinicalel` в контейнере (max-width: 320px) | Фиксированная ширина, не растягивает таблицу |
 | Sex selector | `QButtonGroup` (2 radio) | Переключает нормы |
 | Age field | `QLineEdit` | Для будущего (диастолическая функция) |
 

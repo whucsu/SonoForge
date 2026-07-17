@@ -72,7 +72,7 @@ class _PatientMetricsRow(QWidget):
 
 
 class ControlsTab(QWidget):
-    """Window / Level / DR sliders (GE Controls)."""
+    """Window / Level / DR sliders (Clinical controls)."""
 
     magnetic_snap_changed = Signal(bool)
 
@@ -188,7 +188,7 @@ class MeasureTab(QWidget):
 
 
 class ToolPanel(QWidget):
-    """EchoPac-style right tool menu."""
+    """Clinical-style right tool menu."""
 
     action_requested = Signal(object, str, str, str)
     patient_metrics_changed = Signal(object, object)

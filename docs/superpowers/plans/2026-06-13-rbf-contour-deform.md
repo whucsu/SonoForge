@@ -672,7 +672,7 @@ In spec front matter, change:
 Append to `CHANGELOG_SESSION.md`:
 
 ```markdown
-## [2026-06-13] RBF Gaussian contour drag (QLAB-style)
+## [2026-06-13] RBF Gaussian contour drag (Clinical-style)
 - **Тип:** feature
 - **Файлы:** `contour_geometry.py`, `viewer_widget.py`, `tests/unit/test_rbf_contour_deform.py`, `tests/unit/test_spline_editor.py`, `tests/unit/test_contour_geometry.py`
 - **Суть:** Drag узлов контура через Gaussian RBF от курсора; MA-концы pinned; σ от zoom viewRange; подсветка активных узлов; заменён drag_node_local.

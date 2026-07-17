@@ -186,7 +186,7 @@ Expected: PASS
 
 - [ ] **Step 1: Extend SpeckleConfig and TrackingKernel**
 
-Add fields per spec §7.1 and §7.3. Add `preset_echo_pac()`, `preset_tomtec()`, `preset_debug()` classmethods. Change defaults: `kernel_size=20`, `search_radius=20`.
+Add fields per spec §7.1 and §7.3. Add `preset_standard()`, `preset_tomtec()`, `preset_debug()` classmethods. Change defaults: `kernel_size=20`, `search_radius=20`.
 
 Extend `TrackingResult` to include `reference_frame: int = 0` (ED index used).
 
@@ -199,7 +199,7 @@ def test_bidirectional_ed_closure_smaller_than_forward():
     frames = _make_synthetic_cine(n_frames, shift_per_frame=0.5)
     kernels = _make_test_kernels()
     config_fwd = SpeckleConfig.preset_debug()  # bidirectional=False
-    config_bidi = SpeckleConfig.preset_echo_pac()
+    config_bidi = SpeckleConfig.preset_standard()
 
     fwd = track_cine(frames, kernels, config_fwd)
     bidi = track_cine_bidirectional(frames, kernels, ed_index=0, config=config_bidi)
@@ -601,7 +601,7 @@ Table widget: columns Segment, Strain %, Quality (0–100). Red row if quality <
 
 - [ ] **Step 2: Implement SpeckleSettingsDialog**
 
-ComboBox presets (EchoPAC/TomTec/Debug), drift compensation checkbox, wall thickness spinbox. Returns `SpeckleConfig`.
+ComboBox presets (Standard/Research/Debug), drift compensation checkbox, wall thickness spinbox. Returns `SpeckleConfig`.
 
 - [ ] **Step 3: Update SpeckleOverlay.show_kernels**
 
@@ -640,7 +640,7 @@ In worker: if `config.multi_cycle_average` and ≥2 cycles → track each cycle 
 def test_gls_reproducible_10_runs():
     frames = _synthetic_cine_deterministic()
     contour = _synthetic_contour()
-    config = SpeckleConfig.preset_echo_pac()
+    config = SpeckleConfig.preset_standard()
     gls_values = []
     for _ in range(10):
         result = _run_pipeline(frames, contour, config)

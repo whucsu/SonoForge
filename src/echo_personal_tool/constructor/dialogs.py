@@ -7,7 +7,7 @@ from typing import Any
 
 from PySide6.QtWidgets import QFileDialog, QWidget
 
-from echo_personal_tool.presentation.echopac_theme import get_theme_palette
+from echo_personal_tool.presentation.dark_theme import get_theme_palette
 
 
 def styled_open_file(

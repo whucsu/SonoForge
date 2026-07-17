@@ -252,7 +252,7 @@ Ordered by expected ROI once bench is live:
 
 - LA auto segmentation (separate spec)
 - Light-edit user simulation in bench
-- EchoPAC comparison as release gate
+- Standard comparison as release gate
 - A2C auto model
 - int8 / TTA ensemble
 

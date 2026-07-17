@@ -1,4 +1,4 @@
-"""EchoPac-style hierarchical measurement worksheet."""
+"""Clinical-style hierarchical measurement worksheet."""
 
 from __future__ import annotations
 

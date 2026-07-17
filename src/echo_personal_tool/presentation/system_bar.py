@@ -30,7 +30,7 @@ def _icon_dir() -> Path:
 
 
 def _load_icon(name: str) -> QIcon:
-    from echo_personal_tool.presentation.echopac_theme import get_theme_palette
+    from echo_personal_tool.presentation.dark_theme import get_theme_palette
     svg_path = _icon_dir() / f"{name}.svg"
     if svg_path.is_file():
         svg_text = svg_path.read_text(encoding="utf-8")
@@ -88,7 +88,7 @@ class _ElidingStatusLabel(QLabel):
 
 
 class SystemBar(QWidget):
-    """EchoPac-style header above the main splitter."""
+    """Clinical-style header above the main splitter."""
 
     open_folder_requested = Signal()
     load_from_server_requested = Signal()
