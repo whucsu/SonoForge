@@ -19,7 +19,7 @@ from time import perf_counter
 from typing import Literal
 
 import numpy as np
-from PySide6.QtCore import QEvent, QPoint, QSignalBlocker, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QEvent, QPoint, QPropertyAnimation, QEasingCurve, QSignalBlocker, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QCloseEvent, QKeyEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -158,6 +158,7 @@ class MainWindow(QMainWindow):
         self._mmode_widget: MModeWidget | None = None
         self._mmode_active = False
         self._mmode_vertical_splitter: QSplitter | None = None
+        self._mmode_collapse_anim = None
 
         self._controller = controller or AppController()
         orthanc_root = Path.home() / ".echo-personal-tool" / "orthanc"
@@ -405,7 +406,7 @@ class MainWindow(QMainWindow):
         self._mmode_vertical_splitter.setHandleWidth(4)
         self._mmode_vertical_splitter.addWidget(self._viewer)
         self._mmode_vertical_splitter.addWidget(self._mmode_widget)
-        self._mmode_vertical_splitter.setSizes([500, 500])
+        self._mmode_vertical_splitter.setSizes([400, 600])
         self._mmode_vertical_splitter.setStretchFactor(0, 1)
         self._mmode_vertical_splitter.setStretchFactor(1, 1)
 
@@ -414,17 +415,47 @@ class MainWindow(QMainWindow):
             self._content_splitter.setStretchFactor(idx, 1)
         self._mmode_vertical_splitter.show()
 
+        # Animate M-mode widget expand
+        widget = self._mmode_widget
+        if widget is not None:
+            widget.setMaximumHeight(0)
+            anim = QPropertyAnimation(widget, b"maximumHeight")
+            anim.setDuration(200)
+            anim.setStartValue(0)
+            anim.setEndValue(600)
+            anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+            anim.start()
+            self._mmode_collapse_anim = anim
+
     def _deactivate_mmode(self) -> None:
         if self._mmode_vertical_splitter is None:
             return
-        # Find the vertical splitter position in content_splitter
-        idx = self._content_splitter.indexOf(self._mmode_vertical_splitter)
+        # Animate M-mode widget collapse
+        widget = self._mmode_widget
+        if widget is not None and widget.isVisible():
+            widget.setMaximumHeight(widget.height())
+            anim = QPropertyAnimation(widget, b"maximumHeight")
+            anim.setDuration(200)
+            anim.setStartValue(widget.height())
+            anim.setEndValue(0)
+            anim.setEasingCurve(QEasingCurve.Type.InQuad)
+            anim.finished.connect(self._finish_mmode_deactivation)
+            anim.start()
+            # Keep reference to prevent GC
+            self._mmode_collapse_anim = anim
+        else:
+            self._finish_mmode_deactivation()
+
+    def _finish_mmode_deactivation(self) -> None:
+        if self._mmode_vertical_splitter is None:
+            return
         # Remove viewer from vertical splitter (reparent to content_widget)
         self._viewer.setParent(self._content_widget)
         # Schedule splitter deletion
         self._mmode_vertical_splitter.deleteLater()
         self._mmode_vertical_splitter = None
         self._mmode_widget = None
+        self._mmode_collapse_anim = None
         # Rebuild layout to restore proper structure
         self._rebuild_layout()
 
@@ -584,7 +615,7 @@ class MainWindow(QMainWindow):
                         self._mmode_vertical_splitter.addWidget(self._viewer)
                     if self._mmode_vertical_splitter.indexOf(self._mmode_widget) < 0:
                         self._mmode_vertical_splitter.addWidget(self._mmode_widget)
-                    self._mmode_vertical_splitter.setSizes([500, 500])
+                    self._mmode_vertical_splitter.setSizes([400, 600])
                     self._mmode_vertical_splitter.setStretchFactor(0, 1)
                     self._mmode_vertical_splitter.setStretchFactor(1, 1)
                     self._content_splitter.addWidget(self._mmode_vertical_splitter)
