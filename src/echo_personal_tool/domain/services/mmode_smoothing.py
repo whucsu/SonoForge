@@ -21,23 +21,10 @@ def enhance_contrast(column: np.ndarray, clip_pct: float = 1.0) -> np.ndarray:
     return np.clip(stretched, 0, 255).astype(np.uint8)
 
 
-def adjust_brightness(column: np.ndarray, shift: int = -15) -> np.ndarray:
-    """Shift brightness. Negative values darken the image."""
-    f32 = column.astype(np.float32) + shift
-    return np.clip(f32, 0, 255).astype(np.uint8)
-
-
-def gamma_correct(column: np.ndarray, gamma: float = 1.3) -> np.ndarray:
-    """Apply gamma correction. gamma > 1 darkens shadows (chambers darker)."""
-    f32 = column.astype(np.float32) / 255.0
-    corrected = np.power(f32, gamma) * 255.0
-    return np.clip(corrected, 0, 255).astype(np.uint8)
-
-
-def spatial_smooth(column: np.ndarray, sigma: float = 1.0) -> np.ndarray:
+def spatial_smooth(column: np.ndarray, sigma: float = 0.8) -> np.ndarray:
     """1D Gaussian smoothing along depth (axis=0) to remove pixel jaggedness.
 
-    sigma=1.0 gives stronger smoothing than 0.8.
+    Small sigma preserves edges while removing single-pixel noise.
     """
     return gaussian_filter1d(column.astype(np.float32), sigma=sigma, axis=0, mode="nearest")
 

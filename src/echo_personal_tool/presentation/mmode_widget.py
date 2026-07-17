@@ -7,9 +7,7 @@ from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from echo_personal_tool.domain.services.mmode_extractor import extract_mmode_column
 from echo_personal_tool.domain.services.mmode_smoothing import (
-    adjust_brightness,
     enhance_contrast,
-    gamma_correct,
     spatial_smooth,
     temporal_smooth,
 )
@@ -202,11 +200,9 @@ class MModeWidget(QWidget):
     def on_new_column(self, column: np.ndarray) -> None:
         n = min(column.shape[0], self._num_samples)
         col = column[:n]
-        # Post-processing pipeline: contrast → brightness → gamma → spatial → temporal
+        # Smart pipeline: contrast → spatial → temporal
         col = enhance_contrast(col, clip_pct=1.0)
-        col = adjust_brightness(col, shift=-15)
-        col = gamma_correct(col, gamma=1.3)
-        col = spatial_smooth(col, sigma=1.0)
+        col = spatial_smooth(col, sigma=0.8)
         col = temporal_smooth(col, self._previous_column, alpha=0.3)
         self._previous_column = col.copy()
         self._image_buffer[:n, self._sweep_x] = col.astype(np.uint8)
