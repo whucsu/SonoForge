@@ -37,6 +37,8 @@ topics:
       source: 2015, ASE, Guidelines for the Standardization in Echocardiography
   - name: Размеры левого желудочка
     slug: lv_dimensions
+    image_paths:
+    - LV_measures.jpg
     parameters:
     - id: lvedd
       name: Конечно-диастолический диаметр (LVEDD)
@@ -98,10 +100,11 @@ topics:
         low: 6
         high: 10
       source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-    image_paths:
-    - LV_measures.jpg
   - name: Геометрия и гипертрофия левого желудочка
     slug: lv_geometry
+    image_paths:
+    - LV_geometry.jpg
+    - LV_geometry2.png
     parameters:
     - id: lvmi_hyp
       name: Индекс массы миокарда (LVMI)
@@ -147,8 +150,6 @@ topics:
         high: 10
       pathology_desc: '>11 — гипертрофия'
       source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-    image_paths:
-    - LV_geometry.jpg
   - name: Фракция выброса левого желудочка
     slug: lv_systolic
     parameters:
@@ -188,7 +189,9 @@ topics:
     slug: lv_diastolic
     image_paths:
     - Diastolic_dysfunc_LV.png
-    - diastolic_function.png
+    - Diastolog2.png
+    - Diastolic_other1.png
+    - Diastolic_other2.png
     parameters:
     - id: ea_ratio
       name: Соотношение E/A
@@ -270,9 +273,9 @@ topics:
   - name: Сегменты и кровоснабжение левого желудочка
     slug: lv_segments
     image_paths:
-    - LV_segments.png
-    - Coronar_artery_zone.png
     - coronary.jpeg
+    - LV_segments2.jpg
+    - LV_segments.jpg
     parameters:
     - id: seg_anterior
       name: Передняя стенка
@@ -327,6 +330,8 @@ topics:
   pathologies:
   - name: Размеры и объём левого предсердия
     slug: la_dimensions
+    image_paths:
+    - LA_volume.jpg
     parameters:
     - id: lav
       name: Объём левого предсердия (LAV)
@@ -379,8 +384,6 @@ topics:
         low: null
         high: 38
       source: 2015, ASE, Guidelines for the Standardization in Echocardiography
-    image_paths:
-    - LA_volume.jpg
 - name: Правый желудочек
   slug: right_ventricle
   pathologies:
@@ -466,6 +469,9 @@ topics:
       source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
   - name: Систолическая функция правого желудочка
     slug: rv_systolic
+    image_paths:
+    - TAPSE.png
+    - RV_FAC.jpg
     parameters:
     - id: tapss
       name: TAPSE
@@ -551,6 +557,8 @@ topics:
       source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
   - name: Давление в легочной артерии
     slug: pulmonary_pressure
+    image_paths:
+    - AV_pathology.png
     parameters:
     - id: spap
       name: Систолическое давление в ЛА (sPAP)
@@ -659,6 +667,8 @@ topics:
       source: 2010, ASE, Guidelines for the Echocardiographic Assessment of the Right Heart in Adults
   - name: Давление в правом предсердии
     slug: ra_pressure
+    image_paths:
+    - IVC_collapse.jpg
     parameters:
     - id: rap
       name: Давление в правом предсердии (RAP)
@@ -695,10 +705,6 @@ topics:
   pathologies:
   - name: Первичная митральная регургитация
     slug: primary_mr
-    image_paths:
-    - Mitral_regurgitation_1.png
-    - Mitral_regurgitation_2.png
-    - pisa_mr.png
     gradations:
     - name: Лёгкая
       parameters:
@@ -778,11 +784,12 @@ topics:
           high: 3
         pathology_desc: ≥7
         source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement
+    parameters: []
   - name: Вторичная митральная регургитация
     slug: secondary_mr
     image_paths:
-    - Mitral_regurgitation_1.png
-    - Mitral_regurgitation_2.png
+    - MR_secondary.png
+    - MR_visual.png
     gradations:
     - name: Лёгкая
       parameters:
@@ -838,11 +845,13 @@ topics:
           high: 30
         pathology_desc: ≥45
         source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement
+    parameters: []
   - name: Митральный стеноз
     slug: mitral_stenosis
     image_paths:
     - Mitral_stenosis_1.png
     - Mitral_stenosis_2.png
+    - MV_stenosis.png
     parameters:
     - id: ms_area
       name: Площадь МК
@@ -879,6 +888,10 @@ topics:
       source: 2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease
   - name: Анатомия митрального клапана
     slug: mitral_segments
+    image_paths:
+    - MV_measurements.png
+    - MV_anatomy.png
+    - MV_leaflets.png
     parameters:
     - id: p1
       name: P1 (латеральный)
@@ -911,6 +924,7 @@ topics:
     slug: aortic_stenosis
     image_paths:
     - Aortic_stenosis.png
+    - AV_pathology.png
     gradations:
     - name: Лёгкий
       parameters:
@@ -1080,12 +1094,12 @@ topics:
           high: null
         pathology_desc: < 0.25
         source: Bonita Anderson, Echo Reference Values, March 2017
+    parameters: []
   - name: Аортальная регургитация
     slug: aortic_regurgitation
     image_paths:
     - Aortic_regurgitation_1.png
     - Aortic_regurgitation_2.png
-    - pisa_ar.png
     gradations:
     - name: Лёгкая
       parameters:
@@ -1173,6 +1187,7 @@ topics:
           high: 3
         pathology_desc: ≥6
         source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement
+    parameters: []
 - name: Трикуспидальный клапан
   slug: tricuspid_valve
   pathologies:
@@ -1259,6 +1274,7 @@ topics:
           high: 3
         pathology_desc: ≥7
         source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement
+    parameters: []
   - name: Трикуспидальный стеноз
     slug: tricuspid_stenosis
     image_paths:
@@ -1324,6 +1340,7 @@ topics:
           high: null
         pathology_desc: Широкая струя, дилатация ПЖ
         source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement
+    parameters: []
   - name: Легочный стеноз
     slug: pulmonary_stenosis
     image_paths:
@@ -1359,6 +1376,7 @@ topics:
           high: 2.0
         pathology_desc: '>4.0'
         source: 2021, ESC/EACTS, 2021 ESC/EACTS Guidelines for the Management of Valvular Heart Disease
+    parameters: []
   - name: Легочный ствол
     slug: pulmonary_trunk
     parameters:
@@ -1499,7 +1517,6 @@ topics:
   - name: Митральная позиция
     slug: mitral_position
     image_paths:
-    - Mitral_prosthetic_1.png
     - Mitral_prosthetic_2.png
     parameters:
     - id: mv_prosth_gradient_mean
@@ -1540,6 +1557,7 @@ topics:
     - Aortic_prosthetic_1.png
     - Aotric_prosthetic_2.png
     - Aortic_prosthetic_3.png
+    - Aortic_prosthetic_1 (1).png
     parameters:
     - id: av_prosth_gradient_mean
       name: Средний градиент
@@ -1632,3 +1650,9 @@ topics:
         high: null
       pathology_desc: Измерение от митральной/аортальной створки
       source: 2017, ASE, Guidelines for the Evaluation of Valvular Regurgitation After Percutaneous Valve Repair or Replacement
+  - name: Патологии
+    slug: new_pathology_1
+    image_paths:
+    - Non_compact_LV.png
+    - PDA.png
+    parameters: []

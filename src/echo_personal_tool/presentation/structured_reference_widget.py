@@ -286,6 +286,61 @@ class StructuredReferenceWidget(QWidget):
 
         self._build_ui()
 
+    def reload(self) -> None:
+        """Reload data from YAML and refresh the entire view."""
+        self._store.load()
+        self._topics = self._store.get_topics()
+        # Rebuild topic buttons
+        self._rebuild_topic_buttons()
+        # Re-select current pathology if still exists
+        if self._current_pathology is not None:
+            new_patho = self._store.get_pathology(
+                self._current_topic.slug if self._current_topic else "",
+                self._current_pathology.slug,
+            )
+            if new_patho is not None:
+                self._current_pathology = new_patho
+                self._image_paths = new_patho.image_paths
+                self._current_image_index = 0
+                self._refresh_table()
+                self._load_image()
+
+    def _rebuild_topic_buttons(self) -> None:
+        """Remove old topic buttons and recreate from current data."""
+        p = get_theme_palette()
+        # Remove old buttons
+        for btn in self._topic_buttons:
+            self._topic_group.removeButton(btn)
+            btn.setParent(None)
+            btn.deleteLater()
+        self._topic_buttons.clear()
+        # Create new buttons
+        for i, topic in enumerate(self._topics):
+            label = _TOPIC_LABELS.get(topic.slug, topic.name[:8])
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFixedHeight(32)
+
+            icon_name = _TOPIC_ICONS.get(topic.slug)
+            if icon_name:
+                icon_path = _ICONS_DIR / f"{icon_name}.svg"
+                if icon_path.is_file():
+                    icon = QIcon(str(icon_path))
+                    btn.setIcon(icon)
+                    btn.setIconSize(QSize(20, 20))
+
+            btn.setStyleSheet(
+                f"QPushButton {{ text-align: left; padding: 6px 8px; border: none; "
+                f"background: transparent; color: {p['text']}; font-size: 14px; }}"
+                f"QPushButton:checked {{ background: {p['accent_tab']}; font-weight: bold; }}"
+                f"QPushButton:hover:!checked {{ background: {p['bg_button_hover']}; }}"
+            )
+            btn.clicked.connect(lambda _checked, t=topic: self._on_topic_clicked(t))
+            self._topic_group.addButton(btn, i)
+            self._topic_buttons.append(btn)
+            self._left_layout.insertWidget(self._left_layout.count() - 2, btn)
+
     # Default section to open on first show
     _DEFAULT_TOPIC_SLUG = "left_ventricle"
     _DEFAULT_PATHOLOGY_SLUG = "lv_diastolic"
@@ -319,7 +374,7 @@ class StructuredReferenceWidget(QWidget):
 
         # Left: topic navigation (fixed width, non-collapsible)
         left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
+        self._left_layout = left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(4, 4, 4, 4)
         left_layout.setSpacing(2)
 

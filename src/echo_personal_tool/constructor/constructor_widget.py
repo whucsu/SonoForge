@@ -200,7 +200,11 @@ class ConstructorWidget(QWidget):
     # ── Save / Undo ──
 
     def save(self) -> None:
-        errors = self._validator.validate(self._model.to_dict())
+        from echo_personal_tool.domain.services.measurement_results_formatter import (
+            invalidate_norm_cache,
+        )
+        data = self._model.to_dict()
+        errors = self._validator.validate(data)
         if errors:
             msg = "\n".join(str(e) for e in errors[:20])
             QMessageBox.warning(
@@ -209,9 +213,10 @@ class ConstructorWidget(QWidget):
                 f"Найдено {len(errors)} ошибок:\n\n{msg}",
             )
             return
-        self._yaml_storage.save(self._model.to_dict())
+        self._yaml_storage.save(data)
         self._saved_state = self._model.deep_copy()
         self._clear_dirty()
+        invalidate_norm_cache()
 
     def save_as(self, path: Path) -> None:
         errors = self._validator.validate(self._model.to_dict())

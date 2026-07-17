@@ -144,6 +144,12 @@ def _get_norm_store() -> ReferenceDataStore:
     return _norm_store_cache
 
 
+def invalidate_norm_cache() -> None:
+    """Reset the norm store cache so next access re-reads YAML."""
+    global _norm_store_cache
+    _norm_store_cache = None
+
+
 def _norm_for_param(param_id: str, sex_male: bool = True):
     """Look up norm range from ReferenceDataStore by param_id."""
     try:

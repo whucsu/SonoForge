@@ -207,7 +207,10 @@ class PathologyEditor(BaseEditor):
             new_name = edit.text().strip()
             if new_name:
                 patho.name = new_name
-            self._list.setItemWidget(item, None)
+            try:
+                self._list.setItemWidget(item, None)
+            except RuntimeError:
+                pass  # Item already deleted
             self._all_items = [(p.name, p.slug) for p in self._pathologies]
             self._refresh_list()
             self.pathologies_changed.emit()

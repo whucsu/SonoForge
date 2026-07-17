@@ -107,8 +107,8 @@ class PathologyModel:
             d["image_paths"] = list(self.image_paths)
         if self.gradations:
             d["gradations"] = [g.to_dict() for g in self.gradations]
-        elif self.parameters:
-            d["parameters"] = [p.to_dict() for p in self.parameters]
+        # Always include parameters to satisfy schema anyOf requirement
+        d["parameters"] = [p.to_dict() for p in self.parameters]
         return d
 
     @classmethod

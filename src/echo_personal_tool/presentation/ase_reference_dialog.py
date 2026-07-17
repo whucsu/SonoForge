@@ -567,6 +567,12 @@ class AseReferenceDialog(QDialog):
     def _open_constructor(self) -> None:
         from echo_personal_tool.constructor.constructor_dialog import show_constructor_dialog
         show_constructor_dialog(self)
+        # Reload reference data after constructor closes
+        if self._structured_widget is not None:
+            self._structured_widget.reload()
+        # Restore focus to this dialog
+        self.activateWindow()
+        self.setFocus()
 
     # ── Documents ─────────────────────────────────────────────────
 

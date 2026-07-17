@@ -284,3 +284,32 @@ class ConstructorDialog(QDialog):
 
     def mouseDoubleClickEvent(self, event: Any) -> None:
         self._toggle_maximize()
+
+    def keyPressEvent(self, event: Any) -> None:
+        # Prevent Enter/Return from triggering dialog default button
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            focused = self.focusWidget()
+            if isinstance(focused, (QLineEdit, QSpinBox)):
+                # Let QLineEdit/QSpinBox handle Enter naturally
+                super().keyPressEvent(event)
+                return
+            # Otherwise ignore Enter to prevent dialog minimize/close
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event: Any) -> None:
+        if self._constructor_widget._dirty:
+            reply = QMessageBox.question(
+                self,
+                "Несохранённые изменения",
+                "Есть несохранённые изменения. Сохранить перед закрытием?",
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Cancel,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._constructor_widget.save()
+            elif reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+        event.accept()
