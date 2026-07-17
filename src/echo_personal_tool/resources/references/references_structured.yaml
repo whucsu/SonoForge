@@ -98,6 +98,8 @@ topics:
         low: 6
         high: 10
       source: 2015, ASE, Guidelines for the Standardization in Echocardiography
+    image_paths:
+    - LV_linear_sizes.png
   - name: Геометрия и гипертрофия левого желудочка
     slug: lv_geometry
     parameters:
@@ -145,6 +147,8 @@ topics:
         high: 10
       pathology_desc: '>11 — гипертрофия'
       source: 2015, ASE, Guidelines for the Standardization in Echocardiography
+    image_paths:
+    - LV-geometry.png
   - name: Фракция выброса левого желудочка
     slug: lv_systolic
     parameters:
@@ -375,6 +379,8 @@ topics:
         low: null
         high: 38
       source: 2015, ASE, Guidelines for the Standardization in Echocardiography
+    image_paths:
+    - LA_volume.png
 - name: Правый желудочек
   slug: right_ventricle
   pathologies:
