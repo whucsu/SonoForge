@@ -1,10 +1,79 @@
 # ROADMAP — ECHO Personal Tool
 
-**Обновлено:** 2026-07-04 (DIMSE Phase 2 + Micro-UX specs)  
-**Источник истины по коду:** этот файл + `CHANGELOG_SESSION.md` (последние записи).  
+**Обновлено:** 2026-07-18 (Teichholz M-mode, cleanup for trial release)
+**Источник истины по коду:** этот файл + git log.
 **Детальные спеки:** `docs/superpowers/specs/`, планы — `docs/superpowers/plans/`.
 
 Легенда: `[x]` реализовано в коде · `[~]` частично · `[ ]` не начато / отложено · `[—]` **cancelled**
+
+---
+
+## Хронология major changes (июнь–июль 2026)
+
+### Июнь 2026
+
+| Дата | Изменение | Статус |
+|------|-----------|--------|
+| 06-01 | **M-mode domain models** — `MModeScanLine`, `MModeState`, `MModeCaliperMeasurement` | [x] |
+| 06-02 | **M-mode column extractor** — bilinear interpolation по scan line | [x] |
+| 06-03 | **M-mode sweep display** — PyQtGraph panel с image buffer | [x] |
+| 06-04 | **M-mode vertical splitter** — toggle layout в MainWindow | [x] |
+| 06-05 | **M-mode extraction pipeline** — AppController + MainWindow wiring | [x] |
+| 06-06 | **M-mode caliper tool** — distance/time measurements | [x] |
+| 06-07 | **M-mode anatomical integration** — tests + DICOM calibration | [x] |
+| 06-08 | **M-mode scan line tool** — draggable nodes на ViewBox | [x] |
+| 06-09 | **M-mode status bar hints** — activation + scan line placement | [x] |
+| 06-10 | **M-mode DICOM calibration** — vertical axis cm, horizontal ms | [x] |
+| 06-11 | **M-mode close button** — × deactivates M-mode | [x] |
+| 06-12 | **M-mode caliper UX** — preview first point, multiple calipers per session | [x] |
+| 06-13 | **M-mode smart smoothing** — log compression + spatial Gaussian + temporal EMA | [x] |
+| 06-14 | **M-mode measurement tools** — vertical (depth), horizontal (time), arbitrary с guide lines | [x] |
+| 06-15 | **M-mode vertical lock** — toggle button + guide lines | [x] |
+| 06-16 | **M-mode horizontal lock** — horizontal measurement с guide lines preview | [x] |
+| 06-17 | **M-mode heart rate** — ЧСС в horizontal measurement label | [x] |
+| 06-18 | **STE Phase 5** — Bull's Eye Plot (17-segment polar map) | [x] |
+| 06-19 | **STE Phase 6** — Summary Table (clinical-style layout) | [x] |
+| 06-20 | **STE Phase 7** — Strain Curves View | [x] |
+| 06-21 | **STE Phase 8** — Display Mode Toggle (Deformation/SR/Peak) | [x] |
+| 06-22 | **STE Phase 9** — Quality Control Checkboxes | [x] |
+| 06-23 | **STE Phase 10** — Manual Kernel Correction | [x] |
+| 06-24 | **STE Phase 11** — Save/Export Deformation Data | [x] |
+| 06-25 | **STE fixes** — auto-load frames, QC checkboxes, critical blockers | [x] |
+| 06-26 | **Gold store** — UI tab in preferences + ECHO_GOLD_EXPORT env var | [x] |
+| 06-27 | **Gold UX** — per-frame instance_path, auto-update manifest, dedup | [x] |
+| 06-28 | **Gold multi-DICOM** — per-instance dedup + multi-DICOM study support | [x] |
+| 06-29 | **Gold annotation UX** — save/load gold contours with validation | [x] |
+| 06-30 | **Bench** — LV auto-contour bench + annulus landmarks + gold tooling | [x] |
+| 07-01 | **Bench** — MA landmark ONNX + baseline reports | [x] |
+| 07-02 | **Bench** — LVEF reject gate, temporal smoothing, per-frame normalization | [x] |
+| 07-03 | **LA auto** — gold UX + la_mask_to_contour + quality gate + LA-2 finetune | [x] |
+| 07-04 | **ONNX fixes** — atexit shutdown, thread safety, per-instance WL/DR | [x] |
+| 07-05 | **Segmentation fixes** — stuck + slow scroll + diagnostics | [x] |
+| 07-06 | **Structured reference browser** — ASE reference в AseReferenceDialog | [x] |
+| 07-07 | **Reference constructor** — visual editor для structured reference handbook | [x] |
+| 07-08 | **Reference widget** — tables instead of cards, image scaling, gradation table | [x] |
+| 07-09 | **Overlay** — color-coded out-of-range values + click-to-reference navigation | [x] |
+| 07-10 | **M-mode depth calibration** — detected ticks (5cm intervals) вместо DICOM pixel spacing | [x] |
+| 07-11 | **M-mode deactivate** — simplify by directly manipulating splitter | [x] |
+| 07-12 | **M-mode expand/collapse animation** — smooth QPropertyAnimation + 50% taller panel | [x] |
+
+### Июль 2026 — Cleanup & Release Prep
+
+| Дата | Изменение | Статус |
+|------|-----------|--------|
+| 07-18 | **Project cleanup** — удаление debug-логов, old/, orphan-директорий, backup-файлов, кэшей | [x] |
+| 07-18 | **Dependencies fix** — добавлены pyyaml, jsonschema; убран black; hatch version source | [x] |
+| 07-18 | **Commercial names** — замена EchoPAC/TomTec/Samsung/GE/QLAB на generic-названия | [x] |
+| 07-18 | **Phase2 → required** — onnxruntime, reportlab, openpyxl теперь обязательные зависимости | [x] |
+| 07-18 | **README update** — актуализация возможностей, требований, установки | [x] |
+
+### Июль 2026 — New Features
+
+| Дата | Изменение | Статус |
+|------|-----------|--------|
+| 07-18 | **Teichholz M-mode** — 3 последовательных калипера (МЖП→КДР→ЗСЛЖ) с chain-логикой | [x] |
+| 07-18 | **Teichholz ESV** — измерение КСР после подсветки | [x] |
+| 07-18 | **Teichholz results** — КДО, КСО, ФВ, ОТС, ММЛЖ, ИММЛЖ в overlay | [x] |
 
 ---
 
@@ -36,16 +105,6 @@
 | 6 | LAV/RAV Simpson open-arc | [x] `chamber_simpson`, овальный шаблон `warp_elliptical_open_arc` |
 | — | ~~П. 7~~ | **Снят** — ошибочный пункт исходного запроса |
 
-**Решённые вопросы спеки:** generic объём — замкнутый полигон; LAV primary — Simpson (area-length код есть, не в меню); overlay — **ОТС**.
-
-**Критерии готовности спеки:**
-
-- [x] Калибровка: 5.0 см → корректный mm/px
-- [x] После All Diastole → blink ES Diameter; после EDV Simpson → ESV
-- [x] ОТС в overlay при IVSd+LVEDD+LVPWd
-- [x] Площадь1/2, Объем1/2 в generic tools
-- [x] LAV 4C/2C + RAV 4C: open-arc, snap, group delete (как LV)
-
 ---
 
 ## LV Auto ONNX (спека 2026-06-19)
@@ -53,10 +112,9 @@
 | Фаза | Содержание | Статус |
 |------|------------|--------|
 | **v1** | A4C ONNX, papillary cleanup, review UX (Enter/Esc), hotkey I | [x] |
-| **v1** | Biplane A2C в LV Auto | [x] убрано из меню (не v1) |
-| **v1.1** | Фиксированные train mean/std | [ ] отложено — v1 annulus не трогаем |
-| **v1.5** | Per-frame quality: MP4 ROI fix, DICOM sector trim, adaptive Otsu threshold, embed order=1, phase-aware papillary, fixed norm v1.1, auto_refine all media | [x] спека `2026-07-05-lv-auto-onnx-quality-design.md` |
-| **v1.5+** | Temporal fusion: neighbor-aware contour (N±2), mask vote, node clamp, annulus fuse, ghost overlays | [x] спека `2026-07-05-lv-auto-temporal-fusion-design.md` |
+| **v1.1** | Фиксированные train mean/std | [ ] отложено |
+| **v1.5** | Per-frame quality: MP4 ROI fix, DICOM sector trim, adaptive Otsu threshold | [x] |
+| **v1.5+** | Temporal fusion: neighbor-aware contour (N±2), mask vote, node clamp | [x] |
 | **v2** | A2C auto (отдельная модель / transfer) | [ ] «в следующей версии» |
 
 - [x] Stepped border refine + edge snap для ai/manual
@@ -65,55 +123,71 @@
 
 ---
 
+## M-Mode (июнь–июль 2026)
+
+| Компонент | Описание | Статус |
+|-----------|----------|--------|
+| Domain models | `MModeScanLine`, `MModeState`, `MModeCaliperMeasurement` | [x] |
+| Column extractor | Bilinear interpolation по scan line | [x] |
+| Sweep display | PyQtGraph panel с image buffer | [x] |
+| Vertical splitter | Toggle layout в MainWindow | [x] |
+| DICOM calibration | Vertical axis cm, horizontal ms | [x] |
+| Smart smoothing | Log compression + spatial Gaussian + temporal EMA | [x] |
+| Measurement tools | Vertical (depth), horizontal (time), arbitrary с guide lines | [x] |
+| Vertical lock | Toggle button + guide lines | [x] |
+| Horizontal lock | Horizontal measurement с guide lines preview | [x] |
+| Heart rate | ЧСС в horizontal measurement label | [x] |
+| Expand/collapse animation | Smooth QPropertyAnimation + 50% taller panel | [x] |
+| Teichholz ED | 3 sequential calipers (МЖП→КДР→ЗСЛЖ) с chain-логикой | [x] |
+| Teichholz ESV | ESV measurement после подсветки | [x] |
+| Teichholz results | КДО, КСО, ФВ, ОТС, ММЛЖ, ИММЛЖ в overlay | [x] |
+
+---
+
+## Speckle Tracking (STE)
+
+| Фаза | Содержание | Статус |
+|------|------------|--------|
+| Phase 5 | Bull's Eye Plot (17-segment polar map) | [x] |
+| Phase 6 | Summary Table (clinical-style layout) | [x] |
+| Phase 7 | Strain Curves View | [x] |
+| Phase 8 | Display Mode Toggle (Deformation/SR/Peak) | [x] |
+| Phase 9 | Quality Control Checkboxes | [x] |
+| Phase 10 | Manual Kernel Correction | [x] |
+| Phase 11 | Save/Export Deformation Data | [x] |
+
+- [x] NCC block-matching, bidirectional ED-anchored tracking
+- [x] GLS, AHA 17 segments, strain curves, QC
+- [x] Пресеты: `standard`, `research` (настраиваемые параметры)
+- [x] Auto-load all frames перед tracking
+
+---
+
 ## Clinical UI и отчёты
 
 - [x] SystemBar, Measures accordion, ToolPanel (Controls)
 - [x] Нормативы ASE (`ase_reference_dialog`)
+- [x] **Structured reference browser** — интерактивный браузер с темами, патологиями, градациями, изображениями
+- [x] **Reference constructor** — visual editor для structured reference handbook
+- [x] **Overlay** — color-coded out-of-range values + click-to-reference navigation
 - [x] Рост/вес, индексы BSA, LAVi/RAVi в overlay
-- [x] Кнопка **Результаты** + PDF export (`measurement_results_dialog`, `reportlab` optional)
-- [~] `MeasurementWorksheet` — модуль есть, в `MainWindow` не подключён (заменён `MeasuresMenuWidget`)
+- [x] Кнопка **Результаты** + PDF export
+- [~] `MeasurementWorksheet` — модуль есть, в `MainWindow` не подключён
 - [ ] CSV / JSON export (`ReportService` из Этап2)
 - [ ] 2D | Doppler layout toggle в SystemBar
 
 ---
 
-## Measures-block.md — пробелы в меню
+## Gold Standard & Benchmarks
 
-Код handlers есть, **кнопок в `measures_menu.py` нет:**
-
-- [x] ~~**S ПП**~~ — **закрыто**: площадь ПП через RAV 4C (Simpson), отдельной кнопки не будет
-- [x] **RV FAC** — одна кнопка, ED→blink→ES, шаблон crescent open-arc (спека `2026-06-22-rv-fac-design.md`)
-
-**Реализовано в меню:** LV, LV Auto (EDV/ESV A4C), Aorta, LA, RA (диаметр + RAV 4C), RV + **FAC**, Diastology, MV/AV, TV/PV.
-
-**Area-length LA/RA:** `la_area_length.py`, `start_atrial_area_length_contour` — legacy, не в меню (Simpson primary).
-
----
-
-## Этап 2 / Этап 3 — архитектурный backlog
-
-- [ ] Side-by-side viewer + `MasterClock`
-- [ ] ECG waveform → ED/ES (`EcgWaveformParser`)
-- [ ] Полный блок ASE 2016 градации в UI (частично: `diastology_grade`, нормативы)
-- [ ] Doppler auto-trace / speckle tracking (исключено в Этап3)
-- [ ] Автоматические цепочки производных Doppler (S AV, полные MV/AV trace metrics)
-
----
-
-## Инфраструктура и UX (старые планы)
-
-| План | Статус |
-|------|--------|
-| Display UX (labels, RGB DICOM, DR sliders) | [~] gallery вместо tree browser; DR/W/L в Controls |
-| DICOM performance (decode worker, cache) | [x] |
-| Thumbnail priority P0/P1/P2 | [x] |
-| Simpson dual workflow (manual + MBS) | [x] |
-| LV Lamé template | [x] |
-| RBF contour deform | [x] |
-| MBS Advanced (ED→ES propagate) | [—] **cancelled** — superseded Lamé + R-refine |
-| LV Lamé template v2 (piecewise asymmetric) | [—] **cancelled** |
-| Open-arc Simpson (2026-06-11) | [x] |
-| DICOMweb Orthanc (QIDO/WADO, mock offline, session cache) | [x] |
+- [x] **Gold store** — UI tab in preferences + ECHO_GOLD_EXPORT env var
+- [x] **Gold UX** — per-frame instance_path, auto-update manifest, dedup
+- [x] **Gold multi-DICOM** — per-instance dedup + multi-DICOM study support
+- [x] **Gold annotation UX** — save/load gold contours with validation
+- [x] **Bench** — LV auto-contour bench + annulus landmarks + gold tooling
+- [x] **Bench** — MA landmark ONNX + baseline reports
+- [x] **Bench** — LVEF reject gate, temporal smoothing, per-frame normalization
+- [x] **LA auto** — gold UX + la_mask_to_contour + quality gate + LA-2 finetune
 
 ---
 
@@ -124,12 +198,10 @@
 - [x] Mock offline: `FakeDicomWebClient` + JSON/DICOM фикстуры
 - [x] UI: `OrthancStudyDialog`, «Загрузить с сервера…», настройки сервера
 - [x] Интеграция: `open_folder(study_path)` после загрузки
-- [x] Cancel загрузки + очистка session cache (`DICOM_parsing.md`)
+- [x] Cancel загрузки + очистка session cache
 - [x] Суммарный progress-bar по всем выбранным сериям
 - [x] QIDO `includefield`; парсинг `00201209` → «N инст.» в диалоге
-- [ ] Workplace: реальные JSON-фикстуры с Orthanc (см. spec footer)
-
-**Спека:** `docs/superpowers/specs/2026-06-23-dicomweb-orthanc-design.md` · **Замечания:** `DICOM_parsing.md`
+- [ ] Workplace: реальные JSON-фикстуры с Orthanc
 
 ---
 
@@ -138,13 +210,13 @@
 - [x] pynetdicom dep + DimseClient / DicomUploadClient ports
 - [x] PynetdimseClient: c_echo, c_find (study/series/instances), c_store
 - [x] FakeDimseClient для offline dev
-- [x] ServerSettings: dimse_enabled, ae_title, called_ae, host, port, stow_dicom_web_url, query_source
+- [x] ServerSettings: dimse_enabled, ae_title, called_ae, host, port
 - [x] UI: DIMSE section + Test C-ECHO кнопка
 - [x] UI: Query source selector (DICOMweb / DIMSE / Auto)
 - [x] STOW-RS: stow_instances() в OrthancDicomWebClient
 - [x] DicomUploadWorker: STOW-RS batch + DIMSE sequential C-STORE
 - [x] UI: «Отправить на сервер…» в SystemBar
-- [x] Unit + integration tests (ECHO_ORTHANC=1 / ECHO_ORTHANC_DIMSE=1)
+- [x] Unit + integration tests
 
 ### DIMSE Phase 2 (спека 2026-07-04)
 
@@ -154,45 +226,62 @@
 - [x] TLS client (CA + optional client cert)
 - [x] `retrieval_source`: wado / dimse / cmove / auto
 
-**Спека:** `docs/superpowers/specs/2026-07-04-dimse-phase2-design.md`
-
 ---
 
 ## Micro-UX (спека 2026-07-04)
 
-- [x] Inter fonts, theme fade, SVG icons — done
+- [x] Inter fonts, theme fade, SVG icons
 - [x] Hover lerp 100ms (SystemBar, ActivityBar, ToolPanel)
 - [x] Dialog fade+scale open/close
 - [x] Focus ring + disabled opacity (global QSS)
 - [x] Loading state on Search / Upload / C-ECHO
 - [—] Darcula palette migration — **cancelled**
 
-**Спека:** `docs/superpowers/specs/2026-07-04-micro-ux-design.md`
+---
+
+## Constructor (июль 2026)
+
+- [x] Reference constructor — visual editor для structured reference handbook
+- [x] Editors: topic, pathology, metadata, parameter table, image
+- [x] Storage: YAML, schema validation, image storage
+- [x] Import: Excel (openpyxl)
+- [x] Export: PDF (reportlab), HTML
+- [x] Save/reload + focus + validation + Enter key fixes
 
 ---
 
-## Performance Benchmarks (2026-07-02)
+## Этап 2 / Этап 3 — архитектурный backlog
 
-- [x] test_pipeline_bench.py — full end-to-end scan→decode→cache
-- [x] test_decode_bench.py — DicomSession (uncompressed, JPEG, JPEG-2000, single-frame, fallback)
-- [x] test_network_bench.py — C-ECHO, C-FIND, C-STORE, STOW multipart, QueryService
-- [x] pytest-benchmark autosave + compare workflow (.benchmarks/ history)
+- [ ] Side-by-side viewer + `MasterClock`
+- [ ] ECG waveform → ED/ES (`EcgWaveformParser`)
+- [ ] Полный блок ASE 2016 градации в UI
+- [ ] Doppler auto-trace
+- [ ] Автоматические цепочки производных Doppler
 
 ---
 
-## Следующие приоритеты (рекомендация)
+## Инфраструктура
 
-1. [x] RV FAC (одна кнопка, crescent open-arc, blink ED→ES)
-2. [ ] Workplace smoke DICOMweb + обновить `tests/fixtures/orthanc/` с сервера
-3. [ ] ONNX v1.1 (mean/std only, annulus — без изменений)
-4. [ ] ONNX v2 / A2C auto
-5. [ ] CSV/JSON отчёт
-6. [ ] Side-by-side + ECG (Этап 3)
+| План | Статус |
+|------|--------|
+| DICOM performance (decode worker, cache) | [x] |
+| Thumbnail priority P0/P1/P2 | [x] |
+| Simpson dual workflow (manual + MBS) | [x] |
+| LV Lamé template | [x] |
+| RBF contour deform | [x] |
+| Open-arc Simpson (2026-06-11) | [x] |
+| DICOMweb Orthanc (QIDO/WADO, mock offline) | [x] |
+| DIMSE Phase 1 + Phase 2 (C-GET, C-MOVE, TLS) | [x] |
+| M-mode anatomical | [x] |
+| Structured reference browser | [x] |
+| Reference constructor | [x] |
+| Gold store + benchmarks | [x] |
+| Project cleanup for trial release | [x] |
 
 ---
 
 ## Ссылки
 
-- Требования кнопок: `Measures-block.md`
-- Архитектура: `Этап2.md`, UI: `Этап3.md`
-- Актуальная спека workflow: `docs/superpowers/specs/2026-06-19-measurement-workflow-design.md`
+- Детальные спеки: `docs/superpowers/specs/`
+- Планы: `docs/superpowers/plans/`
+- Бенчмарки: `docs/bench/`
