@@ -12,7 +12,7 @@ from typing import Literal
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QEvent, QPointF, QSignalBlocker, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QCursor, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -960,6 +960,12 @@ class ViewerWidget(QWidget):
                 and hasattr(event, "globalPosition")
             ):
                 self._handle_contour_drag_release_from_global(event.globalPosition())
+            # Forward key events (Delete/Backspace/Escape) so they reach
+            # ViewerWidget.keyPressEvent — pyqtgraph.GraphicsView eats them
+            # by sending them to the scene, which ignores unhandled ones.
+            if event.type() == QEvent.Type.KeyPress:
+                self.keyPressEvent(event)
+                return event.isAccepted()
         return super().eventFilter(watched, event)
 
     @_prof
@@ -2171,11 +2177,11 @@ class ViewerWidget(QWidget):
     def _handle_mmode_line_click(self, x: float, y: float) -> bool:
         if not self._mmode_line_active or self._mmode_line_item is None:
             return False
-        # Convert view coords to image coords for storage
+        # _map_view_event already returns ViewBox coords (image pixel space)
+        # Just invert Y: ViewBox has invertY=True (Y up), image has Y=0 at top
         h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
-        img_pos = self._image_item.mapFromView(QPointF(x, y))
-        img_x = img_pos.x()
-        img_y = img_pos.y()
+        img_x = x
+        img_y = h - y
         if self._mmode_line_click_step == "start":
             # Remove previous caliper if any
             if self._mmode_line_item.is_complete:
@@ -2220,10 +2226,9 @@ class ViewerWidget(QWidget):
     def _mmode_node_dragging(self, endpoint_index: int, pos: tuple[float, float]) -> None:
         if self._mmode_line_item is None:
             return
-        # Convert view coords to image coords
+        # _map_view_event already returns ViewBox coords — just invert Y
         h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
-        img_pos_point = self._image_item.mapFromView(QPointF(pos[0], pos[1]))
-        img_pos = (img_pos_point.x(), img_pos_point.y())
+        img_pos = (pos[0], h - pos[1])
 
         # Apply vertical lock: keep original X, only update Y
         if self._mmode_vertical_lock:
@@ -3088,21 +3093,23 @@ class ViewerWidget(QWidget):
         return True
 
     def delete_contour_for_current_phase(self, view: str = "A4C") -> bool:
-        """Remove contour for the current frame and view."""
+        """Remove the last contour for the current frame and view (one at a time)."""
         if self._current_state is None:
             return False
         frame_index = self._current_state.current_frame_index
-        before = len(self._stored_contours)
-        self._stored_contours = [
-            contour
-            for contour in self._stored_contours
-            if not (
-                contour.view.casefold() == view.casefold()
-                and contour.frame_index == frame_index
-            )
-        ]
-        if len(self._stored_contours) == before:
+        # Find the last matching contour (LIFO — most recently added)
+        last_idx: int | None = None
+        for idx in reversed(range(len(self._stored_contours))):
+            c = self._stored_contours[idx]
+            if (
+                c.view.casefold() == view.casefold()
+                and c.frame_index == frame_index
+            ):
+                last_idx = idx
+                break
+        if last_idx is None:
             return False
+        del self._stored_contours[last_idx]
         self._render_contours_for_current_frame()
         if not self._syncing_state:
             self.contours_changed.emit(self.contours())

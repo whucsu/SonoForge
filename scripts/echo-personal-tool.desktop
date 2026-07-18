@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ECHO Personal Tool
+Comment=Personal desktop echocardiography analysis tool
+Exec=/opt/echo-personal-tool/echo-personal-tool
+Icon=echo-personal-tool
+Categories=MedicalSoftware;Science;
+Terminal=false
+StartupWMClass=echo-personal-tool

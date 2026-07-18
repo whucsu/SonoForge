@@ -793,7 +793,12 @@ class AseReferenceDialog(QDialog):
         if mode == 2:  # continuous
             self._pdf_scroll.hide()
             self._pdf_continuous_scroll.show()
-        else:
+        elif mode == 1:  # double page — let scroll area handle overflow
+            self._pdf_scroll.setWidgetResizable(False)
+            self._pdf_scroll.show()
+            self._pdf_continuous_scroll.hide()
+        else:  # single page
+            self._pdf_scroll.setWidgetResizable(True)
             self._pdf_scroll.show()
             self._pdf_continuous_scroll.hide()
 
@@ -863,6 +868,9 @@ class AseReferenceDialog(QDialog):
             self._render_pdf()
 
     def _pdf_view_mode_changed(self, index: int) -> None:
+        if index == 1:  # double page
+            self._pdf_zoom = 0.75
+            self._pdf_zoom_label.setText("75%")
         self._update_pdf_view_visibility()
         self._render_pdf()
 

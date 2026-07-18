@@ -8,6 +8,7 @@ from echo_personal_tool.domain.calculations.chamber_simpson import (
     biplane_es_volume_ml,
     es_volume_from_view,
 )
+from echo_personal_tool.domain.models.linear_measurement import _LABEL_I18N_KEY
 from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
 from echo_personal_tool.domain.services.indexed_results_formatter import (
     append_indexed_for_overlay,
@@ -190,6 +191,29 @@ def _best_lav_index(indexed) -> float | None:
         if candidate is not None:
             return candidate
     return None
+
+
+_CALIPER_PARAM_ID_MAP: dict[str, str] = {
+    "ivsd": "ivsd",
+    "lvedd": "lvedd",
+    "lvpwd": "lvpwd",
+    "lvesd": "lvesd",
+    "la": "la_lax",
+    "lal": "la_lax",
+    "ra": "ra_area",
+    "rv basal": "rvd1",
+    "rv mid": "rvd2",
+    "rvot": "pa_rvot",
+    "tapse": "tapss",
+    "s' rv": "s_prime_rv",
+    "s'": "s_prime_rv",
+    "av": "asc_aorta",
+    "annulus": "sinotubular",
+    "ao sinus": "asc_aorta",
+    "ao junction": "sinotubular",
+    "prox ao": "ascending_aorta",
+    "lvot": "lvedd",
+}
 
 
 _INDEXED_LINEAR_I18N: dict[str, str] = {
@@ -386,8 +410,23 @@ def format_results_overlay_html(
         _html_append(parts, item.label, item.value, item.unit, decimals=2 if item.kind == "area" else 1)
 
     for measurement in snapshot.linear_measurements:
-        text = measurement.display_text(length_unit=length_display_unit)
-        parts.append(f'<span style="color:{_COLOR_NORMAL};">{text}</span>')
+        if measurement.millimeter_length is not None:
+            param_id = _CALIPER_PARAM_ID_MAP.get(measurement.label.casefold())
+            display_label = measurement.label
+            i18n_key = _LABEL_I18N_KEY.get(measurement.label)
+            if i18n_key:
+                display_label = tr(i18n_key)
+            _html_append(
+                parts,
+                display_label,
+                measurement.millimeter_length,
+                length_display_unit,
+                param_id=param_id,
+                sex_male=sex_male,
+            )
+        else:
+            text = measurement.display_text(length_unit=length_display_unit)
+            parts.append(f'<span style="color:{_COLOR_NORMAL};">{text}</span>')
 
     return "<br>".join(parts)
 
