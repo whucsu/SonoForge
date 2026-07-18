@@ -369,16 +369,17 @@ class MeasuresMenuWidget(QWidget):
         layout.addStretch(1)
         scroll.setWidget(inner)
 
-        # Clear old layout if exists
+        # Clear old layout content if exists, otherwise create new layout
         if hasattr(self, '_outer_layout') and self._outer_layout is not None:
             while self._outer_layout.count():
                 item = self._outer_layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
-
-        self._outer_layout = QVBoxLayout(self)
-        self._outer_layout.setContentsMargins(0, 0, 0, 0)
-        self._outer_layout.addWidget(scroll)
+            self._outer_layout.addWidget(scroll)
+        else:
+            self._outer_layout = QVBoxLayout(self)
+            self._outer_layout.setContentsMargins(0, 0, 0, 0)
+            self._outer_layout.addWidget(scroll)
 
     def set_preferences(self, preferences) -> None:
         """Update preferences and rebuild menu."""
