@@ -20,7 +20,7 @@
 | **M-Mode** | Калибровка, scan line, измерения, сглаживание |
 | **Контуры** | Ручной / MBS-lite / ONNX LV Auto; R-refine, magnetic snap, Bézier spline |
 | **Speckle tracking (STE)** | NCC block-matching, GLS, AHA 17 segments, strain curves, QC |
-| **ONNX** | LV Auto A4C (hotkey `I`), LA Auto, temporal fusion, review + gradient refine (`R`) |
+| **ONNX** | LV Auto A4C (hotkey `I`), temporal fusion, review + gradient refine (`R`) |
 | **Отчёты** | Study overlay, индексы BSA, нормативы ASE, PDF export |
 | **Справочник ASE** | Интерактивный браузер с темами, патологиями, градациями, изображениями |
 | **Конструктор справочника** | Редактор параметров, импорт Excel, экспорт PDF/HTML, валидация YAML-схемы |
@@ -65,7 +65,6 @@
 
 - **Open-arc Simpson** — mitral annulus + apex.
 - **ONNX LV Auto**: `I` → маска → open-arc → review (`Enter`/`Esc`).
-- **LA Auto**: автоматическая сегментация левого предсердия.
 - **Temporal Fusion**: neighbor-aware контур (N±2), mask vote, node clamp.
 - **R** — stepped border refine (±N px вдоль нормали) + edge snap.
 - **Magnetic snap** контуров к границам миокарда.
