@@ -1,9 +1,9 @@
-"""M-mode measurement tools: vertical (depth), horizontal (time), arbitrary."""
+"""M-mode measurement tools: vertical (depth), horizontal (time), arbitrary, teichholz."""
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
@@ -14,11 +14,12 @@ from PySide6.QtWidgets import QWidget
 
 @dataclass
 class MModeMeasurement:
-    kind: Literal["vertical", "horizontal", "arbitrary"]
+    kind: Literal["vertical", "horizontal", "arbitrary", "teichholz_ed", "teichholz_es"]
     start: tuple[float, float]  # (time_ms, depth_mm)
     end: tuple[float, float]
     value_mm: float | None = None
     value_ms: float | None = None
+    label: str = ""
 
 
 class MModeMeasurementItem:
@@ -28,6 +29,8 @@ class MModeMeasurementItem:
     _LINE_PEN = pg.mkPen("#ffb300", width=2)
     _NODE_BRUSH = pg.mkBrush("#ffb300")
     _NODE_PEN = pg.mkPen("#ffb300")
+    _ES_HIGHLIGHT_PEN = pg.mkPen("#ff5722", width=3, style=Qt.PenStyle.DashLine)
+    _ES_HIGHLIGHT_BRUSH = pg.mkBrush("#ff5722")
 
     def __init__(self, view_box: pg.ViewBox) -> None:
         self._view = view_box
@@ -40,6 +43,7 @@ class MModeMeasurementItem:
         self._guide_v_end: pg.PlotDataItem | None = None
         self._label: pg.TextItem | None = None
         self._measurement: MModeMeasurement | None = None
+        self._es_highlight: pg.ScatterPlotItem | None = None
 
     def set_measurement(self, m: MModeMeasurement) -> None:
         self._measurement = m
@@ -51,7 +55,7 @@ class MModeMeasurementItem:
             self._line_item, self._start_node, self._end_node,
             self._guide_h_start, self._guide_h_end,
             self._guide_v_start, self._guide_v_end,
-            self._label,
+            self._label, self._es_highlight,
         ):
             if item is not None:
                 self._view.removeItem(item)
@@ -63,6 +67,7 @@ class MModeMeasurementItem:
         self._guide_v_start = None
         self._guide_v_end = None
         self._label = None
+        self._es_highlight = None
 
     def _create_graphics(self) -> None:
         if self._line_item is not None:
@@ -103,7 +108,7 @@ class MModeMeasurementItem:
         self._end_node.setData([ex], [ey])
 
         # Horizontal guides (from point to Y axis at x=0)
-        if m.kind != "horizontal":
+        if m.kind not in ("horizontal",):
             self._guide_h_start.setData([0, sx], [sy, sy])
             self._guide_h_end.setData([0, ex], [ey, ey])
         else:
@@ -111,7 +116,7 @@ class MModeMeasurementItem:
             self._guide_h_end.setData([], [])
 
         # Vertical guides (from point to X axis at y=0)
-        if m.kind != "vertical":
+        if m.kind not in ("vertical",):
             self._guide_v_start.setData([sx, sx], [0, sy])
             self._guide_v_end.setData([ex, ex], [0, ey])
         else:
@@ -120,11 +125,12 @@ class MModeMeasurementItem:
 
         # Label
         parts = []
+        if m.label:
+            parts.append(m.label)
         if m.value_mm is not None:
             parts.append(f"{m.value_mm:.1f} mm")
         if m.value_ms is not None:
             parts.append(f"{m.value_ms:.1f} ms")
-            # Heart rate from interval
             if m.value_ms > 0:
                 hr = 60000.0 / m.value_ms
                 parts.append(f"ЧСС {hr:.0f}")
@@ -134,15 +140,37 @@ class MModeMeasurementItem:
         self._label.setText(text)
         self._label.setPos(mid_x, mid_y)
 
+    def show_es_highlight(self) -> None:
+        """Show a pulsating highlight on the end point for ESV measurement."""
+        if self._measurement is None or self._view is None:
+            return
+        sx, sy = self._measurement.start
+        ex, ey = self._measurement.end
+        if self._es_highlight is None:
+            self._es_highlight = pg.ScatterPlotItem(
+                symbol="o", size=16,
+                pen=self._ES_HIGHLIGHT_PEN,
+                brush=self._ES_HIGHLIGHT_BRUSH,
+            )
+            self._es_highlight.setZValue(30)
+            self._view.addItem(self._es_highlight)
+        self._es_highlight.setData([ex], [ey])
+
 
 class MModeMeasurementTool(QWidget):
     """Manages M-mode measurements on the MModeWidget plot."""
 
     measurement_added = Signal(object)
+    teichholz_ed_complete = Signal(object)  # Emitted when 3 ED calipers are done
+    teichholz_es_complete = Signal(object)  # Emitted when ESV caliper is done
+    teichholz_es_highlight = Signal()  # Emitted to show ESV highlight
+
+    # Labels for the 3 ED calipers in Teichholz workflow
+    _TEICHHOLZ_ED_LABELS = ["МЖП", "КДР", "ЗСЛЖ"]
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._active_mode: Literal["vertical", "horizontal", "arbitrary"] | None = None
+        self._active_mode: Literal["vertical", "horizontal", "arbitrary", "teichholz_ed", "teichholz_es"] | None = None
         self._first_click: tuple[float, float] | None = None
         self._depth_mm_per_pixel: float | None = None
         self._time_ms_per_pixel: float | None = None
@@ -151,6 +179,10 @@ class MModeMeasurementTool(QWidget):
         self._items: list[MModeMeasurementItem] = []
         self._view_box: pg.ViewBox | None = None
         self._preview_item: MModeMeasurementItem | None = None
+
+        # Teichholz ED state
+        self._teichholz_ed_index: int = 0
+        self._teichholz_ed_measurements: list[MModeMeasurement] = []
 
     def set_view_box(self, view_box: pg.ViewBox) -> None:
         self._view_box = view_box
@@ -172,9 +204,22 @@ class MModeMeasurementTool(QWidget):
         self._active_mode = "arbitrary"
         self._first_click = None
 
+    def start_teichholz_ed(self) -> None:
+        """Start Teichholz ED workflow: 3 sequential vertical calipers."""
+        self._active_mode = "teichholz_ed"
+        self._first_click = None
+        self._teichholz_ed_index = 0
+        self._teichholz_ed_measurements.clear()
+
+    def start_teichholz_es(self) -> None:
+        """Start Teichholz ESV measurement."""
+        self._active_mode = "teichholz_es"
+        self._first_click = None
+
     def cancel(self) -> None:
         self._active_mode = None
         self._first_click = None
+        self._teichholz_ed_index = 0
         self._remove_preview()
 
     def on_click(self, x: float, y: float) -> bool:
@@ -192,17 +237,23 @@ class MModeMeasurementTool(QWidget):
         self._remove_preview()
 
         # Apply vertical lock: second point uses first point's X
-        if self._active_mode == "vertical":
+        if self._active_mode in ("vertical", "teichholz_ed", "teichholz_es"):
             end = (start[0], end[1])
         # Apply horizontal lock: second point uses first point's Y
         elif self._active_mode == "horizontal":
             end = (end[0], start[1])
 
-        m = MModeMeasurement(kind=self._active_mode, start=start, end=end)
+        # Determine label
+        label = ""
+        if self._active_mode == "teichholz_ed":
+            label = self._TEICHHOLZ_ED_LABELS[self._teichholz_ed_index]
+        elif self._active_mode == "teichholz_es":
+            label = "КСР"
 
-        # Coordinates are already in physical units (mm/ms) because
-        # ImageItem.setRect() maps the ViewBox to physical dimensions.
-        if self._active_mode in ("vertical", "arbitrary"):
+        m = MModeMeasurement(kind=self._active_mode, start=start, end=end, label=label)
+
+        # Coordinates are already in physical units (mm/ms)
+        if self._active_mode in ("vertical", "arbitrary", "teichholz_ed", "teichholz_es"):
             m.value_mm = abs(end[1] - start[1])
         if self._active_mode in ("horizontal", "arbitrary"):
             m.value_ms = abs(end[0] - start[0])
@@ -212,6 +263,28 @@ class MModeMeasurementTool(QWidget):
         item.set_measurement(m)
         self._items.append(item)
         self.measurement_added.emit(m)
+
+        # Handle Teichholz ED workflow
+        if self._active_mode == "teichholz_ed":
+            self._teichholz_ed_measurements.append(m)
+            self._teichholz_ed_index += 1
+
+            if self._teichholz_ed_index >= 3:
+                # All 3 ED calipers done — emit signal and switch to ESV mode
+                self.teichholz_ed_complete.emit(self._teichholz_ed_measurements)
+                self.teichholz_es_highlight.emit()
+                self._active_mode = None
+                self._teichholz_ed_index = 0
+            else:
+                # Chain: end point of this caliper = start point of next
+                self._first_click = end
+                self._show_preview(end[0], end[1])
+
+        # Handle Teichholz ESV workflow
+        elif self._active_mode == "teichholz_es":
+            self.teichholz_es_complete.emit(m)
+            self._active_mode = None
+
         return True
 
     def on_hover(self, x: float, y: float) -> bool:
@@ -221,14 +294,18 @@ class MModeMeasurementTool(QWidget):
         self._update_preview_guides(x, y)
         return True
 
+    def get_teichholz_ed_values(self) -> tuple[float, float, float] | None:
+        """Return (IVSd, LVIDd, LVPWd) in mm if all 3 calipers are measured."""
+        if len(self._teichholz_ed_measurements) < 3:
+            return None
+        return tuple(m.value_mm for m in self._teichholz_ed_measurements[:3])  # type: ignore[return-value]
+
     def _show_preview(self, x: float, y: float) -> None:
         """Show perpendicular crosshair guide lines at first click position."""
         if self._view_box is None:
             return
         self._remove_preview()
-        pen = pg.mkPen("#9e9e9e", width=1, style=Qt.PenStyle.DashLine)
         self._preview_item = MModeMeasurementItem(self._view_box)
-        # Create a dummy vertical measurement for guide rendering
         m = MModeMeasurement(kind="arbitrary", start=(x, y), end=(x, y))
         self._preview_item.set_measurement(m)
 
@@ -238,7 +315,7 @@ class MModeMeasurementTool(QWidget):
             return
         sx, sy = self._first_click
         # For vertical mode, fix X to first point
-        if self._active_mode == "vertical":
+        if self._active_mode in ("vertical", "teichholz_ed", "teichholz_es"):
             x = sx
         # For horizontal mode, fix Y to first point
         elif self._active_mode == "horizontal":
@@ -258,4 +335,6 @@ class MModeMeasurementTool(QWidget):
         self.measurements.clear()
         self._active_mode = None
         self._first_click = None
+        self._teichholz_ed_index = 0
+        self._teichholz_ed_measurements.clear()
         self._remove_preview()

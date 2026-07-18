@@ -25,3 +25,17 @@ class MModeCaliperMeasurement:
     end: tuple[float, float]
     value_mm: float | None = None
     value_ms: float | None = None
+
+
+@dataclass(frozen=True)
+class TeichholzMModeResult:
+    """Computed Teichholz LV function from M-mode calipers."""
+    ivsd_mm: float
+    lvidd_mm: float
+    lvpwd_mm: float
+    edv_ml: float
+    esv_ml: float | None = None
+    lvef_percent: float | None = None
+    rwt: float | None = None
+    lvm_g: float | None = None
+    lvmi_g_m2: float | None = None

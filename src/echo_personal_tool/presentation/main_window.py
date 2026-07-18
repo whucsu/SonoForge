@@ -394,6 +394,8 @@ class MainWindow(QMainWindow):
         if self._mmode_widget is None:
             self._mmode_widget = MModeWidget()
             self._mmode_widget.deactivate_requested.connect(self._toggle_mmode)
+            self._mmode_widget.teichholz_ed_complete.connect(self._on_teichholz_ed_complete)
+            self._mmode_widget.teichholz_es_complete.connect(self._on_teichholz_es_complete)
         # Find viewer's current position BEFORE reparenting
         idx = self._content_splitter.indexOf(self._viewer)
         if idx < 0:
@@ -915,6 +917,63 @@ class MainWindow(QMainWindow):
             if state.instance is not None and state.instance.frame_time_ms is not None and state.instance.frame_time_ms > 0:
                 self._mmode_widget.set_time_calibration_ms_per_pixel(state.instance.frame_time_ms)
             self._show_status(tr("status.mmode_line_placed"))
+
+    def _on_teichholz_ed_complete(self, measurements) -> None:
+        """Handle completion of 3 Teichholz ED calipers (МЖП, КДР, ЗСЛЖ)."""
+        if len(measurements) < 3:
+            return
+        ivsd = measurements[0].value_mm
+        lvidd = measurements[1].value_mm
+        lvpwd = measurements[2].value_mm
+        if ivsd is None or lvidd is None or lvpwd is None:
+            return
+        from echo_personal_tool.domain.calculations.teichholz_mmode import compute_teichholz_from_mmode
+        session = self._controller._measurement_session
+        study_uid = session._current_study_uid if session else None
+        data = session._studies.get(study_uid) if session and study_uid else None
+        height_cm = data.height_cm if data else None
+        weight_kg = data.weight_kg if data else None
+        result = compute_teichholz_from_mmode(
+            ivsd_mm=ivsd, lvidd_mm=lvidd, lvpwd_mm=lvpwd,
+            height_cm=height_cm, weight_kg=weight_kg,
+        )
+        self._show_status(
+            f"МЖП={ivsd:.1f} КДР={lvidd:.1f} ЗСЛЖ={lvpwd:.1f} "
+            f"КДО={result.edv_ml:.1f} мл  "
+            f"ОТС={result.rwt:.2f}  ММЛЖ={result.lvm_g:.1f} г"
+        )
+
+    def _on_teichholz_es_complete(self, measurement) -> None:
+        """Handle completion of Teichholz ESV caliper (КСР)."""
+        if measurement.value_mm is None:
+            return
+        from echo_personal_tool.domain.calculations.teichholz_mmode import compute_teichholz_from_mmode
+        if self._mmode_widget is None:
+            return
+        ed_values = self._mmode_widget._measurement_tool.get_teichholz_ed_values()
+        if ed_values is None:
+            return
+        ivsd, lvidd, lvpwd = ed_values
+        lvesd = measurement.value_mm
+        session = self._controller._measurement_session
+        study_uid = session._current_study_uid if session else None
+        data = session._studies.get(study_uid) if session and study_uid else None
+        height_cm = data.height_cm if data else None
+        weight_kg = data.weight_kg if data else None
+        result = compute_teichholz_from_mmode(
+            ivsd_mm=ivsd, lvidd_mm=lvidd, lvpwd_mm=lvpwd,
+            lvesd_mm=lvesd,
+            height_cm=height_cm, weight_kg=weight_kg,
+        )
+        lvmi_str = f"  ИММЛЖ={result.lvmi_g_m2:.1f} г/м²" if result.lvmi_g_m2 else ""
+        self._show_status(
+            f"Тейхольц: МЖП={result.ivsd_mm:.1f} ЗСЛЖ={result.lvpwd_mm:.1f} "
+            f"КДР={result.lvidd_mm:.1f} КСР={lvesd:.1f} "
+            f"КДО={result.edv_ml:.1f} КСО={result.esv_ml:.1f} "
+            f"ФВ={result.lvef_percent:.1f}%  "
+            f"ОТС={result.rwt:.2f}  ММЛЖ={result.lvm_g:.1f} г"
+            f"{lvmi_str}"
+        )
 
     def _wire_wl_persistence(self) -> None:
         for slider_widget in (

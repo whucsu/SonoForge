@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from echo_personal_tool.domain.services.mmode_extractor import extract_mmode_column
 from echo_personal_tool.domain.services.mmode_smoothing import (
@@ -25,6 +25,8 @@ class MModeWidget(QWidget):
     sweep_speed_changed = Signal(int)
     deactivate_requested = Signal()
     measurement_added = Signal(object)
+    teichholz_ed_complete = Signal(object)
+    teichholz_es_complete = Signal(object)
 
     def __init__(self, buffer_width: int = 512, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -64,6 +66,9 @@ class MModeWidget(QWidget):
         self._measurement_tool = MModeMeasurementTool()
         self._measurement_tool.set_view_box(self._view_box)
         self._measurement_tool.measurement_added.connect(self.measurement_added.emit)
+        self._measurement_tool.teichholz_ed_complete.connect(self._on_teichholz_ed_complete)
+        self._measurement_tool.teichholz_es_complete.connect(self._on_teichholz_es_complete)
+        self._measurement_tool.teichholz_es_highlight.connect(self._on_teichholz_es_highlight)
 
         # Enable mouse clicks on plot for measurements
         self._plot.scene().sigMouseClicked.connect(self._on_plot_clicked)
@@ -94,6 +99,25 @@ class MModeWidget(QWidget):
             btn.clicked.connect(slot)
             self._measure_btns[label] = btn
             toolbar.addWidget(btn)
+
+        # Teichholz buttons
+        self._teichholz_ed_btn = QPushButton("📐 Тейхольц ED")
+        self._teichholz_ed_btn.setFixedHeight(22)
+        self._teichholz_ed_btn.setCheckable(True)
+        self._teichholz_ed_btn.clicked.connect(self._start_teichholz_ed)
+        toolbar.addWidget(self._teichholz_ed_btn)
+
+        self._teichholz_es_btn = QPushButton("📐 Тейхольц ESV")
+        self._teichholz_es_btn.setFixedHeight(22)
+        self._teichholz_es_btn.setCheckable(True)
+        self._teichholz_es_btn.setEnabled(False)
+        self._teichholz_es_btn.clicked.connect(self._start_teichholz_es)
+        toolbar.addWidget(self._teichholz_es_btn)
+
+        self._teichholz_status = QLabel("")
+        self._teichholz_status.setFixedHeight(22)
+        self._teichholz_status.setStyleSheet("color: #ffb300; font-weight: bold;")
+        toolbar.addWidget(self._teichholz_status)
 
         self._clear_meas_btn = QPushButton("Очистить")
         self._clear_meas_btn.setFixedHeight(22)
@@ -172,13 +196,61 @@ class MModeWidget(QWidget):
         self._measurement_tool.cancel()
         for btn in self._measure_btns.values():
             btn.setChecked(False)
+        self._teichholz_ed_btn.setChecked(False)
+        self._teichholz_es_btn.setChecked(False)
         self._measure_btns["↗ Произвольное"].setChecked(True)
         self._measurement_tool.start_arbitrary()
+
+    def _start_teichholz_ed(self) -> None:
+        """Start Teichholz ED workflow: 3 sequential vertical calipers (МЖП, КДР, ЗСЛЖ)."""
+        self._measurement_tool.cancel()
+        for btn in self._measure_btns.values():
+            btn.setChecked(False)
+        self._teichholz_es_btn.setChecked(False)
+        self._teichholz_ed_btn.setChecked(True)
+        self._teichholz_status.setText("Кликните: МЖП → КДР → ЗСЛЖ")
+        self._measurement_tool.start_teichholz_ed()
+
+    def _start_teichholz_es(self) -> None:
+        """Start Teichholz ESV measurement."""
+        self._measurement_tool.cancel()
+        for btn in self._measure_btns.values():
+            btn.setChecked(False)
+        self._teichholz_ed_btn.setChecked(False)
+        self._teichholz_es_btn.setChecked(True)
+        self._teichholz_status.setText("Измерьте КСР (вертикально)")
+        self._measurement_tool.start_teichholz_es()
 
     def _clear_measurements(self) -> None:
         self._measurement_tool.clear()
         for btn in self._measure_btns.values():
             btn.setChecked(False)
+        self._teichholz_ed_btn.setChecked(False)
+        self._teichholz_es_btn.setEnabled(False)
+        self._teichholz_es_btn.setChecked(False)
+        self._teichholz_status.setText("")
+
+    def _on_teichholz_ed_complete(self, measurements) -> None:
+        """Handle completion of 3 ED calipers."""
+        self._teichholz_ed_btn.setChecked(False)
+        self._teichholz_es_btn.setEnabled(True)
+        self._teichholz_status.setText("ED готово! Нажмите КСР для измерения КСР")
+        self.teichholz_ed_complete.emit(measurements)
+
+    def _on_teichholz_es_complete(self, measurement) -> None:
+        """Handle completion of ESV caliper."""
+        self._teichholz_es_btn.setChecked(False)
+        self._teichholz_es_btn.setEnabled(False)
+        self._teichholz_status.setText("Тейхольц: все измерения готовы")
+        self.teichholz_es_complete.emit(measurement)
+
+    def _on_teichholz_es_highlight(self) -> None:
+        """Show ESV highlight on the last ED measurement item."""
+        items = self._measurement_tool._items
+        if items:
+            # Highlight the end point of the last ED caliper (ЗСЛЖ end = where ESV starts)
+            last_item = items[-1]
+            last_item.show_es_highlight()
 
     def set_scan_line(
         self,
