@@ -12,7 +12,7 @@ from typing import Literal
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QEvent, QSignalBlocker, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPointF, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QCursor, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -2173,7 +2173,7 @@ class ViewerWidget(QWidget):
             return False
         # Convert view coords to image coords for storage
         # Both X and Y need conversion — ViewBox may scale/offset the image
-        img_pos = self._image_item.mapFromView(pg.PointF(x, y))
+        img_pos = self._image_item.mapFromView(QPointF(x, y))
         img_x = img_pos.x()
         img_y = img_pos.y()
         if self._mmode_line_click_step == "start":
@@ -2221,7 +2221,7 @@ class ViewerWidget(QWidget):
         if self._mmode_line_item is None:
             return
         # Convert view coords to image coords
-        img_pos_point = self._image_item.mapFromView(pg.PointF(pos[0], pos[1]))
+        img_pos_point = self._image_item.mapFromView(QPointF(pos[0], pos[1]))
         img_pos = (img_pos_point.x(), img_pos_point.y())
 
         # Apply vertical lock: keep original X, only update Y

@@ -93,7 +93,11 @@ class MModeMeasurementItem:
             self._view.addItem(item)
             setattr(self, attr, item)
 
-        self._label = pg.TextItem(color="#ffb300", anchor=(0, 1))
+        self._label = pg.TextItem(
+            color="#ffb300",
+            fill=(0, 0, 0, 160),
+            anchor=(0, 1),
+        )
         self._label.setZValue(27)
         self._view.addItem(self._label)
 
