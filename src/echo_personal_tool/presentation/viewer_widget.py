@@ -2172,7 +2172,7 @@ class ViewerWidget(QWidget):
         if not self._mmode_line_active or self._mmode_line_item is None:
             return False
         # Convert view coords to image coords for storage
-        # Both X and Y need conversion — ViewBox may scale/offset the image
+        h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
         img_pos = self._image_item.mapFromView(QPointF(x, y))
         img_x = img_pos.x()
         img_y = img_pos.y()
@@ -2221,6 +2221,7 @@ class ViewerWidget(QWidget):
         if self._mmode_line_item is None:
             return
         # Convert view coords to image coords
+        h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
         img_pos_point = self._image_item.mapFromView(QPointF(pos[0], pos[1]))
         img_pos = (img_pos_point.x(), img_pos_point.y())
 
