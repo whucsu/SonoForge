@@ -1,0 +1,5 @@
+2026-07-18 20:32:46,616 [WARNING] echo_personal_tool.application.app_controller: on_linear_measurements_changed: 1 measurements
+2026-07-18 20:32:46,616 [WARNING] echo_personal_tool.application.app_controller:   -> label=Dist1 uid=1.2.410.200001.1.1185.2062614048.3.20260424.1144005822.508.49 mm=48.2
+2026-07-18 20:33:14,550 [WARNING] echo_personal_tool.application.app_controller: on_linear_measurements_changed: 2 measurements
+2026-07-18 20:33:14,550 [WARNING] echo_personal_tool.application.app_controller:   -> label=Dist1 uid=1.2.410.200001.1.1185.2062614048.3.20260424.1144005822.508.49 mm=48.2
+2026-07-18 20:33:14,550 [WARNING] echo_personal_tool.application.app_controller:   -> label=Dist2 uid=1.2.410.200001.1.1185.2062614048.3.20260424.1144005822.508.49 mm=37.0

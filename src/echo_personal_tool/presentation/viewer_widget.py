@@ -2171,19 +2171,21 @@ class ViewerWidget(QWidget):
     def _handle_mmode_line_click(self, x: float, y: float) -> bool:
         if not self._mmode_line_active or self._mmode_line_item is None:
             return False
-        # Convert view coords (invertY=True) to image coords (Y=0 at top) for storage
-        h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
-        img_y = h - y
+        # Convert view coords to image coords for storage
+        # Both X and Y need conversion — ViewBox may scale/offset the image
+        img_pos = self._image_item.mapFromView(pg.PointF(x, y))
+        img_x = img_pos.x()
+        img_y = img_pos.y()
         if self._mmode_line_click_step == "start":
             # Remove previous caliper if any
             if self._mmode_line_item.is_complete:
                 self._mmode_line_item.remove_from_view(self._view)
-            self._mmode_line_item.set_start((x, img_y))
+            self._mmode_line_item.set_start((img_x, img_y))
             self._mmode_line_click_step = "end"
             self._update_mmode_line_preview(x, y)
             return True
         elif self._mmode_line_click_step == "end":
-            self._mmode_line_item.set_end((x, img_y))
+            self._mmode_line_item.set_end((img_x, img_y))
             self._mmode_line_item.update_graphics_for_view(self._view, h)
             self.mmode_line_completed.emit(*self._mmode_line_item.get_endpoints())
             self._mmode_line_click_step = "start"
@@ -2219,8 +2221,8 @@ class ViewerWidget(QWidget):
         if self._mmode_line_item is None:
             return
         # Convert view coords to image coords
-        h = self._current_frame.shape[0] if self._current_frame is not None else 1.0
-        img_pos = (pos[0], h - pos[1])
+        img_pos_point = self._image_item.mapFromView(pg.PointF(pos[0], pos[1]))
+        img_pos = (img_pos_point.x(), img_pos_point.y())
 
         # Apply vertical lock: keep original X, only update Y
         if self._mmode_vertical_lock:
