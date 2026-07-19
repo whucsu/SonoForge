@@ -91,6 +91,13 @@ class ServerSettingsForm(QWidget):
         dimse_form.addRow("", self._dimse_use_tls)
         self._dimse_tls_verify = QCheckBox(tr("server_settings.verify_certificate"))
         dimse_form.addRow("", self._dimse_tls_verify)
+        self._dimse_tls_warning = QLabel(tr("server_settings.tls_verify_warning"))
+        self._dimse_tls_warning.setStyleSheet("color: #fb923c; font-weight: bold;")
+        self._dimse_tls_warning.hide()
+        dimse_form.addRow("", self._dimse_tls_warning)
+        self._dimse_tls_verify.toggled.connect(
+            lambda checked: self._dimse_tls_warning.setVisible(not checked)
+        )
         self._dimse_tls_ca_path = QLineEdit()
         self._dimse_tls_ca_path.setPlaceholderText("/path/to/ca.pem")
         dimse_form.addRow(tr("server_settings.ca_certificate"), self._dimse_tls_ca_path)

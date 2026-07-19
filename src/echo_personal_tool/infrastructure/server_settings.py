@@ -11,10 +11,11 @@ from PySide6.QtCore import QSettings
 _SETTINGS_ORG = "sonoforge"
 _SETTINGS_APP = "server"
 
-_DEFAULT_URL = "http://127.0.0.1:8042/dicom-web"
+_DEFAULT_URL = "https://127.0.0.1:8042/dicom-web"
 _DEFAULT_USE_MOCK = True
 _DEFAULT_AUTH_MODE = "none"
 _AUTH_MODES = frozenset({"none", "basic"})
+_SERVICE_NAME = "sonoforge"
 
 
 @dataclass
@@ -74,7 +75,13 @@ def list_profiles() -> dict[str, ServerSettings]:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         data = {}
-    return {name: _dict_to_settings(d) for name, d in data.items()}
+    profiles = {}
+    for name, d in data.items():
+        settings = _dict_to_settings(d)
+        # Load password from keyring
+        settings.password = _load_password_keyring(f"profile:{name}")
+        profiles[name] = settings
+    return profiles
 
 
 def save_profile(name: str, settings: ServerSettings) -> None:
@@ -85,7 +92,12 @@ def save_profile(name: str, settings: ServerSettings) -> None:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         data = {}
-    data[name] = _settings_to_dict(settings)
+    profile_data = _settings_to_dict(settings)
+    # Store password in keyring, not in JSON
+    if settings.password:
+        _save_password_keyring(f"profile:{name}", settings.password)
+    profile_data.pop("password", None)
+    data[name] = profile_data
     store.setValue("profiles", json.dumps(data, ensure_ascii=False))
     store.sync()
 
@@ -109,6 +121,8 @@ def delete_profile(name: str) -> bool:
     del data[name]
     store.setValue("profiles", json.dumps(data, ensure_ascii=False))
     store.sync()
+    # Clear keyring password for this profile
+    _save_password_keyring(f"profile:{name}", "")
     return True
 
 
@@ -165,7 +179,7 @@ def load_server_settings() -> ServerSettings:
         description=str(store.value("description", "")),
         url=legacy_url,
         username=str(store.value("username", "")),
-        password=str(store.value("password", "")),
+        password=_load_password_keyring(str(store.value("username", ""))),
         auth_mode=auth_mode,
         http_headers=str(store.value("http_headers", "")),
         use_mock=_read_bool(store.value("use_mock"), _DEFAULT_USE_MOCK),
@@ -192,6 +206,10 @@ def load_server_settings() -> ServerSettings:
 def reset_server_settings() -> None:
     """Clear all server settings, restoring QSettings to factory defaults."""
     store = _settings_store()
+    # Clear keyring password for current username
+    username = str(store.value("username", ""))
+    if username:
+        _save_password_keyring(username, "")
     for key in ("description", "url", "username", "password", "auth_mode",
                 "http_headers", "use_mock", "dimse_enabled", "dimse_ae_title",
                 "dimse_called_ae", "dimse_host", "dimse_port", "stow_dicom_web_url",
@@ -208,7 +226,7 @@ def save_server_settings(settings: ServerSettings) -> None:
     store.setValue("description", settings.description)
     store.setValue("url", settings.url.strip())
     store.setValue("username", settings.username)
-    store.setValue("password", settings.password)
+    _save_password_keyring(settings.username, settings.password)
     store.setValue("auth_mode", settings.auth_mode)
     store.setValue("http_headers", settings.http_headers)
     store.setValue("use_mock", settings.use_mock)
@@ -230,3 +248,29 @@ def save_server_settings(settings: ServerSettings) -> None:
     store.setValue("dimse_scp_host", settings.dimse_scp_host)
     store.setValue("dimse_scp_ae_title", settings.dimse_scp_ae_title)
     store.sync()
+
+
+# ── Keyring helpers ────────────────────────────────────────────────
+
+def _save_password_keyring(username: str, password: str) -> None:
+    """Store password in OS keychain instead of plaintext QSettings."""
+    try:
+        import keyring
+        if password:
+            keyring.set_password(_SERVICE_NAME, username, password)
+        else:
+            try:
+                keyring.delete_password(_SERVICE_NAME, username)
+            except keyring.errors.PasswordDeleteError:
+                pass
+    except Exception:
+        pass  # Fallback: QSettings already saved it
+
+
+def _load_password_keyring(username: str) -> str:
+    """Load password from OS keychain."""
+    try:
+        import keyring
+        return keyring.get_password(_SERVICE_NAME, username) or ""
+    except Exception:
+        return ""

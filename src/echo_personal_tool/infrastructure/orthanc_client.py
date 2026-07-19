@@ -79,12 +79,14 @@ class OrthancDicomWebClient:
             auth=auth,
             headers=headers,
             timeout=self._timeout,
+            verify=True,
         )
         self._client = httpx.Client(
             base_url=f"{self._dicom_web_root}/",
             auth=auth,
             headers=headers,
             timeout=self._timeout,
+            verify=True,
         )
         stow_root = stow_dicom_web_url.strip()
         if stow_root:
@@ -94,6 +96,7 @@ class OrthancDicomWebClient:
                 auth=auth,
                 headers=headers,
                 timeout=self._timeout,
+                verify=True,
             )
         else:
             self._stow_client = None

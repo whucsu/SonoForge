@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -274,3 +275,17 @@ class ToolPanel(QWidget):
     @property
     def is_collapsed(self) -> bool:
         return self._collapsed
+
+    def showEvent(self, event: QShowEvent) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        QTimer.singleShot(0, self._setup_tab_scroll_arrows)
+
+    def _setup_tab_scroll_arrows(self) -> None:
+        tab_bar = self._tabs.tabBar()
+        for btn in tab_bar.findChildren(QToolButton):
+            # Scroll buttons are children of the tab bar with no text
+            if not btn.text() and btn.width() < 60:
+                if btn.x() < tab_bar.width() // 2:
+                    btn.setText("\u25c0")  # ◀
+                else:
+                    btn.setText("\u25b6")  # ▶

@@ -977,6 +977,7 @@ class ReferenceFontSettingsDialog(QDialog):
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        self._recolor_buttonbox_icons(buttons)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
@@ -987,3 +988,26 @@ class ReferenceFontSettingsDialog(QDialog):
 
     def selected_size(self) -> int:
         return self._size.value()
+
+    def _recolor_buttonbox_icons(self, box: QDialogButtonBox) -> None:
+        from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
+        from PySide6.QtCore import Qt
+        from echo_personal_tool.presentation.dark_theme import get_theme_palette
+        p = get_theme_palette()
+        color = QColor(p["text"])
+        for btn in box.findChildren(QPushButton):
+            old_icon = btn.icon()
+            if old_icon.isNull():
+                continue
+            pixmap = old_icon.pixmap(16, 16)
+            if pixmap.isNull():
+                continue
+            image = QImage(16, 16, QImage.Format.Format_ARGB32)
+            image.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(image)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(image.rect(), color)
+            painter.end()
+            btn.setIcon(QIcon(QPixmap.fromImage(image)))

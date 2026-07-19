@@ -99,6 +99,7 @@ class PynetdimseClient:
         if ca_path:
             ssl_cx.load_verify_locations(cafile=ca_path)
         if not verify:
+            logger.warning("TLS certificate verification DISABLED — MITM risk!")
             ssl_cx.check_hostname = False
             ssl_cx.verify_mode = ssl.CERT_NONE
         if cert_path and key_path:

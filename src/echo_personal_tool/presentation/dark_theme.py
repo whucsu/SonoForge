@@ -467,6 +467,11 @@ QTreeWidget::indicator:unchecked, QTreeView::indicator:unchecked {{
     border-bottom: 1px solid {p["border"]};
     min-height: 34px;
 }}
+#preferencesTitleBar {{
+    background: {p["bg_panel"]};
+    border-bottom: 1px solid {p["border"]};
+    min-height: 34px;
+}}
 #systemBar QPushButton {{
     min-height: 23px;
     max-height: 23px;
@@ -594,9 +599,9 @@ QTabBar QToolButton {{
     color: {p["text"]};
     border: 1px solid {p["border"]};
     border-radius: 4px;
-    padding: 4px 8px;
-    min-width: 24px;
-    min-height: 24px;
+    padding: 4px 14px;
+    min-width: 42px;
+    min-height: 26px;
     font-size: {font_size}px;
     font-weight: bold;
 }}

@@ -57,7 +57,7 @@ MAX_PDF_FONT_SIZE = 16
 DEFAULT_PDF_FONT_SIZE = 10
 
 DEFAULT_INTERESTING_DICOM_TAGS = (
-    "PatientName,PatientID,StudyDate,SeriesDescription,HeartRate,FrameRate"
+    "StudyDate,SeriesDescription,HeartRate,FrameRate"
 )
 
 

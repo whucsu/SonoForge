@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -19,6 +20,9 @@ class ImageStorage:
 
     def resolve(self, filename: str) -> Path | None:
         """Resolve a filename to full path. Returns None if not found."""
+        # Prevent path traversal
+        if ".." in filename or "/" in filename or "\\" in filename:
+            return None
         path = self._dir / filename
         return path if path.exists() else None
 
@@ -34,6 +38,9 @@ class ImageStorage:
 
     def delete(self, filename: str) -> bool:
         """Delete image from images dir. Returns True if deleted."""
+        # Prevent path traversal
+        if ".." in filename or "/" in filename or "\\" in filename:
+            return False
         path = self._dir / filename
         if path.exists():
             path.unlink()
@@ -42,6 +49,10 @@ class ImageStorage:
 
     def rename(self, old_name: str, new_name: str) -> str:
         """Rename image. Returns new filename."""
+        # Prevent path traversal
+        for name in (old_name, new_name):
+            if ".." in name or "/" in name or os.sep in name:
+                return old_name
         old_path = self._dir / old_name
         new_path = self._dir / new_name
         if old_path.exists():

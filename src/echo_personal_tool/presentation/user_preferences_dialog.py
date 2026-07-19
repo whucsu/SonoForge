@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -95,7 +96,7 @@ class UserPreferencesDialog(QDialog):
 
         # Custom title bar
         title_bar = QWidget()
-        title_bar.setObjectName("systemBar")
+        title_bar.setObjectName("preferencesTitleBar")
         title_bar.setFixedHeight(34)
         title_bar_layout = QHBoxLayout(title_bar)
         title_bar_layout.setContentsMargins(6, 0, 0, 0)
@@ -114,6 +115,7 @@ class UserPreferencesDialog(QDialog):
         title_bar_layout.addWidget(btn_close)
 
         tabs = QTabWidget()
+        self._tabs = tabs
 
         interface_form = QFormLayout()
         self._theme_combo = QComboBox()
@@ -340,6 +342,7 @@ class UserPreferencesDialog(QDialog):
         )
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
+        self._recolor_buttonbox_icons(buttons)
 
         reset_row = QHBoxLayout()
         reset_defaults_btn = QPushButton(tr("preferences.reset_defaults"))
@@ -458,3 +461,40 @@ class UserPreferencesDialog(QDialog):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         self._drag_pos = None
+
+    def showEvent(self, event) -> None:  # noqa: ANN001
+        super().showEvent(event)
+        QTimer.singleShot(0, self._setup_tab_scroll_arrows)
+
+    def _setup_tab_scroll_arrows(self) -> None:
+        tab_bar = self._tabs.tabBar()
+        for btn in tab_bar.findChildren(QToolButton):
+            # Scroll buttons are children of the tab bar with no text
+            if not btn.text() and btn.width() < 60:
+                if btn.x() < tab_bar.width() // 2:
+                    btn.setText("\u25c0")  # ◀
+                else:
+                    btn.setText("\u25b6")  # ▶
+
+    def _recolor_buttonbox_icons(self, box: QDialogButtonBox) -> None:
+        from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
+        from PySide6.QtCore import Qt
+        from echo_personal_tool.presentation.dark_theme import get_theme_palette
+        p = get_theme_palette()
+        color = QColor(p["text"])
+        for btn in box.findChildren(QPushButton):
+            old_icon = btn.icon()
+            if old_icon.isNull():
+                continue
+            pixmap = old_icon.pixmap(16, 16)
+            if pixmap.isNull():
+                continue
+            image = QImage(16, 16, QImage.Format.Format_ARGB32)
+            image.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(image)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+            painter.fillRect(image.rect(), color)
+            painter.end()
+            btn.setIcon(QIcon(QPixmap.fromImage(image)))

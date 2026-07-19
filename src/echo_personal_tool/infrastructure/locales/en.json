@@ -450,6 +450,7 @@
   "server_settings.retrieval_source": "Retrieval source:",
   "server_settings.use_tls": "Use TLS",
   "server_settings.verify_certificate": "Verify server certificate",
+  "server_settings.tls_verify_warning": "⚠️ Without certificate verification, traffic interception (MITM) is possible!\nUse only for testing.",
   "server_settings.ca_certificate": "CA certificate:",
   "server_settings.client_certificate": "Client certificate:",
   "server_settings.client_key": "Client key:",

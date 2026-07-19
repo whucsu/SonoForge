@@ -28,7 +28,7 @@ source "${VENV_DIR}/bin/activate"
 echo "[step 2] Installing dependencies..."
 pip install --quiet --upgrade pip
 pip install --quiet pyinstaller
-pip install --quiet -e ".[dev]" 2>/dev/null || pip install --quiet pyside6 pyqtgraph pydicom pylibjpeg pylibjpeg-openjpeg pylibjpeg-libjpeg "numpy<2" scipy opencv-python-headless httpx psutil pymupdf pynetdicom pyyaml jsonschema onnxruntime reportlab openpyxl
+pip install --quiet -e ".[dev]" 2>/dev/null || pip install --quiet pyside6 pyqtgraph pydicom pylibjpeg pylibjpeg-openjpeg pylibjpeg-libjpeg "numpy<2" scipy opencv-python-headless httpx psutil pymupdf pynetdicom pyyaml jsonschema onnxruntime reportlab openpyxl keyring
 
 # ── 3. Clear server settings on build machine ──
 echo "[step 3] Clearing server settings..."

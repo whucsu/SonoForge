@@ -150,12 +150,11 @@ class OrthancStudyDialog(QDialog):
         title_label.setStyleSheet("color: #f1f5f9; font-weight: bold; border: none;")
         tb_layout.addWidget(title_label)
         tb_layout.addStretch(1)
-        btn_close = QPushButton("\u2715")
-        btn_close.setFixedSize(28, 24)
-        btn_close.setStyleSheet(
-            "QPushButton { color: #94a3b8; border: none; font-size: 14px; }"
-            "QPushButton:hover { color: #f1f5f9; background: #e74c3c; border-radius: 3px; }"
-        )
+        from echo_personal_tool.presentation.system_bar import _load_icon
+        btn_close = QPushButton()
+        btn_close.setIcon(_load_icon("close"))
+        btn_close.setObjectName("closeButton")
+        btn_close.setFixedSize(28, 23)
         btn_close.clicked.connect(self.reject)
         tb_layout.addWidget(btn_close)
 

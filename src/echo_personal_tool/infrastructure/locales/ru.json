@@ -450,6 +450,7 @@
   "server_settings.retrieval_source": "Источник скачивания:",
   "server_settings.use_tls": "Использовать TLS",
   "server_settings.verify_certificate": "Проверять сертификат сервера",
+  "server_settings.tls_verify_warning": "⚠️ Без проверки сертификата возможно перехват трафика (MITM)!\nИспользуйте только для тестирования.",
   "server_settings.ca_certificate": "CA сертификат:",
   "server_settings.client_certificate": "Клиентский сертификат:",
   "server_settings.client_key": "Клиентский ключ:",

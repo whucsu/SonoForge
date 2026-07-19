@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import uuid
 from pathlib import Path
+
+from echo_personal_tool.infrastructure.dicom_uid_validator import safe_uid_path_component
 
 
 class OrthancSessionCache:
@@ -24,9 +27,15 @@ class OrthancSessionCache:
         sop_uid: str,
         data: bytes,
     ) -> Path:
-        path = self._root / f"session-{session_id}" / study_uid / series_uid / f"{sop_uid}.dcm"
+        # Validate UIDs to prevent path traversal
+        safe_study = safe_uid_path_component(study_uid)
+        safe_series = safe_uid_path_component(series_uid)
+        safe_sop = safe_uid_path_component(sop_uid)
+        path = self._root / f"session-{session_id}" / safe_study / safe_series / f"{safe_sop}.dcm"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
+        # Set restrictive permissions (owner read/write only)
+        os.chmod(path, 0o600)
         return path
 
     def study_path(self, session_id: str, study_uid: str) -> Path:
@@ -38,11 +47,11 @@ class OrthancSessionCache:
     def clear_session(self, session_id: str) -> None:
         session_dir = self._root / f"session-{session_id}"
         if session_dir.exists():
-            shutil.rmtree(session_dir)
+            shutil.rmtree(session_dir, ignore_errors=True)
 
     def clear_all(self) -> None:
         if not self._root.exists():
             return
         for entry in self._root.iterdir():
             if entry.is_dir() and entry.name.startswith("session-"):
-                shutil.rmtree(entry)
+                shutil.rmtree(entry, ignore_errors=True)
