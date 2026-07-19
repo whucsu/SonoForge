@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=ECHO Personal Tool
+Name=SonoForge
 Comment=Personal desktop echocardiography analysis tool
-Exec=/opt/echo-personal-tool/echo-personal-tool
-Icon=echo-personal-tool
+Exec=/opt/sonoforge/sonoforge
+Icon=sonoforge
 Categories=MedicalSoftware;Science;
 Terminal=false
-StartupWMClass=echo-personal-tool
+StartupWMClass=sonoforge

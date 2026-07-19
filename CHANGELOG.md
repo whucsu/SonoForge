@@ -1,4 +1,4 @@
-# CHANGELOG — ECHO Personal Tool
+# CHANGELOG — SonoForge
 
 Все значимые изменения в хронологическом порядке. Формат: `[feat/fix/refactor/perf/docs/chore]: описание` (コミット-конвенция).
 

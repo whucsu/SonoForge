@@ -19,7 +19,7 @@ from echo_personal_tool.infrastructure.server_settings import (
 
 @pytest.fixture
 def isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    org = "echo-personal-tool-test"
+    org = "sonoforge-test"
     app = "server-test"
     monkeypatch.setattr(ss, "_SETTINGS_ORG", org)
     monkeypatch.setattr(ss, "_SETTINGS_APP", app)

@@ -22,7 +22,7 @@ _FONT_FILES = (
     "JetBrainsMono-Bold.ttf",
 )
 
-_FONT_CACHE_DIR = Path.home() / ".echo-personal-tool" / "fonts"
+_FONT_CACHE_DIR = Path.home() / ".sonoforge" / "fonts"
 _loaded = False
 
 

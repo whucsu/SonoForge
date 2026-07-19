@@ -30,7 +30,7 @@ def qapp():
 
 @pytest.fixture
 def isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    org = "echo-personal-tool-test"
+    org = "sonoforge-test"
     app = "server-test-query-source"
     monkeypatch.setattr(ss, "_SETTINGS_ORG", org)
     monkeypatch.setattr(ss, "_SETTINGS_APP", app)

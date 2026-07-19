@@ -1,5 +1,5 @@
 [project]
-name = "echo-personal-tool"
+name = "sonoforge"
 dynamic = ["version"]
 description = "Personal desktop echocardiography analysis tool"
 readme = "README.md"
@@ -35,7 +35,7 @@ dev = [
 ]
 
 [project.scripts]
-echo-personal-tool = "echo_personal_tool.__main__:main"
+sonoforge = "echo_personal_tool.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

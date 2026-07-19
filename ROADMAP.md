@@ -1,4 +1,4 @@
-# ROADMAP — ECHO Personal Tool
+# ROADMAP — SonoForge
 
 **Обновлено:** 2026-07-18 (Teichholz M-mode, cleanup for trial release)
 **Источник истины по коду:** этот файл + git log.

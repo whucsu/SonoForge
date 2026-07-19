@@ -46,7 +46,7 @@ from echo_personal_tool.resources.bundled_fonts import FONT_FAMILY_UI
 
 logger = logging.getLogger(__name__)
 
-_SETTINGS_ORG = "echo-personal-tool"
+_SETTINGS_ORG = "sonoforge"
 _SETTINGS_APP = "ase-reference"
 _DEFAULT_FONT_FAMILY = FONT_FAMILY_UI
 _DEFAULT_FONT_SIZE = 12

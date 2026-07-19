@@ -8,7 +8,7 @@ from typing import Any
 
 from PySide6.QtCore import QSettings
 
-_SETTINGS_ORG = "echo-personal-tool"
+_SETTINGS_ORG = "sonoforge"
 _SETTINGS_APP = "server"
 
 _DEFAULT_URL = "http://127.0.0.1:8042/dicom-web"
@@ -187,6 +187,20 @@ def load_server_settings() -> ServerSettings:
         dimse_scp_host=str(store.value("dimse_scp_host", "127.0.0.1")),
         dimse_scp_ae_title=str(store.value("dimse_scp_ae_title", "")),
     )
+
+
+def reset_server_settings() -> None:
+    """Clear all server settings, restoring QSettings to factory defaults."""
+    store = _settings_store()
+    for key in ("description", "url", "username", "password", "auth_mode",
+                "http_headers", "use_mock", "dimse_enabled", "dimse_ae_title",
+                "dimse_called_ae", "dimse_host", "dimse_port", "stow_dicom_web_url",
+                "query_source", "retrieval_source", "dimse_retrieval_mode",
+                "dimse_use_tls", "dimse_tls_verify", "dimse_tls_ca_path",
+                "dimse_tls_cert_path", "dimse_tls_key_path",
+                "dimse_scp_port", "dimse_scp_host", "dimse_scp_ae_title"):
+        store.remove(key)
+    store.sync()
 
 
 def save_server_settings(settings: ServerSettings) -> None:

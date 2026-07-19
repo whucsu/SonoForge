@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for ECHO Personal Tool (folder mode, Linux)."""
+"""PyInstaller spec for SonoForge (folder mode, Linux)."""
 
 import os
 from pathlib import Path
@@ -75,7 +75,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="ECHO-Personal-Tool",
+    name="SonoForge",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -90,5 +90,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="ECHO-Personal-Tool",
+    name="SonoForge",
 )

@@ -1,4 +1,4 @@
-"""Temporary profiling instrumentation for ECHO Personal Tool.
+"""Temporary profiling instrumentation for SonoForge.
 
 Enable with ECHO_PROFILE=1 environment variable.
 Logs timing, errors, and call counts for all major app functions.

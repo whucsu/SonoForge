@@ -62,7 +62,12 @@ bench/reports/
 .mimocode/
 .claude/
 .opencode/
+AGENTS.md
+.cursorrules
 
 # IDE config (contains MCP tokens)
 .cursor/
 .vscode/
+
+# Server settings (contains potentially sensitive data)
+server_TOKKD.md

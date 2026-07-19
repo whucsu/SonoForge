@@ -67,7 +67,7 @@ from echo_personal_tool.infrastructure.profiler import print_summary, is_enabled
 def main() -> int:
     patch_pyqtgraph_export_dialog()
     app = QApplication(sys.argv)
-    app.setApplicationName("ECHO Personal Tool")
+    app.setApplicationName("SonoForge")
     ensure_bundled_fonts_loaded()
     preferences = load_user_preferences()
     app.setFont(ui_font(point_size=preferences.ui_font_size))

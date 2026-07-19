@@ -1,4 +1,4 @@
-# ECHO Personal Tool
+# SonoForge
 
 Персональный десктопный инструмент для просмотра и количественного анализа эхокардиографических исследований: **DICOM**, **MP4**, **JPEG/PNG**. Интерфейс и workflow ориентированы на ASE — без облака, локально на вашей машине.
 
@@ -143,7 +143,7 @@
 git clone https://github.com/areatu/ECHO2026.git
 cd ECHO2026
 uv sync --extra dev
-uv run echo-personal-tool
+uv run sonoforge
 
 # Или pip
 pip install -e ".[dev]"
@@ -172,7 +172,7 @@ Orthanc по умолчанию слушает **два порта**:
 | **4242** | TCP DIMSE | C-ECHO, C-FIND, C-STORE, C-GET, C-MOVE |
 
 Типичный URL DICOMweb: `http://127.0.0.1:8042/dicom-web`
-DIMSE: host `127.0.0.1`, port `4242`, Called AE `ORTHANC`, Calling AE `ECHO2026`.
+DIMSE: host `127.0.0.1`, port `4242`, Called AE `ORTHANC`, Calling AE `SONOFORGE`.
 
 **Публичный demo (read-only):**
 [https://orthanc.uclouvain.be/demo/dicom-web](https://orthanc.uclouvain.be/demo/dicom-web)
@@ -194,7 +194,7 @@ DIMSE: host `127.0.0.1`, port `4242`, Called AE `ORTHANC`, Calling AE `ECHO2026`
 ```json
 {
   "DicomModalities": {
-    "ECHO2026": ["ECHO2026", "127.0.0.1", 11112]
+    "SONOFORGE": ["SONOFORGE", "127.0.0.1", 11112]
   }
 }
 ```

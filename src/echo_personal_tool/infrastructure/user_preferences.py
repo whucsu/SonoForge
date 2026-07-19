@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QSettings
 
-_SETTINGS_ORG = "echo-personal-tool"
+_SETTINGS_ORG = "sonoforge"
 _SETTINGS_APP = "preferences"
 
 MIN_UI_FONT_SIZE = 9

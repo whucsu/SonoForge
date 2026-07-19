@@ -129,7 +129,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setWindowTitle("ECHO Personal Tool")
+        self.setWindowTitle("SonoForge")
         self._user_preferences = user_preferences or load_user_preferences()
         self._click_to_frame_started_at: float | None = None
         self._playback_active = False
@@ -161,7 +161,7 @@ class MainWindow(QMainWindow):
         self._mmode_collapse_anim = None
 
         self._controller = controller or AppController()
-        orthanc_root = Path.home() / ".echo-personal-tool" / "orthanc"
+        orthanc_root = Path.home() / ".sonoforge" / "orthanc"
         orthanc_root.parent.mkdir(parents=True, exist_ok=True)
         self._orthanc_cache = OrthancSessionCache(orthanc_root)
         self._controller.studies_loaded.connect(self._on_studies_loaded)

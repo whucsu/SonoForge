@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for ECHO Personal Tool (folder mode, Windows 10)."""
+"""PyInstaller spec for SonoForge (folder mode, Windows 10)."""
 
 import os
 from pathlib import Path
@@ -76,7 +76,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="ECHO-Personal-Tool",
+    name="SonoForge",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -97,5 +97,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="ECHO-Personal-Tool",
+    name="SonoForge",
 )

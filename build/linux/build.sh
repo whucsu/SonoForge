@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ============================================
-#  ECHO Personal Tool — Linux Build
+#  SonoForge — Linux Build
 #  Folder mode (portable directory)
 # ============================================
 set -euo pipefail
 
 echo ""
-echo "=== ECHO Personal Tool — Linux Build ==="
+echo "=== SonoForge — Linux Build ==="
 echo ""
 
 # [1] Проверка venv
@@ -19,18 +19,22 @@ if [ ! -f "$VENV_PYTHON" ]; then
 fi
 
 # [2] Установка зависимостей
-echo "[1/3] Installing dependencies..."
+echo "[1/4] Installing dependencies..."
 $VENV_PIP install -e ".[phase2]" --quiet 2>/dev/null || $VENV_PIP install -e "." --quiet
 $VENV_PIP install pyinstaller --quiet
 
-# [3] Сборка
-echo "[2/3] Building (folder mode)..."
+# [3] Clear server settings on build machine
+echo "[2/4] Clearing server settings..."
+rm -f ~/.config/sonoforge/server.conf
+
+# [4] Сборка
+echo "[3/4] Building (folder mode)..."
 $VENV_PYTHON -m PyInstaller build/linux/build.spec --noconfirm --clean
 
 # [4] Готово
 echo ""
-echo "[3/3] Build complete!"
+echo "[4/4] Build complete!"
 echo ""
-echo "  Output: dist/ECHO-Personal-Tool/"
-echo "  Launch: ./dist/ECHO-Personal-Tool/ECHO-Personal-Tool"
+echo "  Output: dist/SonoForge/"
+echo "  Launch: ./dist/SonoForge/SonoForge"
 echo ""

@@ -30,7 +30,7 @@ class TestGoldPreferences:
     def test_gold_defaults_when_missing(self, qtbot) -> None:
         """When QSettings has no gold keys, defaults should be used."""
         from PySide6.QtCore import QSettings
-        store = QSettings("echo-personal-tool", "preferences")
+        store = QSettings("sonoforge", "preferences")
         store.remove("gold_annotation_enabled")
         store.remove("gold_dataset_path")
         loaded = load_user_preferences()
