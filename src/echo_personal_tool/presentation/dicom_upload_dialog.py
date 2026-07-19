@@ -32,8 +32,9 @@ def run_dicom_upload_dialog(
     parent: QWidget | None,
     studies: list[StudyMetadata],
     settings: ServerSettings,
+    annotations: dict[str, list] | None = None,
 ) -> None:
-    payloads = collect_dicom_bytes(studies)
+    payloads = collect_dicom_bytes(studies, annotations=annotations)
     if not payloads:
         QMessageBox.information(
             parent,

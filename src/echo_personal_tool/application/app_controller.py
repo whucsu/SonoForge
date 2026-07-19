@@ -374,6 +374,18 @@ class AppController(QObject):
             self._measurement_session.get(study_uid).contours,
             instance.sop_instance_uid,
         )
+        # Load annotations from DICOM Graphic Annotation tags
+        if not session_contours and instance.path is not None and instance.media_format == "dicom":
+            try:
+                import pydicom
+                from io import BytesIO
+                ds = pydicom.dcmread(str(instance.path), stop_before_pixels=True, force=True)
+                dicom_calipers, dicom_contours = read_annotations_from_dicom(ds)
+                if dicom_contours:
+                    session_contours = tuple(dicom_contours)
+                    logger.info("Loaded %d contours from DICOM Graphic Annotation", len(dicom_contours))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Could not read DICOM annotations: %s", exc)
         if instance.media_format != "dicom":
             session_contours = tuple(
                 contour

@@ -314,6 +314,12 @@ class DicomSession:
             (i * frame_size, frame_size) for i in range(self._frame_count)
         ]
 
+    def annotations(self) -> tuple:
+        """Extract calipers and contours from DICOM Graphic Annotation."""
+        if self._metadata is None:
+            return ([], [])
+        return read_annotations_from_dicom(self._metadata)
+
     def _ensure_pixel_data(self) -> None:
         """Load raw pixel data bytes, avoiding a second pydicom parse when possible."""
         if self._pixel_data_raw is not None:

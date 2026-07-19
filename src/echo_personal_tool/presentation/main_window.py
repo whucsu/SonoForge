@@ -1113,7 +1113,27 @@ class MainWindow(QMainWindow):
                 tr("dialog.dicom_upload.no_files"),
             )
             return
-        run_dicom_upload_dialog(self, studies, load_server_settings())
+        # Collect annotations from viewer for upload
+        annotations = {}
+        try:
+            if self._viewer is not None:
+                contours = self._viewer.contours()
+                if hasattr(self._viewer, '_stored_linear_measurements'):
+                    linear = list(self._viewer._stored_linear_measurements.values())
+                else:
+                    linear = []
+                if contours or linear:
+                    for c in contours:
+                        uid = c.sop_instance_uid or ""
+                        if uid:
+                            annotations.setdefault(uid, []).append(c)
+                    for m in linear:
+                        uid = m.sop_instance_uid or ""
+                        if uid:
+                            annotations.setdefault(uid, []).append(m)
+        except Exception:
+            pass  # Upload without annotations if viewer access fails
+        run_dicom_upload_dialog(self, studies, load_server_settings(), annotations=annotations)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         # If M-mode is active, close it instead of closing the app
