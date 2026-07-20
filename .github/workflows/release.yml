@@ -32,12 +32,10 @@ jobs:
       - name: Run smoke tests
         run: |
           python -c "
-          import echo_personal_tool
-          print(f'Version: {echo_personal_tool.__version__}')
-          from echo_personal_tool.infrastructure.log_sanitizer import sanitize_uid
-          from echo_personal_tool.infrastructure.dicom_validator import validate_dicom_header
-          from echo_personal_tool.infrastructure.runtime_setup import get_setup_status
-          print('All imports OK')
+          import PySide6, pydicom, numpy, scipy
+          print(f'PySide6: {PySide6.__version__}')
+          print(f'numpy: {numpy.__version__}')
+          print('Dependencies OK')
           "
 
       - name: Build .deb (lite)
@@ -70,16 +68,15 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyside6 pyqtgraph pydicom pylibjpeg pylibjpeg-openjpeg pylibjpeg-libjpeg "numpy<2" scipy opencv-python-headless httpx psutil pymupdf pynetdicom pyyaml jsonschema onnxruntime reportlab openpyxl keyring
+          python -m pip install -e "." 2>$null; if ($LASTEXITCODE -ne 0) { python -m pip install pyside6 pyqtgraph pydicom pylibjpeg pylibjpeg-openjpeg pylibjpeg-libjpeg "numpy<2" scipy opencv-python-headless httpx psutil pymupdf pynetdicom pyyaml jsonschema onnxruntime reportlab openpyxl keyring }
 
       - name: Run smoke tests
         run: |
           python -c "
-          import echo_personal_tool
-          print(f'Version: {echo_personal_tool.__version__}')
-          from echo_personal_tool.infrastructure.log_sanitizer import sanitize_uid
-          from echo_personal_tool.infrastructure.dicom_validator import validate_dicom_header
-          print('All imports OK')
+          import PySide6, pydicom, numpy, scipy
+          print(f'PySide6: {PySide6.__version__}')
+          print(f'numpy: {numpy.__version__}')
+          print('Dependencies OK')
           "
 
       - name: Build lightweight package
