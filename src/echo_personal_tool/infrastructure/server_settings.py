@@ -261,7 +261,7 @@ def save_server_settings(settings: ServerSettings) -> None:
 # ── Keyring helpers ────────────────────────────────────────────────
 
 def _save_password_keyring(username: str, password: str) -> None:
-    """Store password in OS keychain instead of plaintext QSettings."""
+    """Store password in OS keychain, falling back to QSettings."""
     try:
         import keyring
         if password:
@@ -271,14 +271,26 @@ def _save_password_keyring(username: str, password: str) -> None:
                 keyring.delete_password(_SERVICE_NAME, username)
             except keyring.errors.PasswordDeleteError:
                 pass
+        return
     except Exception:
-        pass  # Fallback: QSettings already saved it
+        pass
+    # Fallback: store in QSettings when keyring is unavailable
+    store = _settings_store()
+    if password:
+        store.setValue("password", password)
+    else:
+        store.remove("password")
+    store.sync()
 
 
 def _load_password_keyring(username: str) -> str:
-    """Load password from OS keychain."""
+    """Load password from OS keychain, falling back to QSettings."""
     try:
         import keyring
-        return keyring.get_password(_SERVICE_NAME, username) or ""
+        pwd = keyring.get_password(_SERVICE_NAME, username)
+        if pwd:
+            return pwd
     except Exception:
-        return ""
+        pass
+    # Fallback: load from QSettings
+    return str(_settings_store().value("password", ""))

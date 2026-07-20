@@ -1,62 +1,45 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM ============================================
-REM  SonoForge — Lightweight Windows Build
-REM  Packages app code only (~50MB).
-REM  Dependencies + models are downloaded at first run.
-REM ============================================
+REM SonoForge Lightweight Windows Build
+REM Assembles dist\SonoForge-Setup\ for both .zip and .exe installer
 
 set APP_NAME=SonoForge
 for /f "tokens=*" %%v in ('python -c "import sys; sys.path.insert(0,'src'); from echo_personal_tool import __version__; print(__version__)"') do set APP_VERSION=%%v
-set BUILD_DIR=build\dist-lite
-set DIST_DIR=dist
-set SRC_DIR=src\echo_personal_tool
+set STAGE=dist\SonoForge-Setup
 
 echo.
 echo === SonoForge Lite Build v%APP_VERSION% ===
 echo.
 
-REM ── 1. Clean ──
-echo [1/5] Cleaning...
-if exist "%BUILD_DIR%" rmdir /s /q "%BUILD_DIR%"
+REM 1. Clean
+echo [1/4] Cleaning...
+if exist "%STAGE%" rmdir /s /q "%STAGE%"
+if not exist "dist" mkdir "dist"
 
-REM ── 2. Assemble package ──
-echo [2/5] Assembling package...
-set PKG=%BUILD_DIR%\%APP_NAME%
-mkdir "%PKG%\lib"
-mkdir "%PKG%\bin"
+REM 2. Assemble staging directory
+echo [2/4] Assembling package...
+mkdir "%STAGE%\lib"
+mkdir "%STAGE%\bin"
 
-REM Copy app code
-xcopy /E /I /Q "src\echo_personal_tool" "%PKG%\lib\echo_personal_tool"
+xcopy /E /I /Q "src\echo_personal_tool" "%STAGE%\lib\echo_personal_tool"
+copy /Y "pyproject.toml" "%STAGE%\lib\" >nul
+if exist "uv.lock" copy /Y "uv.lock" "%STAGE%\lib\" >nul
+copy /Y "build\windows\sonoforge-launcher.bat" "%STAGE%\bin\SonoForge.bat" >nul
+copy /Y "scripts\setup.bat" "%STAGE%\setup.bat" >nul 2>nul
+copy /Y "scripts\uninstall.bat" "%STAGE%\uninstall.bat" >nul 2>nul
 
-REM Copy project files
-copy /Y "pyproject.toml" "%PKG%\lib\" >nul
-if exist "uv.lock" copy /Y "uv.lock" "%PKG%\lib\" >nul
+REM 3. Create .zip from staging
+echo [3/4] Creating archive...
+set ZIP_NAME=%APP_NAME%-%APP_VERSION%-Windows.zip
+powershell -Command "Compress-Archive -Path '%STAGE%\*' -DestinationPath 'dist\%ZIP_NAME%' -Force"
 
-REM Copy launcher
-copy /Y "build\windows\sonoforge-launcher.bat" "%PKG%\bin\SonoForge.bat" >nul
-
-REM ── 3. Create .zip ──
-echo [3/5] Creating archive...
-if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
-powershell -Command "Compress-Archive -Path \"%PKG%\*\" -DestinationPath \"%DIST_DIR%\%APP_NAME%-%APP_VERSION%-Windows.zip\" -Force"
-
-REM ── 4. Done ──
+REM 4. Done
 echo.
-echo [4/5] Done!
+echo [4/4] Done!
 echo.
-echo   Package: %DIST_DIR%\%APP_NAME%-%APP_VERSION%-Windows.zip
-echo   Size:
-powershell -Command "(Get-Item '%DIST_DIR%\%APP_NAME%-%APP_VERSION%-Windows.zip').Length / 1MB" 2>nul
-echo   MB
-echo.
-echo   Install: Extract the .zip anywhere
-echo   Run:     SonoForge\bin\SonoForge.bat
-echo.
-echo   First run will download:
-echo     - Python dependencies (~940 MB)
-echo     - AI models (~300 MB)
+echo   Staging:  %STAGE%
+echo   Archive:  dist\%ZIP_NAME%
 echo.
 
 endlocal

@@ -68,7 +68,10 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e "." 2>$null; if ($LASTEXITCODE -ne 0) { python -m pip install pyside6 pyqtgraph pydicom pylibjpeg pylibjpeg-openjpeg pylibjpeg-libjpeg "numpy<2" scipy opencv-python-headless httpx psutil pymupdf pynetdicom pyyaml jsonschema onnxruntime reportlab openpyxl keyring }
+          python -m pip install -e "." 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            python -m pip install pyside6 pyqtgraph pydicom pylibjpeg pylibjpeg-openjpeg pylibjpeg-libjpeg "numpy<2" scipy opencv-python-headless httpx psutil pymupdf pynetdicom pyyaml jsonschema onnxruntime reportlab openpyxl keyring
+          }
 
       - name: Run smoke tests
         run: |
@@ -79,22 +82,35 @@ jobs:
           print('Dependencies OK')
           "
 
-      - name: Build lightweight package
+      - name: Build staging directory
         run: build\windows\build-lite.bat
 
-      - name: Build self-extracting installer
+      - name: Build launcher exe
         run: |
           python -m pip install pyinstaller
           python -m PyInstaller --onefile --name SonoForgeLauncher --console --clean launcher.py
-          python scripts/create_installer.py
+          copy dist\SonoForgeLauncher.exe dist\SonoForge-Setup\SonoForge.exe
 
-      - name: Upload artifacts
+      - name: Build self-extracting installer
+        run: python scripts\create_installer.py
+
+      - name: List artifacts
+        run: |
+          dir dist\SonoForge-Setup
+          dir dist\*.zip
+          dir dist\*.exe
+
+      - name: Upload .zip
         uses: actions/upload-artifact@v4
         with:
-          name: sonoforge-windows
-          path: |
-            dist/SonoForge-*.zip
-            dist/SonoForge-Setup.exe
+          name: sonoforge-windows-zip
+          path: dist\*.zip
+
+      - name: Upload .exe installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonoforge-windows-exe
+          path: dist\SonoForge-Setup.exe
 
   release:
     needs: [build-linux, build-windows]
@@ -105,17 +121,25 @@ jobs:
         with:
           name: sonoforge-deb
 
-      - name: Download Windows artifact
+      - name: Download Windows zip
         uses: actions/download-artifact@v4
         with:
-          name: sonoforge-windows
+          name: sonoforge-windows-zip
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: sonoforge-windows-exe
+
+      - name: List downloaded files
+        run: ls -la
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             sonoforge_*.deb
-            SonoForge-*.zip
+            SonoForge-*-Windows.zip
             SonoForge-Setup.exe
           generate_release_notes: true
           draft: false
