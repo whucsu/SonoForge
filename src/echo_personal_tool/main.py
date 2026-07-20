@@ -90,6 +90,13 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("SonoForge")
 
+    # Set application icon (window icon + taskbar)
+    from PySide6.QtGui import QIcon
+    from PySide6.QtCore import Qt
+    _icon_path = Path(__file__).resolve().parent / "resources" / "logo.png"
+    if _icon_path.exists():
+        app.setWindowIcon(QIcon(str(_icon_path)))
+
     # Check models after QApplication exists (can show Qt dialog)
     if not _is_frozen:
         try:

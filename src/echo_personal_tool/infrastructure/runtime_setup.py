@@ -225,8 +225,20 @@ def show_setup_dialog() -> bool:
 
     layout = QVBoxLayout(dialog)
 
+    # Logo
+    from PySide6.QtGui import QPixmap
+    from PySide6.QtCore import Qt
+    _logo_path = Path(__file__).resolve().parent.parent / "resources" / "logo.png"
+    if _logo_path.exists():
+        logo_label = QLabel()
+        pixmap = QPixmap(str(_logo_path))
+        logo_label.setPixmap(pixmap.scaledToHeight(80, Qt.SmoothTransformation))
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(logo_label)
+
     title = QLabel("SonoForge is setting up for the first time.")
     title.setStyleSheet("font-size: 14px; font-weight: bold;")
+    title.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(title)
 
     status_label = QLabel("Preparing...")
