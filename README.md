@@ -6,6 +6,58 @@
 
 ---
 
+## Установка
+
+### Linux (.deb)
+
+```bash
+# Скачать .deb с GitHub Releases
+wget https://github.com/areatu/SonoForge/releases/latest/download/sonoforge_*.deb
+
+# Установить
+sudo dpkg -i sonoforge_*.deb
+
+# Запустить
+sonoforge
+```
+
+При первом запуске:
+- Создаётся виртуальное окружение
+- Устанавливаются зависимости (~940 MB)
+- Предлагается скачать AI-модели (~300 MB) — можно пропустить
+
+### Windows (.zip)
+
+1. Скачайте `SonoForge-*.zip` с [GitHub Releases](https://github.com/areatu/SonoForge/releases)
+2. Распакуйте в любую папку
+3. Запустите `SonoForge\bin\SonoForge.bat`
+
+**Требуется:** Python 3.10+ (скачать с [python.org](https://www.python.org/downloads/), поставить галочку "Add Python to PATH")
+
+При первом запуске:
+- Создаётся виртуальное окружение
+- Устанавливаются зависимости (~940 MB)
+- Предлагается скачать AI-модели (~300 MB) — можно пропустить
+
+### Из исходников (разработка)
+
+```bash
+git clone https://github.com/areatu/SonoForge.git
+cd SonoForge
+
+# С uv (рекомендуется)
+uv sync --extra dev
+uv run sonoforge
+
+# Или pip
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+python -m echo_personal_tool
+```
+
+---
+
 ## Возможности (обзор)
 
 | Область | Что реализовано |
@@ -114,8 +166,7 @@
 
 ## Требования
 
-- **Python 3.10–3.11**
-- [uv](https://docs.astral.sh/uv/) (рекомендуется) или `pip` + virtualenv
+- **Python 3.10–3.11** (для установки из исходников или .zip)
 - Linux / Windows (протестировано на Debian 12, Win 10)
 - ~500 MB RAM (ONNX модели загружаются по требованию)
 
@@ -133,24 +184,6 @@
 | **Excel** | openpyxl |
 | **Data** | PyYAML, jsonschema |
 | **System** | psutil |
-
----
-
-## Установка
-
-```bash
-# С uv (рекомендуется)
-git clone https://github.com/areatu/ECHO2026.git
-cd ECHO2026
-uv sync --extra dev
-uv run sonoforge
-
-# Или pip
-pip install -e ".[dev]"
-python -m echo_personal_tool
-```
-
-**Примечание:** все зависимости (включая ONNX Runtime, reportlab, openpyxl) устанавливаются автоматически.
 
 ---
 
@@ -219,7 +252,7 @@ ECHO_ORTHANC=1 ECHO_ORTHANC_RETRIEVAL=cmove pytest tests/integration/test_orthan
 
 ### ONNX (LV Auto)
 
-ONNX модели загружаются из `models/` автоматически. LV Auto (A4C) доступен по `I`.
+ONNX модели загружаются из `~/.local/share/sonoforge/models/` (установленная версия) или `models/` (из исходников). LV Auto (A4C) доступен по `I`.
 
 ### Speckle Tracking
 
@@ -282,6 +315,8 @@ src/echo_personal_tool/
 | Документ | Назначение |
 |----------|------------|
 | [ROADMAP.md](ROADMAP.md) | Статус фич по коду |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Гайдлайны по контрибьюшену |
+| [SECURITY.md](SECURITY.md) | Безопасность и обработка PHI |
 | [docs/superpowers/specs/](docs/superpowers/specs/) | Спеки (STE, DICOMweb, lazy loading, M-Mode…) |
 | [docs/superpowers/plans/](docs/superpowers/plans/) | Планы реализации |
 | [docs/bench/](docs/bench/) | Бенчмарки производительности |
@@ -290,4 +325,19 @@ src/echo_personal_tool/
 
 ## Лицензия
 
-См. репозиторий / автор.
+GPL-3.0 — см. [LICENSE](LICENSE).
+
+## Цитирование
+
+Если вы используете SonoForge в научной работе, пожалуйста, цитируйте:
+
+```bibtex
+@software{kuvilkin2026sonoforge,
+  author       = {Kuvilkin, Vitaliy},
+  title        = {SonoForge: Desktop Echocardiography Analysis Tool},
+  year         = {2026},
+  publisher    = {GitHub},
+  url          = {https://github.com/areatu/SonoForge},
+  license      = {GPL-3.0}
+}
+```
