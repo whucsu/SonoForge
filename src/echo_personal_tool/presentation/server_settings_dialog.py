@@ -48,6 +48,8 @@ class ServerSettingsForm(QWidget):
         )
         self._headers_edit.setFixedHeight(72)
         self._mock_check = QCheckBox(tr("server_settings.mock"))
+        self._tls_verify_check = QCheckBox("Verify SSL certificate")
+        self._tls_verify_check.setChecked(True)
 
         form = QFormLayout(self)
         form.addRow(tr("server_settings.description"), self._description_edit)
@@ -57,6 +59,7 @@ class ServerSettingsForm(QWidget):
         form.addRow(tr("server_settings.password"), self._password_edit)
         form.addRow(tr("server_settings.http_headers"), self._headers_edit)
         form.addRow("", self._mock_check)
+        form.addRow("", self._tls_verify_check)
 
         # DIMSE section
         dimse_group = QGroupBox("DIMSE (Native DICOM)")
@@ -219,6 +222,7 @@ class ServerSettingsForm(QWidget):
             dimse_scp_host=self._dimse_scp_host.text().strip() or "127.0.0.1",
             dimse_scp_port=int(self._dimse_scp_port.text().strip() or "11112"),
             dimse_scp_ae_title=self._dimse_scp_ae_title.text().strip(),
+            tls_verify=self._tls_verify_check.isChecked(),
         )
 
     def set_settings(self, settings: ServerSettings) -> None:
@@ -230,6 +234,7 @@ class ServerSettingsForm(QWidget):
         self._password_edit.setText(settings.password)
         self._headers_edit.setPlainText(settings.http_headers)
         self._mock_check.setChecked(settings.use_mock)
+        self._tls_verify_check.setChecked(settings.tls_verify)
         self._dimse_enabled.setChecked(settings.dimse_enabled)
         self._dimse_ae_edit.setText(settings.dimse_ae_title)
         self._dimse_called_ae_edit.setText(settings.dimse_called_ae)

@@ -11,9 +11,9 @@ from PySide6.QtCore import QSettings
 _SETTINGS_ORG = "sonoforge"
 _SETTINGS_APP = "server"
 
-_DEFAULT_URL = "https://127.0.0.1:8042/dicom-web"
-_DEFAULT_USE_MOCK = True
-_DEFAULT_AUTH_MODE = "none"
+_DEFAULT_URL = "http://127.0.0.1:8042/dicom-web"
+_DEFAULT_USE_MOCK = False
+_DEFAULT_AUTH_MODE = "basic"
 _AUTH_MODES = frozenset({"none", "basic"})
 _SERVICE_NAME = "sonoforge"
 
@@ -52,6 +52,7 @@ class ServerSettings:
     dimse_scp_ae_title: str = ""  # default: dimse_ae_title
     # Network
     network_timeout: float = 30.0
+    tls_verify: bool = True
 
 
 # ── Profile management ──────────────────────────────────────────────
@@ -203,6 +204,7 @@ def load_server_settings() -> ServerSettings:
         dimse_scp_host=str(store.value("dimse_scp_host", "127.0.0.1")),
         dimse_scp_ae_title=str(store.value("dimse_scp_ae_title", "")),
         network_timeout=float(store.value("network_timeout", 30.0)),
+        tls_verify=_read_bool(store.value("tls_verify"), True),
     )
 
 
@@ -220,7 +222,7 @@ def reset_server_settings() -> None:
                 "dimse_use_tls", "dimse_tls_verify", "dimse_tls_ca_path",
                 "dimse_tls_cert_path", "dimse_tls_key_path",
                 "dimse_scp_port", "dimse_scp_host", "dimse_scp_ae_title",
-                "network_timeout"):
+                "network_timeout", "tls_verify"):
         store.remove(key)
     store.sync()
 
@@ -252,6 +254,7 @@ def save_server_settings(settings: ServerSettings) -> None:
     store.setValue("dimse_scp_host", settings.dimse_scp_host)
     store.setValue("dimse_scp_ae_title", settings.dimse_scp_ae_title)
     store.setValue("network_timeout", settings.network_timeout)
+    store.setValue("tls_verify", settings.tls_verify)
     store.sync()
 
 

@@ -66,6 +66,7 @@ class OrthancDicomWebClient:
         http_headers: dict[str, str] | None = None,
         timeout: float = 30.0,
         stow_dicom_web_url: str = "",
+        tls_verify: bool = True,
     ):
         self._timeout = timeout
         self._orthanc_root, self._dicom_web_root = split_orthanc_urls(base_url)
@@ -79,14 +80,14 @@ class OrthancDicomWebClient:
             auth=auth,
             headers=headers,
             timeout=self._timeout,
-            verify=True,
+            verify=tls_verify,
         )
         self._client = httpx.Client(
             base_url=f"{self._dicom_web_root}/",
             auth=auth,
             headers=headers,
             timeout=self._timeout,
-            verify=True,
+            verify=tls_verify,
         )
         stow_root = stow_dicom_web_url.strip()
         if stow_root:
@@ -96,7 +97,7 @@ class OrthancDicomWebClient:
                 auth=auth,
                 headers=headers,
                 timeout=self._timeout,
-                verify=True,
+                verify=tls_verify,
             )
         else:
             self._stow_client = None
@@ -112,6 +113,7 @@ class OrthancDicomWebClient:
             http_headers=parse_http_headers(settings.http_headers),
             timeout=timeout if timeout is not None else settings.network_timeout,
             stow_dicom_web_url=settings.stow_dicom_web_url,
+            tls_verify=settings.tls_verify,
         )
 
     def _build_client(self) -> httpx.Client:
