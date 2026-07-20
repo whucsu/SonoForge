@@ -158,6 +158,47 @@ def get_theme_palette() -> dict[str, str]:
     return _resolve_theme(_current_theme_mode)
 
 
+def get_logo_path() -> "Path":
+    """Return the logo path matching the current theme (dark/inverted or light/original)."""
+    from pathlib import Path
+    _base = Path(__file__).resolve().parent.parent / "resources"
+    mode = _current_theme_mode
+    is_dark = mode in ("dark", "vscode_dark") or (
+        mode == "system" and _is_system_dark()
+    )
+    name = "logo_dark.png" if is_dark else "logo.png"
+    path = _base / name
+    return path if path.exists() else _base / "logo.png"
+
+
+def _is_system_dark() -> bool:
+    """Detect system dark mode on Windows/macOS/Linux."""
+    import os
+    if sys.platform == "win32":
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            )
+            val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            winreg.CloseKey(key)
+            return val == 0
+        except Exception:
+            return True  # default dark
+    if sys.platform == "darwin":
+        try:
+            import subprocess
+            r = subprocess.run(
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                capture_output=True, text=True, timeout=2,
+            )
+            return "Dark" in r.stdout
+        except Exception:
+            return False
+    return os.environ.get("GTK_THEME", "").lower().endswith("dark")
+
+
 _THEME_MAP = {
     "dark": _DARK,
     "light": _LIGHT,

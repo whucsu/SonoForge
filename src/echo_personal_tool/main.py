@@ -92,10 +92,8 @@ def main() -> int:
 
     # Set application icon (window icon + taskbar)
     from PySide6.QtGui import QIcon
-    from PySide6.QtCore import Qt
-    _icon_path = Path(__file__).resolve().parent / "resources" / "logo.png"
-    if _icon_path.exists():
-        app.setWindowIcon(QIcon(str(_icon_path)))
+    from echo_personal_tool.presentation.dark_theme import get_logo_path
+    app.setWindowIcon(QIcon(str(get_logo_path())))
 
     # Check models after QApplication exists (can show Qt dialog)
     if not _is_frozen:

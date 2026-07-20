@@ -820,6 +820,10 @@ class MainWindow(QMainWindow):
             font_size=preferences.ui_font_size,
             theme=preferences.theme_mode,
         )
+        # Update window icon to match theme
+        from PySide6.QtGui import QIcon
+        from echo_personal_tool.presentation.dark_theme import get_logo_path
+        self.setWindowIcon(QIcon(str(get_logo_path())))
         self._system_bar.reload_icons()
         with QSignalBlocker(self._tool_panel.controls._magnetic_snap_check):
             self._tool_panel.controls._magnetic_snap_check.setChecked(
