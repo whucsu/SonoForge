@@ -82,11 +82,19 @@ jobs:
       - name: Build lightweight package
         run: build\windows\build-lite.bat
 
-      - name: Upload .zip artifact
+      - name: Build self-extracting installer
+        run: |
+          python -m pip install pyinstaller
+          python -m PyInstaller --onefile --name SonoForgeLauncher --console --clean launcher.py
+          python scripts/create_installer.py
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sonoforge-windows
-          path: dist/SonoForge-*.zip
+          path: |
+            dist/SonoForge-*.zip
+            dist/SonoForge-Setup.exe
 
   release:
     needs: [build-linux, build-windows]
@@ -108,6 +116,7 @@ jobs:
           files: |
             sonoforge_*.deb
             SonoForge-*.zip
+            SonoForge-Setup.exe
           generate_release_notes: true
           draft: false
           prerelease: false

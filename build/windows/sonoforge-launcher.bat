@@ -66,8 +66,11 @@ if "%PYTHON%"=="" (
 )
 
 REM ── Check Python version ──
-for /f "tokens=2 delims=." %%a in ('%PYTHON% --version 2^>^&1') do set PYMAJOR=%%a
-for /f "tokens=3 delims=." %%a in ('%PYTHON% --version 2^>^&1') do set PYMINOR=%%a
+for /f "tokens=2" %%a in ('%PYTHON% --version 2^>^&1') do set PYFULL=%%a
+for /f "tokens=1,2 delims=." %%a in ("%PYFULL%") do (
+    set PYMAJOR=%%a
+    set PYMINOR=%%b
+)
 
 if %PYMAJOR% LSS 3 (
     echo [SonoForge] ERROR: Python 3.10+ required, found Python %PYMAJOR%.%PYMINOR%
