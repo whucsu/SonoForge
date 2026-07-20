@@ -79,6 +79,14 @@ python -m echo_personal_tool
 
 SonoForge provides a comprehensive set of tools for **echocardiographic assessment**, from basic measurements to advanced AI-powered analysis.
 
+<div align="center">
+
+![LV Auto Segmentation](docs/screenshots/lv-auto-segmentation.png)
+
+*AI-powered LV segmentation with automatic volume calculation*
+
+</div>
+
 ### 📊 Cardiac Measurements
 
 | Category | Measurements | Description |
@@ -104,6 +112,14 @@ SonoForge integrates **ONNX Runtime** for real-time cardiac structure segmentati
 - **Temporal Fusion** — Multi-frame temporal consistency using N±2 neighbor voting for stable contour propagation
 - **Active Contour Refinement** — Edge-snapping and gradient-based contour refinement (press `R`)
 - **Open-Arc Simpson** — Manual contour initialization with mitral annulus points and apex
+
+<div align="center">
+
+![LA Segmentation](docs/screenshots/la-segmentation.png)
+
+*Left atrium segmentation with automatic volume and BSA-indexed calculation*
+
+</div>
 
 ### 🏥 DICOM Integration & PACS Connectivity
 
@@ -137,6 +153,14 @@ Full DICOM connectivity for seamless integration with hospital information syste
 - **Window/Level** — Interactive image contrast/brightness adjustment
 - **Crosshair** — Spatial reference across synchronized views
 - **Keyboard Shortcuts** — Full keyboard navigation for efficient workflow
+
+<div align="center">
+
+![M-Mode Measurements](docs/screenshots/mmode-measurements.png)
+
+*M-Mode with Teichholz measurements: IVSd, LVIDd, LVPWd, LVEF*
+
+</div>
 
 ---
 
