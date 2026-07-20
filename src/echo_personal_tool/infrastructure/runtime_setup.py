@@ -11,6 +11,8 @@ import tarfile
 import tempfile
 import urllib.request
 from dataclasses import dataclass
+
+from echo_personal_tool import __version__
 from pathlib import Path
 from typing import Callable
 
@@ -144,7 +146,7 @@ def _download_file(
     progress_callback: Callable[[str, int], None] | None = None,
 ) -> None:
     """Download a file with progress reporting."""
-    req = urllib.request.Request(url, headers={"User-Agent": "SonoForge/0.1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": f"SonoForge/{__version__}"})
     with urllib.request.urlopen(req, timeout=120) as resp:
         total = int(resp.headers.get("Content-Length", 0))
         downloaded = 0

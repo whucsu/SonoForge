@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files
 
-datas = [('src/echo_personal_tool/resources/fonts', 'echo_personal_tool/resources/fonts'), ('src/echo_personal_tool/resources/references', 'echo_personal_tool/resources/references'), ('src/echo_personal_tool/resources/icons', 'echo_personal_tool/resources/icons'), ('models', 'models')]
+datas = [('src/echo_personal_tool/resources/fonts', 'echo_personal_tool/resources/fonts'), ('src/echo_personal_tool/resources/references', 'echo_personal_tool/resources/references'), ('src/echo_personal_tool/resources/icons', 'echo_personal_tool/resources/icons'), ('src/echo_personal_tool/resources/logo.png', 'echo_personal_tool/resources'), ('src/echo_personal_tool/resources/logo_dark.png', 'echo_personal_tool/resources'), ('models', 'models')]
 datas += collect_data_files('echo_personal_tool')
 
 

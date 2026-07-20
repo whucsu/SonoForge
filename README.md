@@ -140,6 +140,26 @@ Full DICOM connectivity for seamless integration with hospital information syste
 - **Structured Reports** — DICOM SR-compatible output
 - **Constructor** — Custom reference browser editor with Excel import, PDF/HTML export
 
+### 📖 Reference Constructor — Personalized Clinical References
+
+SonoForge includes a **built-in Reference Constructor** that lets you build and maintain your own library of clinical reference materials directly within the application — no coding required.
+
+**What you can add:**
+- ASE guideline tables (normal values by age, sex, BSA)
+- Your own measurement nomograms and scoring systems
+- Protocol checklists and reporting templates
+- PDF documents, images, and structured data
+- Any structured reference material used in daily echocardiography practice
+
+**How it works:**
+- **Import** — Add references from Excel (.xlsx), YAML, or built-in ASE tables
+- **Edit** — Modify values, add new parameters, customize ranges inline
+- **Organize** — Group references by category (LV, RV, Valves, Pediatrics, etc.)
+- **Export** — Share your reference library as PDF or HTML for colleagues
+- **Sync** — Reference data is saved locally and persists across sessions
+
+The Constructor is designed for **clinicians, not developers** — a simple point-and-click interface for managing the reference data you rely on every day.
+
 ### 🎨 User Interface & Experience
 
 - **Dark/Light Theme** — Clinical-friendly color schemes optimized for long reading sessions

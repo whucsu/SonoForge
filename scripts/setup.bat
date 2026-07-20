@@ -43,7 +43,8 @@ echo [4/4] Registering uninstaller...
 reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\%APP_NAME%" /v "DisplayName" /t REG_SZ /d "%APP_NAME%" /f >nul 2>&1
 reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\%APP_NAME%" /v "UninstallString" /t REG_SZ /d "\"%INSTALL_DIR%\uninstall.bat\"" /f >nul 2>&1
 reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\%APP_NAME%" /v "InstallLocation" /t REG_SZ /d "%INSTALL_DIR%" /f >nul 2>&1
-reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\%APP_NAME%" /v "DisplayVersion" /t REG_SZ /d "0.1.0" /f >nul 2>&1
+for /f "tokens=*" %%v in ('python -c "import sys; sys.path.insert(0,'%~dp0lib'); from echo_personal_tool import __version__; print(__version__)"') do set REG_VER=%%v
+reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\%APP_NAME%" /v "DisplayVersion" /t REG_SZ /d "%REG_VER%" /f >nul 2>&1
 reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\%APP_NAME%" /v "Publisher" /t REG_SZ /d "SonoForge" /f >nul 2>&1
 
 echo.

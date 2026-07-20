@@ -215,6 +215,19 @@ class SystemBar(QWidget):
         left_layout = QHBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 12, 0)
         left_layout.setSpacing(8)
+
+        # App logo
+        from echo_personal_tool.presentation.dark_theme import get_logo_path
+        _logo = get_logo_path()
+        if _logo.exists():
+            self._logo_label = QLabel()
+            _pixmap = QPixmap(str(_logo))
+            self._logo_label.setPixmap(_pixmap.scaledToHeight(28, Qt.SmoothTransformation))
+            self._logo_label.setFixedWidth(28)
+            left_layout.addWidget(self._logo_label, 0)
+        else:
+            self._logo_label = None
+
         left_layout.addWidget(btn_open, 0)
         left_layout.addWidget(btn_load_server, 0)
         left_layout.addWidget(btn_send_server, 0)
@@ -278,6 +291,11 @@ class SystemBar(QWidget):
 
     def reload_icons(self) -> None:
         """Reload all icons with current theme colors."""
+        # Refresh logo for current theme
+        if self._logo_label is not None:
+            from echo_personal_tool.presentation.dark_theme import get_logo_path
+            _pixmap = QPixmap(str(get_logo_path()))
+            self._logo_label.setPixmap(_pixmap.scaledToHeight(28, Qt.SmoothTransformation))
         self._btn_open.setIcon(_load_icon("folder_open"))
         self._btn_load_server.setIcon(_load_icon("cloud_download"))
         self._btn_send_server.setIcon(_load_icon("activity_dicom"))
