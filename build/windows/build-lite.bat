@@ -8,7 +8,7 @@ REM  Dependencies + models are downloaded at first run.
 REM ============================================
 
 set APP_NAME=SonoForge
-for /f "tokens=2" %%v in ('python -c "import sys; sys.path.insert(0,'src'); from echo_personal_tool import __version__; print(__version__)"') do set APP_VERSION=%%v
+for /f "tokens=*" %%v in ('python -c "import sys; sys.path.insert(0,'src'); from echo_personal_tool import __version__; print(__version__)"') do set APP_VERSION=%%v
 set BUILD_DIR=build\dist-lite
 set DIST_DIR=dist
 set SRC_DIR=src\echo_personal_tool
@@ -40,7 +40,7 @@ copy /Y "build\windows\sonoforge-launcher.bat" "%PKG%\bin\SonoForge.bat" >nul
 REM ── 3. Create .zip ──
 echo [3/5] Creating archive...
 if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
-powershell -Command "Compress-Archive -Path '%PKG%\*' -DestinationPath '%DIST_DIR%\%APP_NAME%-%APP_VERSION%-Windows.zip" -Force
+powershell -Command "Compress-Archive -Path \"%PKG%\*\" -DestinationPath \"%DIST_DIR%\%APP_NAME%-%APP_VERSION%-Windows.zip\" -Force"
 
 REM ── 4. Done ──
 echo.
