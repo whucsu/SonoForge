@@ -2203,7 +2203,8 @@ class ViewerWidget(QWidget):
         # Update guides
         if self._mmode_vertical_lock and self._mmode_line_item._guide_h is not None:
             self._mmode_line_item._update_guides(img_pos, h)
-        self.mmode_line_completed.emit(*self._mmode_line_item.get_endpoints())
+        # NOTE: Do NOT emit mmode_line_completed here — it triggers expensive
+        # recalculate_from_frames on every mouse-move. Only emit on drag end.
 
     def _end_mmode_node_drag(self, endpoint_index: int) -> None:
         if self._mmode_line_item is not None:

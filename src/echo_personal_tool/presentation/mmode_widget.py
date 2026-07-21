@@ -52,7 +52,7 @@ class MModeWidget(QWidget):
         self._view_box.setMenuEnabled(False)
         self._image_item = pg.ImageItem(axisOrder="row-major")
         self._view_box.addItem(self._image_item)
-        self._image_item.setImage(self._image_buffer, autoLevels=True)
+        self._image_item.setImage(self._image_buffer, autoLevels=False, levels=(0, 255))
 
         self._sweep_line = pg.InfiniteLine(
             angle=90, pen=pg.mkPen("red", width=1, style=Qt.PenStyle.DashLine), movable=False
@@ -149,7 +149,7 @@ class MModeWidget(QWidget):
         self._buffer_width = new_width
         self._image_buffer = np.zeros((self._num_samples, self._buffer_width), dtype=np.uint8)
         self._sweep_x = 0
-        self._image_item.setImage(self._image_buffer, autoLevels=True)
+        self._image_item.setImage(self._image_buffer, autoLevels=False, levels=(0, 255))
         self._apply_image_rect()
         self.sweep_speed_changed.emit(new_width)
 
@@ -262,7 +262,7 @@ class MModeWidget(QWidget):
             self._num_samples = num_samples
             self._image_buffer = np.zeros((self._num_samples, self._buffer_width), dtype=np.uint8)
             self._sweep_x = 0
-            self._image_item.setImage(self._image_buffer, autoLevels=True)
+            self._image_item.setImage(self._image_buffer, autoLevels=False, levels=(0, 255))
             self._sweep_line.setValue(0)
 
     def on_new_column(self, column: np.ndarray) -> None:
@@ -275,7 +275,7 @@ class MModeWidget(QWidget):
         self._previous_column = col.copy()
         self._image_buffer[:n, self._sweep_x] = col.astype(np.uint8)
         self._sweep_x = (self._sweep_x + 1) % self._buffer_width
-        self._image_item.setImage(self._image_buffer, autoLevels=True)
+        self._image_item.setImage(self._image_buffer, autoLevels=False, levels=(0, 255))
         # Sweep line position in physical X units
         if self._time_ms_per_pixel is not None and self._time_ms_per_pixel > 0:
             self._sweep_line.setValue(self._sweep_x * self._time_ms_per_pixel)
@@ -286,7 +286,7 @@ class MModeWidget(QWidget):
         self._image_buffer[:] = 0
         self._sweep_x = 0
         self._previous_column = None
-        self._image_item.setImage(self._image_buffer, autoLevels=True)
+        self._image_item.setImage(self._image_buffer, autoLevels=False, levels=(0, 255))
         self._sweep_line.setValue(0)
 
     def recalculate_from_frames(
