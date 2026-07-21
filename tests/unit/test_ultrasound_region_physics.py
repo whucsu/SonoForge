@@ -46,9 +46,9 @@ def test_horizontal_ms_per_pixel_seconds_unit_code_3() -> None:
 
 
 def test_time_span_from_vendor_like_region() -> None:
-  span = time_span_ms_from_region(1276.0, 0.024, PHYSICAL_UNIT_SEC)
-  assert span is not None
-  assert abs(span - 1276.0 * 24.0) < 0.1
+    span = time_span_ms_from_region(1276.0, 0.024, PHYSICAL_UNIT_SEC)
+    assert span is not None
+    assert abs(span - 1276.0 * 24.0) < 0.1
 
 
 def test_velocity_span_requires_cm_per_sec_units() -> None:

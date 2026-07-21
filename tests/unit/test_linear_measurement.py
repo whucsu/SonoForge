@@ -49,4 +49,3 @@ def test_inline_caliper_text_raw_label() -> None:
     result = inline_caliper_text(m)
     assert result == "IVSd 8.0 mm"
     assert "МЖП" not in result
-

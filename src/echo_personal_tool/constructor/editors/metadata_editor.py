@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -33,9 +33,7 @@ class MetadataEditor(BaseEditor):
     def _build_ui(self) -> None:
         p = get_theme_palette()
         self.setFixedHeight(80)
-        self.setStyleSheet(
-            f"background: {p['bg_control']}; border-top: 1px solid {p['border']};"
-        )
+        self.setStyleSheet(f"background: {p['bg_control']}; border-top: 1px solid {p['border']};")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 4, 12, 4)
@@ -79,7 +77,7 @@ class MetadataEditor(BaseEditor):
         self._age_spin.setSpecialValueText("—")
         self._age_spin.setFixedWidth(60)
         self._age_spin.setStyleSheet(
-            f"QSpinBox {{ color: {p['text']}; background: {p['bg_panel']}; border: 1px solid {p['border']}; padding: 2px; }}"
+            f"QSpinBox {{ color: {p['text']}; background: {p['bg_panel']}; border: 1px solid {p['border']}; padding: 2px; }}"  # noqa: E501
         )
         self._age_spin.valueChanged.connect(self._on_changed)
         row1.addWidget(self._age_spin)
@@ -94,7 +92,7 @@ class MetadataEditor(BaseEditor):
         self._source_edit = QLineEdit()
         self._source_edit.setPlaceholderText("ASE 2017, Guidelines...")
         self._source_edit.setStyleSheet(
-            f"QLineEdit {{ color: {p['text']}; background: {p['bg_panel']}; border: 1px solid {p['border']}; padding: 2px 6px; }}"
+            f"QLineEdit {{ color: {p['text']}; background: {p['bg_panel']}; border: 1px solid {p['border']}; padding: 2px 6px; }}"  # noqa: E501
         )
         self._source_edit.textChanged.connect(self._on_changed)
         row1.addWidget(self._source_edit, 1)
@@ -112,7 +110,7 @@ class MetadataEditor(BaseEditor):
         self._desc_edit = QLineEdit()
         self._desc_edit.setPlaceholderText("Описание патологии...")
         self._desc_edit.setStyleSheet(
-            f"QLineEdit {{ color: {p['text']}; background: {p['bg_panel']}; border: 1px solid {p['border']}; padding: 2px 6px; }}"
+            f"QLineEdit {{ color: {p['text']}; background: {p['bg_panel']}; border: 1px solid {p['border']}; padding: 2px 6px; }}"  # noqa: E501
         )
         self._desc_edit.textChanged.connect(self._on_changed)
         row2.addWidget(self._desc_edit, 1)

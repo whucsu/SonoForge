@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import numpy as np
 import pyqtgraph as pg
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from echo_personal_tool.presentation.mmode_measurement import MModeMeasurementTool, MModeMeasurement
+from echo_personal_tool.presentation.mmode_measurement import MModeMeasurementTool
 
 
 @pytest.fixture

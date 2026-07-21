@@ -7,11 +7,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pyqtgraph as pg
-from scipy.interpolate import CubicSpline
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QCheckBox,
     QFrame,
     QGridLayout,
@@ -22,12 +20,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
-    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
+from scipy.interpolate import CubicSpline
 
 if TYPE_CHECKING:
     from echo_personal_tool.domain.models.speckle import StrainResult
@@ -38,12 +36,12 @@ logger = logging.getLogger(__name__)
 
 # Russian AHA segment names (Clinical style)
 AHA_SEGMENT_NAMES_RU: dict[int, str] = {
-    1: "БазПерг",   # Basal septal
-    2: "Базбок",    # Basal lateral
-    3: "СрПерг",    # Mid septal
-    4: "Србок",     # Mid lateral
-    5: "АпПер",     # Apical septal
-    6: "АпЛат",     # Apical lateral
+    1: "БазПерг",  # Basal septal
+    2: "Базбок",  # Basal lateral
+    3: "СрПерг",  # Mid septal
+    4: "Србок",  # Mid lateral
+    5: "АпПер",  # Apical septal
+    6: "АпЛат",  # Apical lateral
 }
 
 
@@ -239,13 +237,10 @@ class CinePanel(QWidget):
                     colors.append(pg.mkBrush(255, 193, 7, 200))  # yellow = low
                 else:
                     colors.append(pg.mkBrush(255, 255, 255, 200))  # white = good
-            self._kernel_scatter = pg.ScatterPlotItem(
-                x=x, y=y, pen=None, brush=colors, symbol="s", size=6
-            )
+            self._kernel_scatter = pg.ScatterPlotItem(x=x, y=y, pen=None, brush=colors, symbol="s", size=6)
         else:
             self._kernel_scatter = pg.ScatterPlotItem(
-                x=x, y=y, pen=pg.mkPen("w", width=0.5),
-                brush=pg.mkBrush(255, 255, 255, 180), symbol="s", size=6
+                x=x, y=y, pen=pg.mkPen("w", width=0.5), brush=pg.mkBrush(255, 255, 255, 180), symbol="s", size=6
             )
 
         self._kernel_scatter.setZValue(10)
@@ -283,8 +278,7 @@ class CinePanel(QWidget):
             return
 
         distances = np.sqrt(
-            (self._kernel_positions[:, 0] - click_x) ** 2 +
-            (self._kernel_positions[:, 1] - click_y) ** 2
+            (self._kernel_positions[:, 0] - click_x) ** 2 + (self._kernel_positions[:, 1] - click_y) ** 2
         )
         min_idx = np.argmin(distances)
         min_dist = distances[min_idx]
@@ -308,8 +302,7 @@ class CinePanel(QWidget):
             x = [self._kernel_positions[idx, 0]]
             y = [self._kernel_positions[idx, 1]]
             self._selected_kernel_item = pg.ScatterPlotItem(
-                x=x, y=y, pen=pg.mkPen("#ffd54f", width=2),
-                brush=pg.mkBrush(255, 213, 79, 150), symbol="o", size=16
+                x=x, y=y, pen=pg.mkPen("#ffd54f", width=2), brush=pg.mkBrush(255, 213, 79, 150), symbol="o", size=16
             )
             self._selected_kernel_item.setZValue(15)
             self._plot.addItem(self._selected_kernel_item)
@@ -448,28 +441,39 @@ class BullseyeWidget(QWidget):
         14: (1, 2),  # apical inferior
         12: (1, 3),  # apical septal
         # Mid (6 segments)
-        7: (2, 0),   # mid anterior
-        8: (2, 1),   # anterolateral
+        7: (2, 0),  # mid anterior
+        8: (2, 1),  # anterolateral
         11: (2, 2),  # inferolateral
         10: (2, 3),  # mid inferior
-        9: (2, 4),   # inferoseptal
-        3: (2, 5),   # mid septal
+        9: (2, 4),  # inferoseptal
+        3: (2, 5),  # mid septal
         # Basal (6 segments)
-        1: (3, 0),   # basal anterior
-        2: (3, 1),   # anterolateral
-        6: (3, 2),   # inferolateral
-        5: (3, 3),   # basal inferior
-        4: (3, 4),   # inferoseptal
+        1: (3, 0),  # basal anterior
+        2: (3, 1),  # anterolateral
+        6: (3, 2),  # inferolateral
+        5: (3, 3),  # basal inferior
+        4: (3, 4),  # inferoseptal
         15: (3, 5),  # basal septal
     }
 
     # Russian labels for outer perimeter
     SEGMENT_LABELS_RU: dict[int, str] = {
-        1: "Пер", 2: "Лат", 6: "Лат",
-        5: "Нижн", 4: "Задн", 15: "Пер",
-        7: "Пер", 8: "Лат", 11: "Лат",
-        10: "Нижн", 9: "Задн", 3: "Пер",
-        13: "АпПер", 16: "АпЛат", 14: "АпНижн", 12: "АпПер",
+        1: "Пер",
+        2: "Лат",
+        6: "Лат",
+        5: "Нижн",
+        4: "Задн",
+        15: "Пер",
+        7: "Пер",
+        8: "Лат",
+        11: "Лат",
+        10: "Нижн",
+        9: "Задн",
+        3: "Пер",
+        13: "АпПер",
+        16: "АпЛат",
+        14: "АпНижн",
+        12: "АпПер",
     }
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -488,8 +492,8 @@ class BullseyeWidget(QWidget):
 
     def paintEvent(self, event) -> None:
         """Custom paint using QPainter for filled segments."""
-        from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
         from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -512,7 +516,7 @@ class BullseyeWidget(QWidget):
 
             # Check if segment is accepted by QC
             is_accepted = True
-            if hasattr(self, '_qc_accepted_segments') and self._qc_accepted_segments is not None:
+            if hasattr(self, "_qc_accepted_segments") and self._qc_accepted_segments is not None:
                 is_accepted = seg_id in self._qc_accepted_segments
 
             if not is_accepted:
@@ -590,8 +594,12 @@ class BullseyeWidget(QWidget):
         painter.setPen(QPen(QColor(180, 180, 180), 1))
 
         outer_labels = {
-            0: "Пер", 1: "Лат", 2: "Лат",
-            3: "Нижн", 4: "Задн", 5: "Пер",
+            0: "Пер",
+            1: "Лат",
+            2: "Лат",
+            3: "Нижн",
+            4: "Задн",
+            5: "Пер",
         }
         for i, label in outer_labels.items():
             angle = np.radians(-90 + i * 60 + 30)
@@ -782,16 +790,12 @@ class ControlPanel(QWidget):
 
         self._metric_sr = QRadioButton("Скорость деформ.")
         self._metric_sr.setStyleSheet("color: #e0e0e0;")
-        self._metric_sr.toggled.connect(
-            lambda c: self.strain_metric_changed.emit("strain_rate") if c else None
-        )
+        self._metric_sr.toggled.connect(lambda c: self.strain_metric_changed.emit("strain_rate") if c else None)
         metric_layout.addWidget(self._metric_sr)
 
         self._metric_peak = QRadioButton("Пик.изм.деформации")
         self._metric_peak.setStyleSheet("color: #e0e0e0;")
-        self._metric_peak.toggled.connect(
-            lambda c: self.strain_metric_changed.emit("peak") if c else None
-        )
+        self._metric_peak.toggled.connect(lambda c: self.strain_metric_changed.emit("peak") if c else None)
         metric_layout.addWidget(self._metric_peak)
 
         group_metric.setLayout(metric_layout)
@@ -1162,8 +1166,12 @@ class StrainWindow(QMainWindow):
 
         # AHA segment names
         segment_names = {
-            1: "БазПерг", 2: "Базбок", 3: "СрПерг", 4: "Србок",
-            5: "АпПер", 6: "АпЛат",
+            1: "БазПерг",
+            2: "Базбок",
+            3: "СрПерг",
+            4: "Србок",
+            5: "АпПер",
+            6: "АпЛат",
         }
 
         # Create checkboxes for segments with data
@@ -1280,7 +1288,7 @@ class StrainWindow(QMainWindow):
             title_info = f"GLS: {self._result.gls:.1f}%"
             unit = "%"
         elif metric == "strain_rate":
-            title_info = f"GLS Rate: --"
+            title_info = "GLS Rate: --"
             unit = "1/s"
         elif metric == "peak":
             title_info = f"Peak GLS: {self._result.gls:.1f}%"
@@ -1315,8 +1323,7 @@ class StrainWindow(QMainWindow):
         # Recalculate GLS excluding rejected segments
         if self._result is not None and self._result.segment_strain:
             accepted_strains = [
-                strain for seg_id, strain in self._result.segment_strain.items()
-                if seg_id in self._qc_accepted_segments
+                strain for seg_id, strain in self._result.segment_strain.items() if seg_id in self._qc_accepted_segments
             ]
             if accepted_strains:
                 gls_qc = float(np.min(accepted_strains))
@@ -1339,14 +1346,12 @@ class StrainWindow(QMainWindow):
             return
 
         from PySide6.QtWidgets import QFileDialog
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить данные деформации", "", "JSON files (*.json)"
-        )
+
+        path, _ = QFileDialog.getSaveFileName(self, "Сохранить данные деформации", "", "JSON files (*.json)")
         if not path:
             return
 
         import json
-        from pathlib import Path
 
         data = {
             "gls": self._result.gls,
@@ -1375,11 +1380,8 @@ class StrainWindow(QMainWindow):
     def _export_png(self) -> None:
         """Export current view as PNG screenshot."""
         from PySide6.QtWidgets import QFileDialog
-        from PySide6.QtGui import QPixmap
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Экспорт PNG", "", "PNG files (*.png)"
-        )
+        path, _ = QFileDialog.getSaveFileName(self, "Экспорт PNG", "", "PNG files (*.png)")
         if not path:
             return
 
@@ -1397,23 +1399,33 @@ class StrainWindow(QMainWindow):
         if self._result is None or self._result.segment_strain is None:
             return
 
-        from PySide6.QtWidgets import QFileDialog
         import csv
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Экспорт CSV", "", "CSV files (*.csv)"
-        )
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getSaveFileName(self, "Экспорт CSV", "", "CSV files (*.csv)")
         if not path:
             return
 
         # Segment names
         segment_names = {
-            1: "Basal septal", 2: "Basal lateral", 3: "Mid septal", 4: "Mid lateral",
-            5: "Apical septal", 6: "Apical lateral",
-            7: "Mid anterior", 8: "Anterolateral", 9: "Inferoseptal",
-            10: "Mid inferior", 11: "Inferolateral",
-            12: "Apical septal", 13: "Apical anterior", 14: "Apical inferior",
-            15: "Basal septal", 16: "Apical lateral", 17: "Apex",
+            1: "Basal septal",
+            2: "Basal lateral",
+            3: "Mid septal",
+            4: "Mid lateral",
+            5: "Apical septal",
+            6: "Apical lateral",
+            7: "Mid anterior",
+            8: "Anterolateral",
+            9: "Inferoseptal",
+            10: "Mid inferior",
+            11: "Inferolateral",
+            12: "Apical septal",
+            13: "Apical anterior",
+            14: "Apical inferior",
+            15: "Basal septal",
+            16: "Apical lateral",
+            17: "Apex",
         }
 
         with open(path, "w", newline="", encoding="utf-8") as f:

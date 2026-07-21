@@ -118,9 +118,7 @@ def test_escape_and_enter_delegate_to_active_doppler_tool(qtbot, monkeypatch) ->
     assert cancel_calls == [True]
 
 
-def test_studies_loaded_requests_visible_previews_once_in_real_flow(
-    qtbot, monkeypatch
-) -> None:
+def test_studies_loaded_requests_visible_previews_once_in_real_flow(qtbot, monkeypatch) -> None:
     window = _make_window(qtbot)
     window._browser.resize(320, 260)
     window._browser.show()

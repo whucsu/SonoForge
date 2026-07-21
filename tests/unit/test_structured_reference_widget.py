@@ -1,10 +1,11 @@
 """Tests for StructuredReferenceWidget."""
+
 from __future__ import annotations
 
 import pytest
+
 from echo_personal_tool.domain.services.reference_data_store import ReferenceDataStore
 from echo_personal_tool.presentation.structured_reference_widget import StructuredReferenceWidget
-
 
 _SAMPLE_YAML = """
 topics:

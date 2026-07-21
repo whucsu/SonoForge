@@ -8,12 +8,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QGridLayout,
     QHBoxLayout,
     QLabel,
-    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -25,12 +22,12 @@ logger = logging.getLogger(__name__)
 
 # Segment colors matching Clinical style
 SEGMENT_COLORS: dict[int, tuple[int, int, int]] = {
-    1: (0, 200, 255),    # БазПерг - cyan
-    2: (0, 150, 255),    # Базбок - blue
-    3: (0, 255, 100),    # СрПерг - green
-    4: (255, 255, 0),    # Србок - yellow
-    5: (255, 100, 0),    # АпПер - orange
-    6: (255, 0, 100),    # АпЛат - pink
+    1: (0, 200, 255),  # БазПерг - cyan
+    2: (0, 150, 255),  # Базбок - blue
+    3: (0, 255, 100),  # СрПерг - green
+    4: (255, 255, 0),  # Србок - yellow
+    5: (255, 100, 0),  # АпПер - orange
+    6: (255, 0, 100),  # АпЛат - pink
 }
 
 SEGMENT_NAMES_RU: dict[int, str] = {
@@ -141,7 +138,7 @@ class SegmentCurvePanel(QWidget):
             # Align to common length
             curves_array = np.full((len(segment_strains), max_len), np.nan)
             for i, curve in enumerate(segment_strains.values()):
-                curves_array[i, :len(curve)] = curve
+                curves_array[i, : len(curve)] = curve
             mean_curve = np.nanmean(curves_array, axis=0)
             x_mean = np.arange(max_len) * frame_time_ms
             pen_mean = pg.mkPen(255, 255, 255, width=2, style=Qt.PenStyle.DashLine)
@@ -152,7 +149,8 @@ class SegmentCurvePanel(QWidget):
             self._plot.removeItem(self._es_marker)
         es_x = es_index * frame_time_ms
         self._es_marker = pg.InfiniteLine(
-            pos=es_x, angle=90,
+            pos=es_x,
+            angle=90,
             pen=pg.mkPen("#ffd54f", width=2, style=Qt.PenStyle.DashLine),
         )
         self._plot.addItem(self._es_marker)
@@ -181,7 +179,8 @@ class SegmentCurvePanel(QWidget):
         # Frame marker
         marker_x = current_frame * frame_time_ms
         self._ecg_marker = pg.InfiniteLine(
-            pos=marker_x, angle=90,
+            pos=marker_x,
+            angle=90,
             pen=pg.mkPen("#ffd54f", width=1, style=Qt.PenStyle.DashLine),
         )
         self._ecg_plot.addItem(self._ecg_marker)

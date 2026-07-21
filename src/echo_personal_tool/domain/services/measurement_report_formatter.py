@@ -10,7 +10,6 @@ from echo_personal_tool.domain.calculations.chamber_simpson import (
 )
 from echo_personal_tool.domain.models.linear_measurement import LinearMeasurement
 from echo_personal_tool.domain.models.measurements import (
-    LvViewMetrics,
     MeasurementSnapshot,
 )
 
@@ -261,9 +260,7 @@ def _format_indexed_section(snapshot: MeasurementSnapshot) -> list[str]:
     lines = ["Индексированные (BSA)"]
     lines.append(_line("BSA", indexed.bsa_m2, " m²", decimals=2))
     if snapshot.height_cm is not None and snapshot.weight_kg is not None:
-        lines.append(
-            f"  Рост: {snapshot.height_cm:.0f} cm, Вес: {snapshot.weight_kg:.0f} kg"
-        )
+        lines.append(f"  Рост: {snapshot.height_cm:.0f} cm, Вес: {snapshot.weight_kg:.0f} kg")
 
     volume_fields = (
         ("LVMI", indexed.lvmi_g_m2, " g/m²"),

@@ -36,7 +36,6 @@ class _MenuButton:
 
     @property
     def label(self) -> str:
-        from echo_personal_tool.infrastructure.i18n import tr
         return tr(self.label_key)
 
 
@@ -163,15 +162,11 @@ _MENU: tuple[tuple[str, tuple[_MenuButton, ...]], ...] = (
     ),
     (
         "menu.strain_group",
-        (
-            _btn("menu.speckle_tracking", MeasurementAction.SPECKLE_TRACKING, view="A4C"),
-        ),
+        (_btn("menu.speckle_tracking", MeasurementAction.SPECKLE_TRACKING, view="A4C"),),
     ),
     (
         "menu.mmode_group",
-        (
-            _btn("menu.mmode_anatomic", MeasurementAction.MMODE),
-        ),
+        (_btn("menu.mmode_anatomic", MeasurementAction.MMODE),),
     ),
 )
 
@@ -186,7 +181,7 @@ _EXPERIMENTAL_GROUPS: dict[str, str] = {
 
 def _filter_menu(
     menu: tuple[tuple[str, tuple[_MenuButton, ...]], ...],
-    preferences: "UserPreferences | None" = None,
+    preferences: UserPreferences | None = None,
 ) -> tuple[tuple[str, tuple[_MenuButton, ...]], ...]:
     """Filter menu based on user preferences for experimental features."""
     if preferences is None:
@@ -234,7 +229,6 @@ class MeasuresAccordionSection(QWidget):
         self._content_height = 0
         self._title_key = title_key
 
-        from echo_personal_tool.infrastructure.i18n import tr
         self._header = QPushButton(tr(title_key))
         self._header.setObjectName("measuresSectionTitle")
         self._header.setFlat(True)
@@ -306,7 +300,6 @@ class MeasuresAccordionSection(QWidget):
         return button in self._body.findChildren(QPushButton)
 
     def reload_text(self) -> None:
-        from echo_personal_tool.infrastructure.i18n import tr
         self._header.setText(tr(self._title_key))
         buttons = self._body.findChildren(QPushButton)
         for i, button in enumerate(buttons):
@@ -338,7 +331,7 @@ class MeasuresMenuWidget(QWidget):
     def _build_menu(self) -> None:
         """Build or rebuild the menu with current preferences."""
         # Clear existing content
-        for section in self._sections if hasattr(self, '_sections') else []:
+        for section in self._sections if hasattr(self, "_sections") else []:
             section.deleteLater()
         self._sections = []
         self._tool_buttons = []
@@ -370,7 +363,7 @@ class MeasuresMenuWidget(QWidget):
         scroll.setWidget(inner)
 
         # Clear old layout content if exists, otherwise create new layout
-        if hasattr(self, '_outer_layout') and self._outer_layout is not None:
+        if hasattr(self, "_outer_layout") and self._outer_layout is not None:
             while self._outer_layout.count():
                 item = self._outer_layout.takeAt(0)
                 if item.widget():
@@ -446,9 +439,7 @@ class MeasuresMenuWidget(QWidget):
         if self._blink_target is None:
             return
         self._blink_on = not self._blink_on
-        self._blink_target.setStyleSheet(
-            self._BLINK_STYLE if self._blink_on else self._NORMAL_STYLE
-        )
+        self._blink_target.setStyleSheet(self._BLINK_STYLE if self._blink_on else self._NORMAL_STYLE)
 
     def _ensure_section_visible(self, button: QPushButton) -> None:
         for section in self._sections:

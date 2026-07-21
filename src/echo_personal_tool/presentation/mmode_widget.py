@@ -39,9 +39,7 @@ class MModeWidget(QWidget):
         self._depth_mm_per_pixel: float | None = None
         self._previous_column: np.ndarray | None = None
 
-        self._image_buffer = np.zeros(
-            (self._num_samples, self._buffer_width), dtype=np.uint8
-        )
+        self._image_buffer = np.zeros((self._num_samples, self._buffer_width), dtype=np.uint8)
 
         self._plot = pg.PlotWidget()
         self._plot.setLabel("bottom", "Time", units="px")
@@ -90,9 +88,11 @@ class MModeWidget(QWidget):
 
         # Measurement buttons
         self._measure_btns: dict[str, QPushButton] = {}
-        for label, slot in [("▼ Вертикаль", self._start_vertical_measurement),
-                           ("◄ Горизонталь", self._start_horizontal_measurement),
-                           ("↗ Произвольное", self._start_arbitrary_measurement)]:
+        for label, slot in [
+            ("▼ Вертикаль", self._start_vertical_measurement),
+            ("◄ Горизонталь", self._start_horizontal_measurement),
+            ("↗ Произвольное", self._start_arbitrary_measurement),
+        ]:
             btn = QPushButton(label)
             btn.setFixedHeight(22)
             btn.setCheckable(True)
@@ -147,9 +147,7 @@ class MModeWidget(QWidget):
         for l, btn in self._speed_buttons.items():
             btn.setChecked(l == label)
         self._buffer_width = new_width
-        self._image_buffer = np.zeros(
-            (self._num_samples, self._buffer_width), dtype=np.uint8
-        )
+        self._image_buffer = np.zeros((self._num_samples, self._buffer_width), dtype=np.uint8)
         self._sweep_x = 0
         self._image_item.setImage(self._image_buffer, autoLevels=True)
         self._apply_image_rect()
@@ -262,9 +260,7 @@ class MModeWidget(QWidget):
         self._scan_end = end
         if num_samples != self._num_samples:
             self._num_samples = num_samples
-            self._image_buffer = np.zeros(
-                (self._num_samples, self._buffer_width), dtype=np.uint8
-            )
+            self._image_buffer = np.zeros((self._num_samples, self._buffer_width), dtype=np.uint8)
             self._sweep_x = 0
             self._image_item.setImage(self._image_buffer, autoLevels=True)
             self._sweep_line.setValue(0)
@@ -349,6 +345,4 @@ class MModeWidget(QWidget):
         self._view_box.setXRange(0, x_size)
         # Update measurement tool calibration
         if self._depth_mm_per_pixel is not None and self._time_ms_per_pixel is not None:
-            self._measurement_tool.set_calibration(
-                self._depth_mm_per_pixel, self._time_ms_per_pixel, self._num_samples
-            )
+            self._measurement_tool.set_calibration(self._depth_mm_per_pixel, self._time_ms_per_pixel, self._num_samples)

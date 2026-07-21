@@ -86,7 +86,7 @@ class PropertiesPanel(QWidget):
         if patient_weight_kg is not None and patient_weight_kg > 0:
             self._instance_form.addRow("Weight:", QLabel(f"{patient_weight_kg:.1f} kg"))
         if patient_height_m and patient_weight_kg and patient_height_m > 0 and patient_weight_kg > 0:
-            bmi = patient_weight_kg / (patient_height_m ** 2)
+            bmi = patient_weight_kg / (patient_height_m**2)
             self._instance_form.addRow("BMI:", QLabel(f"{bmi:.1f}"))
         self._instance_group.show()
 

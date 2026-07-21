@@ -1,8 +1,4 @@
 from echo_personal_tool.domain.models.contour import Contour
-from echo_personal_tool.domain.models.temporal_fusion import (
-    TemporalFusionConfig,
-    TemporalFusionResult,
-)
 from echo_personal_tool.domain.models.doppler import (
     DopplerIntervalMarker,
     DopplerMeasurementDTO,
@@ -40,6 +36,10 @@ from echo_personal_tool.domain.models.speckle import (
     StrainResult,
     TrackingKernel,
     TrackingResult,
+)
+from echo_personal_tool.domain.models.temporal_fusion import (
+    TemporalFusionConfig,
+    TemporalFusionResult,
 )
 from echo_personal_tool.domain.models.viewer_state import ViewerState
 

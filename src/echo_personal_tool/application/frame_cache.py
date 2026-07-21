@@ -72,9 +72,7 @@ class FrameCache:
             raise IndexError(f"Frame index {index} out of range [0, {self._total_frames})")
         frame = self._frame_store.get(index)
         if frame is None:
-            raise RuntimeError(
-                f"Frame {index} was evicted; reload or set_current() within range"
-            )
+            raise RuntimeError(f"Frame {index} was evicted; reload or set_current() within range")
         return frame
 
     def set_total_frames(self, path: Path, total: int) -> None:
@@ -156,6 +154,7 @@ class FrameCache:
         if suffix in (".mp4", ".avi", ".mov"):
             # Video file — use existing video reader
             from echo_personal_tool.infrastructure.video_reader import get_thread_video_reader
+
             reader = get_thread_video_reader()
             reader.open(source)
             frames = []
@@ -165,6 +164,7 @@ class FrameCache:
         else:
             # DICOM — load frame by frame
             from echo_personal_tool.infrastructure.dicom_session import get_thread_dicom_session
+
             session = get_thread_dicom_session()
             session.open(source)
             frames = []
@@ -233,8 +233,8 @@ class FrameCache:
         if not keys:
             return
         # Frames outside [lo, hi] are evicted
-        left_drop = keys[:bisect.bisect_left(keys, lo)]
-        right_drop = keys[bisect.bisect_right(keys, hi):]
+        left_drop = keys[: bisect.bisect_left(keys, lo)]
+        right_drop = keys[bisect.bisect_right(keys, hi) :]
         to_drop = [k for k in left_drop + right_drop if k not in self._pinned]
         if not to_drop:
             return

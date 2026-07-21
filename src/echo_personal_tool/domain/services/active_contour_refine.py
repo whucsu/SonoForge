@@ -42,11 +42,7 @@ def refine_open_arc(
     points = [[float(x), float(y)] for x, y in initial_points]
     points[0] = [float(annulus[0][0]), float(annulus[0][1])]
     points[-1] = [float(annulus[1][0]), float(annulus[1][1])]
-    template = (
-        list(template_points)
-        if template_points is not None
-        else [tuple(point) for point in points]
-    )
+    template = list(template_points) if template_points is not None else [tuple(point) for point in points]
     if len(template) != len(points):
         msg = "template_points must match initial_points length"
         raise ValueError(msg)
@@ -61,12 +57,8 @@ def refine_open_arc(
             px, py = points[index]
             force_x = cfg.k_int * (template[index][0] - px)
             force_y = cfg.k_int * (template[index][1] - py)
-            force_x += cfg.k_smooth * (
-                points[index - 1][0] + points[index + 1][0] - 2.0 * px
-            )
-            force_y += cfg.k_smooth * (
-                points[index - 1][1] + points[index + 1][1] - 2.0 * py
-            )
+            force_x += cfg.k_smooth * (points[index - 1][0] + points[index + 1][0] - 2.0 * px)
+            force_y += cfg.k_smooth * (points[index - 1][1] + points[index + 1][1] - 2.0 * py)
 
             normal_x, normal_y = _outward_normal(index, points)
             best_offset = 0.0

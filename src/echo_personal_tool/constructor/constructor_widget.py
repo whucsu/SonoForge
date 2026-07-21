@@ -4,18 +4,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QFileDialog,
-    QHBoxLayout,
-    QLabel,
     QLineEdit,
     QMessageBox,
-    QPushButton,
-    QRadioButton,
-    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -203,6 +196,7 @@ class ConstructorWidget(QWidget):
         from echo_personal_tool.domain.services.measurement_results_formatter import (
             invalidate_norm_cache,
         )
+
         data = self._model.to_dict()
         errors = self._validator.validate(data)
         if errors:
@@ -261,14 +255,14 @@ class ConstructorWidget(QWidget):
 
     def import_excel(self) -> None:
         from echo_personal_tool.constructor.dialogs import styled_open_file
-        path, _ = styled_open_file(
-            self, "Импорт Excel", "", "Excel (*.xlsx *.xls)"
-        )
+
+        path, _ = styled_open_file(self, "Импорт Excel", "", "Excel (*.xlsx *.xls)")
         if path:
             try:
                 from echo_personal_tool.constructor.importers.excel_importer import (
                     import_excel_file,
                 )
+
                 imported = import_excel_file(Path(path))
                 # Merge imported data into model
                 for topic_data in imported.get("topics", []):
@@ -283,28 +277,28 @@ class ConstructorWidget(QWidget):
 
     def export_pdf(self) -> None:
         from echo_personal_tool.constructor.dialogs import styled_save_file
-        path, _ = styled_save_file(
-            self, "Экспорт PDF", "", "PDF (*.pdf)"
-        )
+
+        path, _ = styled_save_file(self, "Экспорт PDF", "", "PDF (*.pdf)")
         if path:
             try:
                 from echo_personal_tool.constructor.exporters.pdf_exporter import (
                     export_to_pdf,
                 )
+
                 export_to_pdf(self._model, Path(path))
             except Exception as exc:
                 QMessageBox.critical(self, "Ошибка экспорта", str(exc))
 
     def export_html(self) -> None:
         from echo_personal_tool.constructor.dialogs import styled_save_file
-        path, _ = styled_save_file(
-            self, "Экспорт HTML", "", "HTML (*.html)"
-        )
+
+        path, _ = styled_save_file(self, "Экспорт HTML", "", "HTML (*.html)")
         if path:
             try:
                 from echo_personal_tool.constructor.exporters.html_exporter import (
                     export_to_html,
                 )
+
                 export_to_html(self._model, Path(path))
             except Exception as exc:
                 QMessageBox.critical(self, "Ошибка экспорта", str(exc))
@@ -315,6 +309,7 @@ class ConstructorWidget(QWidget):
         from echo_personal_tool.constructor.preview.reference_preview import (
             ReferencePreviewWindow,
         )
+
         preview = ReferencePreviewWindow(self._model, self)
         preview.resize(900, 700)
         preview.show()

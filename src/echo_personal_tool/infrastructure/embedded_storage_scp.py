@@ -85,18 +85,22 @@ class EmbeddedStorageSCP:
         file_meta = getattr(event, "file_meta", None)
         if file_meta is None:
             from pydicom.dataset import FileMetaDataset
+
             file_meta = FileMetaDataset()
         if not file_meta.get("TransferSyntaxUID"):
             from pydicom.uid import ExplicitVRLittleEndian
+
             file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
         ds.file_meta = file_meta
 
         from io import BytesIO
+
         buf = BytesIO()
         ds.save_as(buf, enforce_file_format=True)
         self.instances[sop_uid] = buf.getvalue()
 
         from echo_personal_tool.infrastructure.log_sanitizer import sanitize_uid
+
         logger.debug("Received instance %s (%d bytes)", sanitize_uid(sop_uid), len(self.instances[sop_uid]))
         return 0x0000  # Success
 

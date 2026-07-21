@@ -63,25 +63,13 @@ class DopplerCalibrationState:
         return self.has_velocity_scale() and self.time_span_ms > 0.0
 
     def has_velocity_scale(self) -> bool:
-        return (
-            self.roi.width > 0.0
-            and self.roi.height > 0.0
-            and self.velocity_span_cm_s > 0.0
-        )
+        return self.roi.width > 0.0 and self.roi.height > 0.0 and self.velocity_span_cm_s > 0.0
 
     def has_time_scale_from_dicom(self) -> bool:
-        return (
-            self.from_dicom_tags
-            and self.roi.width > 0.0
-            and self.time_span_ms > 0.0
-        )
+        return self.from_dicom_tags and self.roi.width > 0.0 and self.time_span_ms > 0.0
 
     def has_velocity_scale_from_dicom(self) -> bool:
-        return (
-            self.velocity_from_dicom_tags
-            and self.roi.height > 0.0
-            and self.velocity_span_cm_s > 0.0
-        )
+        return self.velocity_from_dicom_tags and self.roi.height > 0.0 and self.velocity_span_cm_s > 0.0
 
     def is_dicom_trusted(self) -> bool:
         return self.from_dicom_tags and self.is_complete()

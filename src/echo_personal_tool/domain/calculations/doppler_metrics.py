@@ -61,14 +61,8 @@ def compute(dto: DopplerMeasurementDTO) -> DopplerResults:
 
     e_a_ratio = _ratio(e_cm_s, a_cm_s)
 
-    e_prime_values = [
-        value
-        for value in (e_prime_sept_cm_s, e_prime_lat_cm_s)
-        if value is not None
-    ]
-    e_prime_avg_cm_s = (
-        sum(e_prime_values) / len(e_prime_values) if e_prime_values else None
-    )
+    e_prime_values = [value for value in (e_prime_sept_cm_s, e_prime_lat_cm_s) if value is not None]
+    e_prime_avg_cm_s = sum(e_prime_values) / len(e_prime_values) if e_prime_values else None
     e_over_e_prime = _ratio(e_cm_s, e_prime_avg_cm_s)
     e_over_e_prime_sept = _ratio(e_cm_s, e_prime_sept_cm_s)
     e_over_e_prime_lat = _ratio(e_cm_s, e_prime_lat_cm_s)
@@ -82,17 +76,13 @@ def compute(dto: DopplerMeasurementDTO) -> DopplerResults:
     at_ms = _find_interval_duration_ms(dto, "at")
 
     vti_cm = _find_vti_cm(dto)
-    pgpeak_mmhg = (
-        pressure_gradient_mmhg(vpeak_cm_s) if vpeak_cm_s is not None else None
-    )
+    pgpeak_mmhg = pressure_gradient_mmhg(vpeak_cm_s) if vpeak_cm_s is not None else None
 
     vmean_cm_s = None
     if vti_cm is not None and at_ms is not None and at_ms > 0:
         vmean_cm_s = vti_cm / (at_ms / 1000.0)
 
-    pgmean_mmhg = (
-        pressure_gradient_mmhg(vmean_cm_s) if vmean_cm_s is not None else None
-    )
+    pgmean_mmhg = pressure_gradient_mmhg(vmean_cm_s) if vmean_cm_s is not None else None
 
     return DopplerResults(
         e_cm_s=e_cm_s,

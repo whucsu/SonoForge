@@ -9,7 +9,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -83,10 +82,7 @@ class PathologyEditor(BaseEditor):
 
     def get_selected_slugs(self) -> list[str]:
         """Return slugs of all selected items."""
-        return [
-            item.data(Qt.ItemDataRole.UserRole)
-            for item in self._list.selectedItems()
-        ]
+        return [item.data(Qt.ItemDataRole.UserRole) for item in self._list.selectedItems()]
 
     def filter(self, query: str) -> None:
         self._list.clear()
@@ -195,10 +191,7 @@ class PathologyEditor(BaseEditor):
 
         edit = QLineEdit(item.text())
         p = get_theme_palette()
-        edit.setStyleSheet(
-            f"QLineEdit {{ border: 1px solid {p['accent']}; "
-            f"color: {p['text']}; padding: 4px; }}"
-        )
+        edit.setStyleSheet(f"QLineEdit {{ border: 1px solid {p['accent']}; color: {p['text']}; padding: 4px; }}")
         self._list.setItemWidget(item, edit)
         edit.setFocus()
         edit.selectAll()

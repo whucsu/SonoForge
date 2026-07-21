@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from echo_personal_tool.domain.models.orthanc import InstanceInfo, SeriesInfo, StudyInfo
-from echo_personal_tool.domain.ports import DimseClient, DicomWebClient, QuerySource
+from echo_personal_tool.domain.ports import DicomWebClient, DimseClient, QuerySource
 
 logger = logging.getLogger(__name__)
 

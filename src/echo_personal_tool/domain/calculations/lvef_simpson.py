@@ -83,10 +83,7 @@ def format_contour_overlay(
     phase = contour.phase.upper()
     chamber = contour.chamber.upper()
     if contour.review_pending:
-        return (
-            f"{chamber} {view} {phase}: проверьте контур (ASE) · "
-            "R — уточнить · Enter — принять"
-        )
+        return f"{chamber} {view} {phase}: проверьте контур (ASE) · R — уточнить · Enter — принять"
     if pixel_spacing is None:
         return f"{chamber} {view} {phase} · Длина: — · Объём: —"
     length = _contour_length_mm(contour, pixel_spacing)
@@ -187,10 +184,7 @@ def explain_lv_auto_reject_reason(
     long_axis_px = _contour_long_axis_px(contour)
     arc_span_px = _contour_arc_span_px(contour)
     if arc_span_px < _MIN_LV_AUTO_ARC_SPAN_PX:
-        return (
-            "контур маски схлопнулся при построении "
-            "(маска есть, но граница не извлечена — сообщите разработчику)"
-        )
+        return "контур маски схлопнулся при построении (маска есть, но граница не извлечена — сообщите разработчику)"
     if annulus_px < _MIN_LV_AUTO_ANNULUS_PX:
         return "не найдено митральное кольцо (проверьте вид A4C и кадр ED/ES)"
     if long_axis_px < _MIN_LV_AUTO_LONG_AXIS_PX:
@@ -262,10 +256,7 @@ def simpson_volume_ml_from_closed_polygon(
     if len(contour.points) < 3:
         return None
     row_spacing, col_spacing = pixel_spacing
-    points_mm = tuple(
-        (float(col) * col_spacing, float(row) * row_spacing)
-        for col, row in contour.points
-    )
+    points_mm = tuple((float(col) * col_spacing, float(row) * row_spacing) for col, row in contour.points)
     volume = _simpson_volume_ml(points_mm, None)
     return volume if volume > 0.0 else None
 
@@ -328,10 +319,7 @@ def _contour_to_mm(
     """Convert contour points from pixels to millimeters."""
     row_spacing, col_spacing = pixel_spacing
     polygon_points = contour.closed_polygon_points()
-    points_mm = tuple(
-        (float(col) * col_spacing, float(row) * row_spacing)
-        for col, row in polygon_points
-    )
+    points_mm = tuple((float(col) * col_spacing, float(row) * row_spacing) for col, row in polygon_points)
     annulus_mm = None
     if contour.mitral_annulus is not None:
         annulus_mm = (

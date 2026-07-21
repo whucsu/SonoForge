@@ -77,9 +77,7 @@ class SpeckleSettingsDialog(QDialog):
         form.addRow(self._es_auto_check)
         form.addRow("ES frame:", self._es_spin)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 

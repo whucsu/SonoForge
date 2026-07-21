@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, fields
+from dataclasses import dataclass, fields
 from typing import Any
 
 from PySide6.QtCore import QSettings
@@ -56,6 +56,7 @@ class ServerSettings:
 
 
 # ── Profile management ──────────────────────────────────────────────
+
 
 def _profile_store() -> QSettings:
     return QSettings(_SETTINGS_ORG, _SETTINGS_APP)
@@ -215,14 +216,34 @@ def reset_server_settings() -> None:
     username = str(store.value("username", ""))
     if username:
         _save_password_keyring(username, "")
-    for key in ("description", "url", "username", "password", "auth_mode",
-                "http_headers", "use_mock", "dimse_enabled", "dimse_ae_title",
-                "dimse_called_ae", "dimse_host", "dimse_port", "stow_dicom_web_url",
-                "query_source", "retrieval_source", "dimse_retrieval_mode",
-                "dimse_use_tls", "dimse_tls_verify", "dimse_tls_ca_path",
-                "dimse_tls_cert_path", "dimse_tls_key_path",
-                "dimse_scp_port", "dimse_scp_host", "dimse_scp_ae_title",
-                "network_timeout", "tls_verify"):
+    for key in (
+        "description",
+        "url",
+        "username",
+        "password",
+        "auth_mode",
+        "http_headers",
+        "use_mock",
+        "dimse_enabled",
+        "dimse_ae_title",
+        "dimse_called_ae",
+        "dimse_host",
+        "dimse_port",
+        "stow_dicom_web_url",
+        "query_source",
+        "retrieval_source",
+        "dimse_retrieval_mode",
+        "dimse_use_tls",
+        "dimse_tls_verify",
+        "dimse_tls_ca_path",
+        "dimse_tls_cert_path",
+        "dimse_tls_key_path",
+        "dimse_scp_port",
+        "dimse_scp_host",
+        "dimse_scp_ae_title",
+        "network_timeout",
+        "tls_verify",
+    ):
         store.remove(key)
     store.sync()
 
@@ -260,10 +281,12 @@ def save_server_settings(settings: ServerSettings) -> None:
 
 # ── Keyring helpers ────────────────────────────────────────────────
 
+
 def _save_password_keyring(username: str, password: str) -> None:
     """Store password in OS keychain, falling back to QSettings."""
     try:
         import keyring
+
         if password:
             keyring.set_password(_SERVICE_NAME, username, password)
         else:
@@ -287,6 +310,7 @@ def _load_password_keyring(username: str) -> str:
     """Load password from OS keychain, falling back to QSettings."""
     try:
         import keyring
+
         pwd = keyring.get_password(_SERVICE_NAME, username)
         if pwd:
             return pwd

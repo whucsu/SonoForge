@@ -7,14 +7,12 @@ from typing import Any
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QMessageBox,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -156,6 +154,7 @@ class TopicEditor(BaseEditor):
             return
 
         import copy
+
         new_topic = copy.deepcopy(topic)
         existing = {t.slug for t in self._topics}
         idx = 1

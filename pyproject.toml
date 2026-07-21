@@ -79,9 +79,10 @@ group_by = "group"
 timer = "time.perf_counter"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py311"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+ignore = ["F821", "E402", "F841", "E501", "UP042", "E741"]

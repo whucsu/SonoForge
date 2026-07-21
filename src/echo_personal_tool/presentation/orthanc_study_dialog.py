@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -25,18 +24,18 @@ from PySide6.QtWidgets import (
 
 from echo_personal_tool.application.workers.orthanc_download_worker import OrthancDownloadWorker
 from echo_personal_tool.domain.models import StudyMetadata
-from echo_personal_tool.infrastructure.i18n import tr
-from echo_personal_tool.domain.models.orthanc import SeriesInfo, StudyInfo
+from echo_personal_tool.domain.models.orthanc import SeriesInfo
 from echo_personal_tool.domain.ports import DicomWebClient, QuerySource
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.orthanc_cache import OrthancSessionCache
 from echo_personal_tool.infrastructure.orthanc_client import OrthancDicomWebClient
+from echo_personal_tool.infrastructure.server_client_factory import (
+    make_dicom_retrieve_service,
+)
 from echo_personal_tool.infrastructure.server_settings import (
     ServerSettings,
     load_server_settings,
     save_server_settings,
-)
-from echo_personal_tool.infrastructure.server_client_factory import (
-    make_dicom_retrieve_service,
 )
 
 _STUDY_UID_ROLE = Qt.ItemDataRole.UserRole
@@ -69,11 +68,7 @@ class OrthancStudyDialog(QDialog):
         self._username = username
         self._password = password
         self._query_service = query_service
-        self._retrieve_service = (
-            make_dicom_retrieve_service(server_settings)
-            if server_settings is not None
-            else None
-        )
+        self._retrieve_service = make_dicom_retrieve_service(server_settings) if server_settings is not None else None
         self._result: tuple[str, str] | None = None
         self._downloading = False
         self._worker: OrthancDownloadWorker | None = None
@@ -112,7 +107,9 @@ class OrthancStudyDialog(QDialog):
         search_row.addWidget(self._find_btn)
 
         self._tree = QTreeWidget()
-        self._tree.setHeaderLabels([tr("orthanc.table_patient"), tr("orthanc.table_date"), tr("orthanc.table_study_series")])
+        self._tree.setHeaderLabels(
+            [tr("orthanc.table_patient"), tr("orthanc.table_date"), tr("orthanc.table_study_series")]
+        )
         self._tree.setColumnWidth(0, 200)
         self._tree.setColumnWidth(1, 100)
         self._tree.setSortingEnabled(True)
@@ -138,7 +135,6 @@ class OrthancStudyDialog(QDialog):
         buttons_row.addWidget(self._cancel_btn)
 
         # Custom title bar for frameless dialog
-        from PySide6.QtWidgets import QSizePolicy
         self._drag_pos: QPoint | None = None
         title_bar = QWidget()
         title_bar.setFixedHeight(32)
@@ -151,6 +147,7 @@ class OrthancStudyDialog(QDialog):
         tb_layout.addWidget(title_label)
         tb_layout.addStretch(1)
         from echo_personal_tool.presentation.system_bar import _load_icon
+
         btn_close = QPushButton()
         btn_close.setIcon(_load_icon("close"))
         btn_close.setObjectName("closeButton")
@@ -220,6 +217,7 @@ class OrthancStudyDialog(QDialog):
 
     def accept(self) -> None:
         from echo_personal_tool.presentation.ui_animations import hide_dialog_animated
+
         log.info("[DLG] accept: result=%s downloaded=%d", self._result, len(self._downloaded_studies))
         try:
             self._release_client()
@@ -258,9 +256,7 @@ class OrthancStudyDialog(QDialog):
             self._persist_query_source(str(source_val))
         # Show info if DIMSE selected — download via C-GET
         if source_val == "dimse":
-            self._status_label.setText(
-                tr("orthanc.dimse_info_banner")
-            )
+            self._status_label.setText(tr("orthanc.dimse_info_banner"))
 
     def _persist_query_source(self, source_val: str) -> None:
         if source_val not in {s.value for s in QuerySource}:
@@ -314,6 +310,7 @@ class OrthancStudyDialog(QDialog):
 
     def _on_find(self) -> None:
         from echo_personal_tool.presentation.ui_animations import loading_button
+
         with loading_button(self._find_btn, tr("orthanc.searching")):
             self._load_studies()
 
@@ -375,6 +372,7 @@ class OrthancStudyDialog(QDialog):
 
     def _on_load(self) -> None:
         from echo_personal_tool.presentation.ui_animations import set_button_loading
+
         all_series = self._collect_all_checked_series()
         log.info("[DLG] _on_load: checked_series=%d", len(all_series))
         if not all_series:
@@ -400,8 +398,12 @@ class OrthancStudyDialog(QDialog):
         self._start_next_download()
 
     def _start_next_download(self) -> None:
-        log.info("[DLG] _start_next_download: pending=%d completed=%d total=%d",
-                 len(self._pending_downloads), self._completed_downloads, self._total_studies)
+        log.info(
+            "[DLG] _start_next_download: pending=%d completed=%d total=%d",
+            len(self._pending_downloads),
+            self._completed_downloads,
+            self._total_studies,
+        )
         if not self._pending_downloads:
             all_ok = self._completed_downloads == self._total_studies
             if all_ok and self._session_id is not None:
@@ -480,12 +482,12 @@ class OrthancStudyDialog(QDialog):
         log.info("[DLG] _on_studies_ready: %d studies", len(studies))
         for s in studies:
             total_inst = sum(len(sr.instances) for sr in s.series)
-            log.info("[DLG]   study_uid=%s series=%d instances=%d",
-                     s.study_uid[:16], len(s.series), total_inst)
+            log.info("[DLG]   study_uid=%s series=%d instances=%d", s.study_uid[:16], len(s.series), total_inst)
         self._downloaded_studies.extend(studies)
 
     def _reset_after_download(self) -> None:
         from echo_personal_tool.presentation.ui_animations import set_button_loading
+
         self._downloading = False
         self._worker = None
         self._force_close_timer.stop()
@@ -503,13 +505,21 @@ class OrthancStudyDialog(QDialog):
         log.warning("[DLG] _on_single_study_failed: uid=%s msg=%s", _uid[:16] if _uid else "?", message)
         self._completed_downloads += 1
         self._status_label.setText(
-            tr("orthanc.series_error_status", current=self._completed_downloads, total=self._total_studies, message=message)
+            tr(
+                "orthanc.series_error_status",
+                current=self._completed_downloads,
+                total=self._total_studies,
+                message=message,
+            )
         )
         self._start_next_download()
 
     def _on_done(self, session_id: str, study_uid: str) -> None:
-        log.info("[DLG] _on_done: session=%s studies_downloaded=%d",
-                 session_id[:8] if session_id else "?", len(self._downloaded_studies))
+        log.info(
+            "[DLG] _on_done: session=%s studies_downloaded=%d",
+            session_id[:8] if session_id else "?",
+            len(self._downloaded_studies),
+        )
         self._reset_after_download()
         self._session_id = None
         self._result = (session_id, study_uid)
@@ -532,7 +542,9 @@ class OrthancStudyDialog(QDialog):
         self._cancel_btn.setText(tr("orthanc.cancel"))
         self._cancel_btn.setEnabled(True)
         self._update_load_button()
-        QMessageBox.warning(self, tr("orthanc.download_error.title"), tr("orthanc.download_error.body", message=message))
+        QMessageBox.warning(
+            self, tr("orthanc.download_error.title"), tr("orthanc.download_error.body", message=message)
+        )
 
     def _on_cancelled(self, _session_id: str) -> None:
         self._reset_after_download()

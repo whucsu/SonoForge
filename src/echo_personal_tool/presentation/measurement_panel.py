@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.domain.calculations.doppler_metrics import compute
 from echo_personal_tool.domain.models.doppler import DopplerMeasurementDTO
 from echo_personal_tool.domain.models.measurements import (
@@ -21,6 +20,7 @@ from echo_personal_tool.domain.models.measurements import (
     MeasurementSnapshot,
 )
 from echo_personal_tool.domain.models.viewer_state import ViewerState
+from echo_personal_tool.infrastructure.i18n import tr
 
 
 class MeasurementPanel(QWidget):
@@ -226,9 +226,7 @@ class MeasurementPanel(QWidget):
         def append_view(view_label: str, metrics: LvViewMetrics | None) -> None:
             if metrics is None:
                 return
-            length = (
-                metrics.length_ed_mm if metrics.length_ed_mm is not None else metrics.length_es_mm
-            )
+            length = metrics.length_ed_mm if metrics.length_ed_mm is not None else metrics.length_es_mm
             length_suffix = " mm" if snapshot is None or snapshot.spacing_calibrated else " px"
             volume_suffix = " mL" if snapshot is None or snapshot.spacing_calibrated else " px³"
             length_line = self._optional_line(tr("panel.lv_length").format(view=view_label), length, length_suffix)
@@ -369,6 +367,7 @@ class MeasurementPanel(QWidget):
 
     def _format_indexed_section(self, snapshot: MeasurementSnapshot | None) -> list[str]:
         from echo_personal_tool.infrastructure.i18n import tr
+
         indexed = snapshot.indexed if snapshot is not None else None
         if indexed is None:
             return []

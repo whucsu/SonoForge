@@ -58,9 +58,7 @@ class DopplerWidget(QWidget):
 
         self._interval_items: list[pg.PlotDataItem] = []
 
-        self._trace_item = pg.PlotDataItem(
-            pen=pg.mkPen("#1565c0", width=2, style=Qt.PenStyle.DashLine)
-        )
+        self._trace_item = pg.PlotDataItem(pen=pg.mkPen("#1565c0", width=2, style=Qt.PenStyle.DashLine))
         self._trace_item.setZValue(15)
         self._plot.addItem(self._trace_item)
         self._trace_items: list[pg.PlotDataItem] = []
@@ -136,9 +134,7 @@ class DopplerWidget(QWidget):
         mapping = self._axis_mapping
         span = mapping.velocity_max_cm_s - mapping.velocity_min_cm_s
         self._image_item.setImage(image, autoLevels=False)
-        self._image_item.setRect(
-            QRectF(mapping.time_origin_ms, mapping.velocity_min_cm_s, mapping.time_span_ms, span)
-        )
+        self._image_item.setRect(QRectF(mapping.time_origin_ms, mapping.velocity_min_cm_s, mapping.time_span_ms, span))
         self._update_image_levels(image)
         self._plot.setRange(
             xRange=(mapping.time_origin_ms, mapping.time_origin_ms + mapping.time_span_ms),
@@ -160,9 +156,7 @@ class DopplerWidget(QWidget):
 
     def cancel_active_tool(self) -> bool:
         had_active_state = (
-            self._tool_mode != "none"
-            or bool(self._active_partial_points)
-            or self._active_interval_start is not None
+            self._tool_mode != "none" or bool(self._active_partial_points) or self._active_interval_start is not None
         )
         self._tool_mode = "none"
         self._clear_partial_state()

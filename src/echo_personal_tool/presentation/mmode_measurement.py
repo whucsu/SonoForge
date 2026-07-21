@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
-import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget
@@ -52,10 +50,15 @@ class MModeMeasurementItem:
 
     def remove(self) -> None:
         for item in (
-            self._line_item, self._start_node, self._end_node,
-            self._guide_h_start, self._guide_h_end,
-            self._guide_v_start, self._guide_v_end,
-            self._label, self._es_highlight,
+            self._line_item,
+            self._start_node,
+            self._end_node,
+            self._guide_h_start,
+            self._guide_h_end,
+            self._guide_v_start,
+            self._guide_v_end,
+            self._label,
+            self._es_highlight,
         ):
             if item is not None:
                 self._view.removeItem(item)
@@ -152,7 +155,8 @@ class MModeMeasurementItem:
         ex, ey = self._measurement.end
         if self._es_highlight is None:
             self._es_highlight = pg.ScatterPlotItem(
-                symbol="o", size=16,
+                symbol="o",
+                size=16,
                 pen=self._ES_HIGHLIGHT_PEN,
                 brush=self._ES_HIGHLIGHT_BRUSH,
             )

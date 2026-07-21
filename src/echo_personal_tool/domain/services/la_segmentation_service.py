@@ -8,12 +8,11 @@ import numpy as np
 from scipy import ndimage
 
 from echo_personal_tool.domain.models import Contour
+from echo_personal_tool.domain.services.bench_metrics import mask_iou
 from echo_personal_tool.domain.services.contour_geometry import (
     DEFAULT_NODE_COUNT,
-    point_line_distance,
     resample_open_arc_landmarks,
 )
-from echo_personal_tool.domain.services.bench_metrics import mask_iou
 from echo_personal_tool.domain.services.mbs_lite_service import (
     _ATRIAL_ELLIPSE_SHORT_AXIS_RATIO,
     _warp_elliptical_open_arc,
@@ -31,6 +30,7 @@ _MAX_LA_ELLIPSE_RESIDUAL = 0.35
 # ---------------------------------------------------------------------------
 # Landmark extraction from binary mask
 # ---------------------------------------------------------------------------
+
 
 def _largest_component(binary: np.ndarray) -> np.ndarray:
     labeled, count = ndimage.label(binary)
@@ -122,6 +122,7 @@ def _la_landmarks_from_mask(
 # la_mask_to_contour — main public API
 # ---------------------------------------------------------------------------
 
+
 def la_mask_to_contour(
     mask: np.ndarray,
     *,
@@ -169,6 +170,7 @@ def la_mask_to_contour(
 # ---------------------------------------------------------------------------
 # Quality gate
 # ---------------------------------------------------------------------------
+
 
 def _mask_ellipse_fit_residual(mask: np.ndarray, contour: Contour) -> float:
     """1 − IoU(mask, filled contour polygon), normalized ellipse-fit error."""
@@ -231,10 +233,7 @@ def explain_la_auto_reject_reason(
 
     # Mask area gate
     if mask_pixels is not None and mask_pixels < _MIN_LA_MASK_AREA_PX:
-        return (
-            f"полость ЛА слишком мала ({mask_pixels} px < {_MIN_LA_MASK_AREA_PX} px) — "
-            "выберите другой кадр"
-        )
+        return f"полость ЛА слишком мала ({mask_pixels} px < {_MIN_LA_MASK_AREA_PX} px) — выберите другой кадр"
 
     if mask is not None:
         residual = _mask_ellipse_fit_residual(mask, contour)

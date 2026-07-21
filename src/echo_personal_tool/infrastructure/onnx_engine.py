@@ -135,14 +135,17 @@ class OnnxInferenceEngine:
         self._manifest_section = manifest_section
         self._model_path = (
             _resolve_model_path(
-                self._models_dir, self._manifest, manifest_section=manifest_section,
+                self._models_dir,
+                self._manifest,
+                manifest_section=manifest_section,
             )
             if self._manifest is not None
             else None
         )
         if self._manifest is not None:
             self._input_name, self._output_name = _resolve_io_names(
-                self._manifest, manifest_section=manifest_section,
+                self._manifest,
+                manifest_section=manifest_section,
             )
         else:
             self._input_name, self._output_name = "input", "logits"
@@ -158,11 +161,7 @@ class OnnxInferenceEngine:
             self._session = None
 
     def is_available(self) -> bool:
-        return (
-            self._manifest is not None
-            and self._model_path is not None
-            and self._model_path.is_file()
-        )
+        return self._manifest is not None and self._model_path is not None and self._model_path.is_file()
 
     @property
     def crop_mode(self) -> str:

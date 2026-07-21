@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QToolButton,
@@ -63,6 +62,7 @@ def show_user_preferences_dialog(
     on_apply: Callable[[UserPreferences], None] | None = None,
 ) -> bool:
     from echo_personal_tool.presentation.ui_animations import exec_animated
+
     dialog = UserPreferencesDialog(parent, on_apply=on_apply)
     return exec_animated(dialog) == QDialog.DialogCode.Accepted
 
@@ -85,10 +85,7 @@ class UserPreferencesDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._on_apply = on_apply
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.Dialog
-        )
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.resize(780, 560)
         self._drag_pos = None
@@ -108,6 +105,7 @@ class UserPreferencesDialog(QDialog):
 
         btn_close = QPushButton()
         from echo_personal_tool.presentation.system_bar import _load_icon
+
         btn_close.setIcon(_load_icon("close"))
         btn_close.setObjectName("closeButton")
         btn_close.setFixedSize(28, 23)
@@ -240,9 +238,7 @@ class UserPreferencesDialog(QDialog):
         self._calibration_tick_snap.setChecked(current.calibration_tick_snap_enabled)
         self._auto_depth_cal = QCheckBox(tr("preferences.auto_depth_cal"))
         self._auto_depth_cal.setChecked(current.auto_depth_calibration_enabled)
-        self._auto_depth_cal.setToolTip(
-            tr("preferences.auto_depth_cal_tooltip")
-        )
+        self._auto_depth_cal.setToolTip(tr("preferences.auto_depth_cal_tooltip"))
         self._length_unit = QComboBox()
         self._length_unit.addItem(tr("preferences.unit_mm"), "mm")
         self._length_unit.addItem(tr("preferences.unit_cm"), "cm")
@@ -266,9 +262,7 @@ class UserPreferencesDialog(QDialog):
         self._show_dicom_inspector.setChecked(current.show_dicom_tag_inspector)
         self._interesting_tags = QLineEdit(current.interesting_dicom_tags)
         self._interesting_tags.setPlaceholderText("PatientName,StudyDate,HeartRate")
-        self._interesting_tags.setToolTip(
-            tr("preferences.tags_tooltip")
-        )
+        self._interesting_tags.setToolTip(tr("preferences.tags_tooltip"))
         dicom_form.addRow(tr("preferences.inspector_tags"), self._show_dicom_inspector)
         dicom_form.addRow(tr("preferences.tags_overlay"), self._interesting_tags)
         tabs.addTab(_scrollable_tab(dicom_form), "DICOM")
@@ -337,9 +331,7 @@ class UserPreferencesDialog(QDialog):
         self._server_form = ServerSettingsForm()
         tabs.addTab(self._server_form, tr("preferences.tab_server"))
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         self._recolor_buttonbox_icons(buttons)
@@ -378,6 +370,7 @@ class UserPreferencesDialog(QDialog):
 
     def _browse_gold_path(self) -> None:
         from echo_personal_tool.presentation.styled_dialogs import styled_select_directory
+
         path = styled_select_directory(
             self,
             tr("preferences.gold_browse_title"),
@@ -388,6 +381,7 @@ class UserPreferencesDialog(QDialog):
 
     def _browse_references_dir(self) -> None:
         from echo_personal_tool.presentation.styled_dialogs import styled_select_directory
+
         path = styled_select_directory(
             self,
             tr("references_dir_browse_title"),
@@ -477,9 +471,11 @@ class UserPreferencesDialog(QDialog):
                     btn.setText("\u25b6")  # ▶
 
     def _recolor_buttonbox_icons(self, box: QDialogButtonBox) -> None:
-        from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
         from PySide6.QtCore import Qt
+        from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
+
         from echo_personal_tool.presentation.dark_theme import get_theme_palette
+
         p = get_theme_palette()
         color = QColor(p["text"])
         for btn in box.findChildren(QPushButton):

@@ -18,6 +18,7 @@ import pytest
 def _ru_locale():
     """Reset language to Russian before each test."""
     from echo_personal_tool.infrastructure.i18n import set_language
+
     set_language("ru")
     yield
     set_language("ru")

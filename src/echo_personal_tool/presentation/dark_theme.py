@@ -158,14 +158,13 @@ def get_theme_palette() -> dict[str, str]:
     return _resolve_theme(_current_theme_mode)
 
 
-def get_logo_path() -> "Path":
+def get_logo_path() -> Path:
     """Return the logo path matching the current theme (dark/inverted or light/original)."""
     from pathlib import Path
+
     _base = Path(__file__).resolve().parent.parent / "resources"
     mode = _current_theme_mode
-    is_dark = mode in ("dark", "vscode_dark") or (
-        mode == "system" and _is_system_dark()
-    )
+    is_dark = mode in ("dark", "vscode_dark") or (mode == "system" and _is_system_dark())
     name = "logo_dark.png" if is_dark else "logo.png"
     path = _base / name
     return path if path.exists() else _base / "logo.png"
@@ -174,9 +173,11 @@ def get_logo_path() -> "Path":
 def _is_system_dark() -> bool:
     """Detect system dark mode on Windows/macOS/Linux."""
     import os
+
     if sys.platform == "win32":
         try:
             import winreg
+
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
                 r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -189,9 +190,12 @@ def _is_system_dark() -> bool:
     if sys.platform == "darwin":
         try:
             import subprocess
+
             r = subprocess.run(
                 ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                capture_output=True, text=True, timeout=2,
+                capture_output=True,
+                text=True,
+                timeout=2,
             )
             return "Dark" in r.stdout
         except Exception:
@@ -215,6 +219,7 @@ def _resolve_theme(mode: str) -> dict[str, str]:
         if sys.platform == "win32":
             try:
                 import winreg
+
                 key = winreg.OpenKey(
                     winreg.HKEY_CURRENT_USER,
                     r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -226,10 +231,13 @@ def _resolve_theme(mode: str) -> dict[str, str]:
                 return _DARK
         if sys.platform == "darwin":
             import subprocess
+
             try:
                 result = subprocess.run(
                     ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                    capture_output=True, text=True, timeout=2,
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
                 )
                 return _DARK if "Dark" in result.stdout else _LIGHT
             except Exception:

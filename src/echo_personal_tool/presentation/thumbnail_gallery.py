@@ -6,10 +6,9 @@ import inspect
 import shutil
 from collections.abc import Callable
 
-from PySide6.QtCore import QPropertyAnimation, QSize, Qt, QTimer, Signal, QEasingCurve
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
-    QFileDialog,
     QListWidget,
     QListWidgetItem,
     QMenu,
@@ -37,9 +36,7 @@ _COLUMN_COUNT = 2
 _CELL_SPACING = 2
 _SCROLLBAR_GUTTER = 24
 
-ThumbnailLoader = (
-    Callable[[InstanceMetadata], None] | Callable[[InstanceMetadata, ThumbnailPriority], None]
-)
+ThumbnailLoader = Callable[[InstanceMetadata], None] | Callable[[InstanceMetadata, ThumbnailPriority], None]
 
 
 class ThumbnailGalleryDelegate(QStyledItemDelegate):
@@ -226,9 +223,7 @@ class ThumbnailGalleryWidget(QListWidget):
     def wheelEvent(self, event) -> None:
         if self._horizontal_mode:
             delta = event.angleDelta().y()
-            self.horizontalScrollBar().setValue(
-                self.horizontalScrollBar().value() - delta
-            )
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta)
         else:
             super().wheelEvent(event)
 
@@ -309,9 +304,7 @@ class ThumbnailGalleryWidget(QListWidget):
             if uid not in visible_uids and uid != selected_uid:
                 continue
             priority = (
-                ThumbnailPriority.P0_VISIBLE_SELECTED
-                if uid == selected_uid
-                else ThumbnailPriority.P1_NEAR_VISIBLE
+                ThumbnailPriority.P0_VISIBLE_SELECTED if uid == selected_uid else ThumbnailPriority.P1_NEAR_VISIBLE
             )
             if self._loader_accepts_priority:
                 self._thumbnail_loader(instance, priority)  # type: ignore[misc]
@@ -373,9 +366,12 @@ class ThumbnailGalleryWidget(QListWidget):
         if instance.path is None:
             return
         from echo_personal_tool.presentation.styled_dialogs import styled_save_file
+
         default_name = instance.path.name
         dest, _ = styled_save_file(
-            self, tr("gallery.save_file"), default_name,
+            self,
+            tr("gallery.save_file"),
+            default_name,
         )
         if dest:
             shutil.copy2(str(instance.path), dest)
@@ -419,7 +415,7 @@ class ThumbnailGalleryWidget(QListWidget):
         self._anim.setStartValue(self._saved_width)
         self._anim.setEndValue(0)
         self._anim.setEasingCurve(QEasingCurve.Type.OutQuint)
-        self._anim.finished.connect(lambda: (self.hide(), setattr(self, '_collapsed', True)))
+        self._anim.finished.connect(lambda: (self.hide(), setattr(self, "_collapsed", True)))
         self._anim.start()
 
     def _animate_expand(self) -> None:
@@ -431,11 +427,13 @@ class ThumbnailGalleryWidget(QListWidget):
         self._anim.setStartValue(0)
         self._anim.setEndValue(target)
         self._anim.setEasingCurve(QEasingCurve.Type.OutQuint)
-        self._anim.finished.connect(lambda: (
-            self.setMaximumWidth(16777215),
-            self.setFixedWidth(target),
-            setattr(self, '_collapsed', False),
-        ))
+        self._anim.finished.connect(
+            lambda: (
+                self.setMaximumWidth(16777215),
+                self.setFixedWidth(target),
+                setattr(self, "_collapsed", False),
+            )
+        )
         self._anim.start()
 
     @property

@@ -72,7 +72,9 @@ class FrameLoaderWorker(QRunnable):
         if _FREEZE_DIAG:
             _diag_log.warning(
                 "[loader] fmt=%s start=%d size=%d elapsed=%.1fms",
-                self._media_format, self._frame_index, self._batch_size or 1,
+                self._media_format,
+                self._frame_index,
+                self._batch_size or 1,
                 (time.perf_counter() - _t0) * 1000,
             )
 

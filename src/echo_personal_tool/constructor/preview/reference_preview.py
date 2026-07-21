@@ -34,9 +34,9 @@ class ReferencePreviewWindow(QDialog):
     def _render(self) -> None:
         parts = ["<html><body>"]
         for topic in self._model.topics:
-            parts.append(f'<h1>{topic.name}</h1>')
+            parts.append(f"<h1>{topic.name}</h1>")
             for patho in topic.pathologies:
-                parts.append(f'<h2>{patho.name}</h2>')
+                parts.append(f"<h2>{patho.name}</h2>")
                 if patho.description:
                     parts.append(f'<p class="desc">{patho.description}</p>')
                 if patho.has_gradations:
@@ -47,7 +47,7 @@ class ReferencePreviewWindow(QDialog):
                     parts.append('<div class="images">')
                     for img in patho.image_paths:
                         parts.append(f'<span class="img">📷 {img}</span>')
-                    parts.append('</div>')
+                    parts.append("</div>")
         parts.append("</body></html>")
         self._browser.setHtml("\n".join(parts))
 
@@ -66,9 +66,9 @@ class ReferencePreviewWindow(QDialog):
             )
         return (
             '<table class="data"><thead><tr>'
-            '<th>ID</th><th>Название</th><th>Ед.</th>'
-            '<th>Норм М</th><th>Норм Ж</th><th>Описание</th><th>Источник</th>'
-            f'</tr></thead><tbody>{"".join(rows)}</tbody></table>'
+            "<th>ID</th><th>Название</th><th>Ед.</th>"
+            "<th>Норм М</th><th>Норм Ж</th><th>Описание</th><th>Источник</th>"
+            f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
         )
 
     def _render_gradation_table(self, patho) -> str:
@@ -95,10 +95,7 @@ class ReferencePreviewWindow(QDialog):
                 css = " class='patho'" if val else ""
                 cells.append(f"<td{css}>{val or '—'}</td>")
             rows.append(f"<tr>{''.join(cells)}</tr>")
-        return (
-            '<table class="data"><thead><tr>'
-            f'{header_row}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
-        )
+        return f'<table class="data"><thead><tr>{header_row}</tr></thead><tbody>{"".join(rows)}</tbody></table>'
 
     def _format_norm(self, norm) -> str:
         if norm is None:
@@ -112,16 +109,16 @@ class ReferencePreviewWindow(QDialog):
 
 
 _CSS = """
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #1a1a1a; padding: 20px; line-height: 1.5; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #1a1a1a; padding: 20px; line-height: 1.5; }  # noqa: E501
 h1 { font-size: 20px; color: #1a1a1a; margin: 24px 0 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 6px; }
 h2 { font-size: 16px; color: #374151; margin: 20px 0 8px; }
 .desc { color: #6b7280; font-style: italic; margin: 4px 0 8px; }
 table.data { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
-table.data th { background: #f3f4f6; font-weight: bold; padding: 6px 10px; border: 1px solid #d1d5db; text-align: left; }
+table.data th { background: #f3f4f6; font-weight: bold; padding: 6px 10px; border: 1px solid #d1d5db; text-align: left; }  # noqa: E501
 table.data td { padding: 6px 10px; border: 1px solid #d1d5db; }
 table.data tr:hover { background: #f9fafb; }
 .norm { color: #2563eb; }
 .patho { color: #dc2626; }
 .images { margin-top: 8px; }
-.img { display: inline-block; padding: 4px 8px; margin: 2px; border: 1px dashed #d1d5db; border-radius: 4px; color: #9ca3af; font-size: 12px; }
+.img { display: inline-block; padding: 4px 8px; margin: 2px; border: 1px dashed #d1d5db; border-radius: 4px; color: #9ca3af; font-size: 12px; }  # noqa: E501
 """

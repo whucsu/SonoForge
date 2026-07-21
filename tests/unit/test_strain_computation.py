@@ -19,9 +19,7 @@ def test_contour_arc_length_horizontal():
 
 def test_green_lagrange_zero_at_reference():
     positions = np.tile(np.array([[0, 0], [10, 0], [20, 0]], dtype=float), (5, 1, 1))
-    strain = compute_longitudinal_strain_gl(
-        positions, ed_index=0, pixel_spacing=(1, 1), endo_indices=[0, 1, 2]
-    )
+    strain = compute_longitudinal_strain_gl(positions, ed_index=0, pixel_spacing=(1, 1), endo_indices=[0, 1, 2])
     assert strain[0] == 0
 
 
@@ -30,9 +28,7 @@ def test_green_lagrange_stretch():
     positions[0] = [[0, 0], [10, 0], [20, 0]]
     positions[1] = [[0, 0], [11, 0], [22, 0]]
     positions[2] = [[0, 0], [12, 0], [24, 0]]
-    strain = compute_longitudinal_strain_gl(
-        positions, ed_index=0, pixel_spacing=(1.0, 1.0), endo_indices=[0, 1, 2]
-    )
+    strain = compute_longitudinal_strain_gl(positions, ed_index=0, pixel_spacing=(1.0, 1.0), endo_indices=[0, 1, 2])
     # L0=20, L1=22 -> ratio=1.1 -> E=0.5*(1.21-1)*100=10.5
     np.testing.assert_allclose(strain[1], 10.5, atol=1e-6)
 

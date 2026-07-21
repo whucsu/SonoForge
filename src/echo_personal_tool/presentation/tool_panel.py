@@ -16,9 +16,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from echo_personal_tool.presentation.measurement_action import MeasurementAction
 from echo_personal_tool.presentation.dicom_tag_inspector_widget import DicomTagInspectorWidget
 from echo_personal_tool.presentation.ge_labeled_slider import TopLabeledSlider
+from echo_personal_tool.presentation.measurement_action import MeasurementAction
 from echo_personal_tool.presentation.measures_menu import MeasuresMenuWidget
 from echo_personal_tool.presentation.properties_panel import PropertiesPanel
 from echo_personal_tool.presentation.ui_animations import HoverButtonMixin
@@ -34,6 +34,7 @@ class _PatientMetricsRow(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         from echo_personal_tool.infrastructure.i18n import tr
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
@@ -80,13 +81,13 @@ class ControlsTab(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         from echo_personal_tool.infrastructure.i18n import tr
+
         self.window_slider = TopLabeledSlider(tr("tools.window"), minimum=1, maximum=400, value=100)
         self.level_slider = TopLabeledSlider(tr("tools.level"), minimum=0, maximum=100, value=50)
         self.dr_slider = TopLabeledSlider(tr("tools.dr"), minimum=0, maximum=100, value=50)
-        self.dr_slider.slider().setToolTip(
-            "Dynamic range: center = full range; left = clip dark (typical for US)"
-        )
+        self.dr_slider.slider().setToolTip("Dynamic range: center = full range; left = clip dark (typical for US)")
         from echo_personal_tool.infrastructure.i18n import tr
+
         self._magnetic_snap_check = QCheckBox(tr("tools.magnetic_snap"))
         self._magnetic_snap_check.setChecked(True)
         self._magnetic_snap_check.setToolTip(tr("tools.magnetic_snap_tip"))
@@ -118,6 +119,7 @@ class MeasureTab(QWidget):
         self._patient_metrics.metrics_changed.connect(self.patient_metrics_changed.emit)
 
         from echo_personal_tool.infrastructure.i18n import tr
+
         self._auto_play_check = QCheckBox(tr("preferences.auto_play"))
         self._auto_play_check.setToolTip(tr("preferences.auto_play"))
         self._auto_play_check.toggled.connect(self.auto_play_changed.emit)
@@ -167,6 +169,7 @@ class MeasureTab(QWidget):
 
     def reload_text(self) -> None:
         from echo_personal_tool.infrastructure.i18n import tr
+
         self._auto_play_check.setText(tr("preferences.auto_play"))
         self._auto_play_check.setToolTip(tr("preferences.auto_play"))
         self._results_button.setText(tr("tool_panel.measures"))
@@ -233,6 +236,7 @@ class ToolPanel(QWidget):
 
     def reload_text(self) -> None:
         from echo_personal_tool.infrastructure.i18n import tr
+
         self.measure.reload_text()
         self._tabs.setTabText(0, tr("tool_panel.measures"))
         self._tabs.setTabText(1, tr("tool_panel.controls"))
@@ -240,6 +244,7 @@ class ToolPanel(QWidget):
     def set_dicom_inspector_visible(self, visible: bool) -> None:
         """Show/hide the DICOM Tags tab."""
         from echo_personal_tool.infrastructure.i18n import tr
+
         idx = self._tabs.indexOf(self._tag_inspector)
         if visible and idx == -1:
             self._tabs.addTab(self._tag_inspector, tr("tool_panel.dicom_tags"))

@@ -121,6 +121,7 @@ class DopplerOverlayTools(QWidget):
         if self._tool_mode != "trace":
             return None
         from echo_personal_tool.infrastructure.i18n import tr
+
         if not self._active_partial_points:
             return f"{self._trace_label}: {tr('doppler.trace_click_baseline')}"
         if self._trace_stroke_active:
@@ -176,9 +177,7 @@ class DopplerOverlayTools(QWidget):
 
     def cancel_active_tool(self) -> bool:
         had_active_state = (
-            self._tool_mode != "none"
-            or bool(self._active_partial_points)
-            or self._active_interval_start is not None
+            self._tool_mode != "none" or bool(self._active_partial_points) or self._active_interval_start is not None
         )
         self._tool_mode = "none"
         self._workflow = None
@@ -209,6 +208,7 @@ class DopplerOverlayTools(QWidget):
         if self._workflow_index >= len(self._workflow):
             return None
         from echo_personal_tool.infrastructure.i18n import tr
+
         mode, label = self._workflow[self._workflow_index]
         if mode == "peak":
             return f"Mitral inflow: {tr('doppler.peak', label=label)}"
@@ -556,9 +556,7 @@ class DopplerOverlayTools(QWidget):
 
     def _add_interval_marker(self, end_time_ms: float) -> None:
         start_time_ms = (
-            float(self._active_interval_start)
-            if self._active_interval_start is not None
-            else float(end_time_ms)
+            float(self._active_interval_start) if self._active_interval_start is not None else float(end_time_ms)
         )
         marker = DopplerIntervalMarker(
             label=self._current_interval_label(),
@@ -581,13 +579,8 @@ class DopplerOverlayTools(QWidget):
         self._refresh_active_trace_graphics()
 
     def _refresh_active_trace_graphics(self) -> None:
-        x_values = [
-            self._axis_mapping.x_from_time_ms(point[0]) for point in self._active_partial_points
-        ]
-        y_values = [
-            self._axis_mapping.y_from_velocity_cm_s(point[1])
-            for point in self._active_partial_points
-        ]
+        x_values = [self._axis_mapping.x_from_time_ms(point[0]) for point in self._active_partial_points]
+        y_values = [self._axis_mapping.y_from_velocity_cm_s(point[1]) for point in self._active_partial_points]
         self._trace_item.setFillLevel(self._baseline_plot_y_px())
         self._trace_item.setData(x_values, y_values)
 
@@ -609,10 +602,7 @@ class DopplerOverlayTools(QWidget):
         baseline_velocity = self._baseline_velocity_cm_s()
         if self._active_partial_points:
             last_time, last_velocity = self._active_partial_points[-1]
-            if (
-                abs(last_time - time_ms) < 0.5
-                and abs(last_velocity - baseline_velocity) < 1.0
-            ):
+            if abs(last_time - time_ms) < 0.5 and abs(last_velocity - baseline_velocity) < 1.0:
                 return
         self._add_trace_point(time_ms, baseline_velocity)
 

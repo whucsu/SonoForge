@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QThreadPool, Qt
+from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -47,9 +47,7 @@ def run_dicom_upload_dialog(
     dialog.setWindowTitle(tr("dialog.dicom_upload.title"))
     layout = QVBoxLayout(dialog)
 
-    layout.addWidget(
-        QLabel(tr("dialog.dicom_upload.summary", count=len(payloads)))
-    )
+    layout.addWidget(QLabel(tr("dialog.dicom_upload.summary", count=len(payloads))))
 
     protocol_combo = QComboBox()
     if stow_upload_available(settings):
@@ -67,9 +65,7 @@ def run_dicom_upload_dialog(
     form.addRow(tr("dialog.dicom_upload.protocol"), protocol_combo)
     layout.addLayout(form)
 
-    buttons = QDialogButtonBox(
-        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-    )
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
     ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
     ok_btn.setText(tr("dialog.dicom_upload.send"))
     buttons.accepted.connect(dialog.accept)
@@ -77,6 +73,7 @@ def run_dicom_upload_dialog(
     layout.addWidget(buttons)
 
     from echo_personal_tool.presentation.ui_animations import exec_animated
+
     if exec_animated(dialog) != QDialog.DialogCode.Accepted:
         return
 
@@ -108,20 +105,12 @@ def run_dicom_upload_dialog(
         stow_client=stow_client,
         parent=parent,
     )
-    worker.signals.progress.connect(
-        lambda current, total: progress.setValue(current)
-        if total
-        else None
-    )
+    worker.signals.progress.connect(lambda current, total: progress.setValue(current) if total else None)
 
     def _on_finished(result: StowResult) -> None:
         progress.close()
         total = len(payloads)
-        if (
-            result.failed_uids
-            or result.error_message
-            or result.success_count < total
-        ):
+        if result.failed_uids or result.error_message or result.success_count < total:
             QMessageBox.warning(
                 parent,
                 tr("dialog.dicom_upload.title"),

@@ -78,9 +78,7 @@ def _arc_depth_px(
         return 0.0
     max_depth = 0.0
     for point in points[1:-1]:
-        numer = abs(
-            dy * point[0] - dx * point[1] + lateral[0] * septal[1] - lateral[1] * septal[0]
-        )
+        numer = abs(dy * point[0] - dx * point[1] + lateral[0] * septal[1] - lateral[1] * septal[0])
         max_depth = max(max_depth, numer / denom)
     return max_depth
 
@@ -107,29 +105,21 @@ def _collect_issues(report: CineSegmentDiagnosticReport) -> tuple[str, ...]:
         x0, y0, x1, y1 = report.roi_xyxy
         roi_width = max(1.0, x1 - x0)
         if centroid_x > x0 + 0.82 * roi_width:
-            issues.append(
-                "маска смещена в правую UI-полосу — проверьте lateral trim ROI"
-            )
+            issues.append("маска смещена в правую UI-полосу — проверьте lateral trim ROI")
         if not (x0 <= centroid_x <= x1 and y0 <= centroid_y <= y1):
             issues.append("центроид маски вне B-mode ROI")
     if report.annulus_mid_y is not None and report.apex_y is not None:
         if report.annulus_mid_y < report.apex_y:
             issues.append(
-                f"инвертирован annulus/apex (annulus_y={report.annulus_mid_y:.0f} "
-                f"< apex_y={report.apex_y:.0f})"
+                f"инвертирован annulus/apex (annulus_y={report.annulus_mid_y:.0f} < apex_y={report.apex_y:.0f})"
             )
         if report.arc_depth_px is not None and report.arc_depth_px < 5.0:
-            issues.append(
-                f"контур схлопнут в линию (глубина дуги {report.arc_depth_px:.1f} px)"
-            )
+            issues.append(f"контур схлопнут в линию (глубина дуги {report.arc_depth_px:.1f} px)")
     if report.roi_xyxy is not None and report.mask_bbox is not None:
         roi_width = max(1.0, report.roi_xyxy[2] - report.roi_xyxy[0])
         mask_width = float(report.mask_bbox[2] - report.mask_bbox[0])
         if mask_width < 0.12 * roi_width:
-            issues.append(
-                f"маска узкая ({mask_width:.0f}px при ROI {roi_width:.0f}px) — "
-                "проверьте sector trim"
-            )
+            issues.append(f"маска узкая ({mask_width:.0f}px при ROI {roi_width:.0f}px) — проверьте sector trim")
     if report.reject_reason:
         issues.append(f"quality gate: {report.reject_reason}")
     return tuple(issues)

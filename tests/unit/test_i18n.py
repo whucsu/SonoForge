@@ -10,7 +10,7 @@ import pytest
 from echo_personal_tool.domain.models import LinearMeasurement
 from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
 from echo_personal_tool.domain.services.measurement_results_formatter import format_results_overlay
-from echo_personal_tool.infrastructure.i18n import get_language, set_language, tr
+from echo_personal_tool.infrastructure.i18n import set_language, tr
 
 _LOCALES_DIR = Path(__file__).resolve().parents[2] / "src" / "echo_personal_tool" / "infrastructure" / "locales"
 

@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-import math
-
-import pytest
-
 from echo_personal_tool.domain.calculations.lvef_simpson import (
-    _MIN_ARC_DEPTH_RATIO,
-    _MIN_LV_AUTO_ANNULUS_MM,
     _contour_arc_depth_px,
     _contour_centroid,
     explain_lv_auto_reject_reason,
@@ -90,7 +84,9 @@ class TestExplainRejectV2:
             mitral_annulus=((40, 40), (60, 40)),
         )
         reason = explain_lv_auto_reject_reason(
-            contour, None, roi_xyxy=(0, 0, 30, 30),
+            contour,
+            None,
+            roi_xyxy=(0, 0, 30, 30),
         )
         assert reason is not None
         assert "ROI" in reason
@@ -102,7 +98,9 @@ class TestExplainRejectV2:
             mitral_annulus=((10, 10), (30, 10)),
         )
         reason = explain_lv_auto_reject_reason(
-            contour, None, roi_xyxy=(0, 0, 50, 50),
+            contour,
+            None,
+            roi_xyxy=(0, 0, 50, 50),
         )
         assert reason is None
 

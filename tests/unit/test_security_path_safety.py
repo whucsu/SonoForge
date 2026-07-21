@@ -44,6 +44,7 @@ class TestOrthancCachePathSafety:
 
     def test_file_permissions_restrictive(self, tmp_path: Path) -> None:
         import os
+
         cache = OrthancSessionCache(tmp_path)
         session = cache.create_session()
         path = cache.save_instance(session, "1.2.3", "4.5.6", "7.8.9", b"DICM")

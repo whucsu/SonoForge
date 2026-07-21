@@ -5,14 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QHeaderView,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -57,9 +55,7 @@ class ParameterTableEditor(BaseEditor):
 
         # Header
         header_widget = QWidget()
-        header_widget.setStyleSheet(
-            f"background: {p['bg_control']}; border-bottom: 1px solid {p['border']};"
-        )
+        header_widget.setStyleSheet(f"background: {p['bg_control']}; border-bottom: 1px solid {p['border']};")
         header_layout = QVBoxLayout(header_widget)
         header_layout.setContentsMargins(8, 4, 8, 4)
 
@@ -130,6 +126,7 @@ class ParameterTableEditor(BaseEditor):
         self._col_visibility: dict[str, bool] = {c[0]: True for c in self._columns}
         self._col_checkboxes: dict[str, QCheckBox] = {}
         from PySide6.QtWidgets import QCheckBox
+
         for field, label in self._columns:
             cb = QCheckBox(label)
             cb.setChecked(True)
@@ -155,9 +152,7 @@ class ParameterTableEditor(BaseEditor):
         self._table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._table.setAlternatingRowColors(True)
         self._table.horizontalHeader().setStretchLastSection(True)
-        self._table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
-        )
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self._table.horizontalHeader().setSectionsMovable(True)
         self._table.horizontalHeader().sectionMoved.connect(self._on_column_moved)
         self._table.verticalHeader().setVisible(True)
@@ -205,10 +200,7 @@ class ParameterTableEditor(BaseEditor):
         self._refresh_table()
 
     def filter(self, query: str) -> None:
-        self._parameters = [
-            p for p in self._all_params
-            if query in p.id.lower() or query in p.name.lower()
-        ]
+        self._parameters = [p for p in self._all_params if query in p.id.lower() or query in p.name.lower()]
         self._refresh_table()
 
     def clear_filter(self) -> None:
@@ -341,6 +333,7 @@ class ParameterTableEditor(BaseEditor):
 
     def _add_column(self) -> None:
         from PySide6.QtWidgets import QInputDialog
+
         name, ok = QInputDialog.getText(self, "Новый столбец", "Имя столбца:")
         if ok and name:
             slug = name.lower().replace(" ", "_")
@@ -357,9 +350,7 @@ class ParameterTableEditor(BaseEditor):
         if field in ("id", "name"):
             QMessageBox.warning(self, "Ошибка", "Нельзя удалить обязательные столбцы")
             return
-        reply = QMessageBox.question(
-            self, "Удалить столбец", f"Удалить столбец «{label}»?"
-        )
+        reply = QMessageBox.question(self, "Удалить столбец", f"Удалить столбец «{label}»?")
         if reply == QMessageBox.StandardButton.Yes:
             self._columns.pop(col)
             self._selected_col = -1
@@ -371,10 +362,7 @@ class ParameterTableEditor(BaseEditor):
         rows = sorted(set(idx.row() for idx in self._table.selectedIndexes()), reverse=True)
         if not rows:
             return
-        reply = QMessageBox.question(
-            self, "Удалить параметры",
-            f"Удалить {len(rows)} параметров?"
-        )
+        reply = QMessageBox.question(self, "Удалить параметры", f"Удалить {len(rows)} параметров?")
         if reply == QMessageBox.StandardButton.Yes:
             for row in rows:
                 if row < len(self._parameters):
@@ -400,6 +388,7 @@ class ParameterTableEditor(BaseEditor):
     def _context_menu(self, pos: Any) -> None:
         p = get_theme_palette()
         from PySide6.QtWidgets import QMenu
+
         menu = QMenu(self)
         menu.setStyleSheet(
             f"QMenu {{ color: {p['text']}; background: {p['bg_control']}; border: 1px solid {p['border']}; }}"

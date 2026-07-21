@@ -56,9 +56,7 @@ MIN_PDF_FONT_SIZE = 8
 MAX_PDF_FONT_SIZE = 16
 DEFAULT_PDF_FONT_SIZE = 10
 
-DEFAULT_INTERESTING_DICOM_TAGS = (
-    "StudyDate,SeriesDescription,HeartRate,FrameRate"
-)
+DEFAULT_INTERESTING_DICOM_TAGS = "StudyDate,SeriesDescription,HeartRate,FrameRate"
 
 
 @dataclass
@@ -280,9 +278,7 @@ def load_user_preferences() -> UserPreferences:
             {"mm", "cm"},
         ),
         show_dicom_tag_inspector=_read_bool(store.value("show_dicom_tag_inspector"), False),
-        interesting_dicom_tags=str(
-            store.value("interesting_dicom_tags", DEFAULT_INTERESTING_DICOM_TAGS)
-        ),
+        interesting_dicom_tags=str(store.value("interesting_dicom_tags", DEFAULT_INTERESTING_DICOM_TAGS)),
         confirm_reset=_read_bool(store.value("confirm_reset"), True),
         pdf_font_size=_clamp_int(
             store.value("pdf_font_size"),

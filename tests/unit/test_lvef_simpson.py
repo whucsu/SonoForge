@@ -33,10 +33,7 @@ def open_arc_contour(*, phase: str, view: str, width_px: float, height_px: float
     n = 9
     annulus = ((0.0, 0.0), (width_px, 0.0))
     angles = [math.pi - i * math.pi / (n - 1) for i in range(n)]
-    points = [
-        (width_px / 2.0 + (width_px / 2.0) * math.cos(a), height_px * math.sin(a))
-        for a in angles
-    ]
+    points = [(width_px / 2.0 + (width_px / 2.0) * math.cos(a), height_px * math.sin(a)) for a in angles]
     return Contour(phase=phase, view=view, mitral_annulus=annulus, points=points)
 
 
@@ -94,9 +91,7 @@ def test_calculate_biplan_averages_views() -> None:
 
 
 def test_calculate_single_ed_returns_partial_a4c_metrics() -> None:
-    contours = (
-        open_arc_contour(phase="ED", view="A4C", width_px=100.0, height_px=50.0),
-    )
+    contours = (open_arc_contour(phase="ED", view="A4C", width_px=100.0, height_px=50.0),)
     result = calculate(contours, (0.5, 0.5))
 
     assert result is not None
@@ -178,10 +173,13 @@ def test_contour_meets_lv_auto_quality_rejects_tiny_contour() -> None:
     )
 
     assert explain_lv_auto_reject_reason(tiny, (0.5, 0.5)) is not None
-    assert explain_lv_auto_reject_reason(
-        open_arc_contour(phase="ed", view="A4C", width_px=100.0, height_px=50.0),
-        (0.5, 0.5),
-    ) is None
+    assert (
+        explain_lv_auto_reject_reason(
+            open_arc_contour(phase="ed", view="A4C", width_px=100.0, height_px=50.0),
+            (0.5, 0.5),
+        )
+        is None
+    )
 
 
 def test_lv_auto_quality_rejects_small_annulus_mm_with_spacing() -> None:

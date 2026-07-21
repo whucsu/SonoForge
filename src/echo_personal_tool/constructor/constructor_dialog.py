@@ -5,24 +5,17 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QCloseEvent, QKeyEvent, QMouseEvent, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
     QDialog,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMenuBar,
-    QMenu,
     QMessageBox,
     QPushButton,
-    QRadioButton,
-    QSizePolicy,
     QSpinBox,
-    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -30,17 +23,22 @@ from PySide6.QtWidgets import (
 from echo_personal_tool.constructor.constructor_widget import ConstructorWidget
 from echo_personal_tool.constructor.storage import SchemaValidator, YamlStorage
 from echo_personal_tool.presentation.dark_theme import get_theme_palette
-from echo_personal_tool.resources.bundled_fonts import FONT_FAMILY_UI
 
-_YAML_PATH = Path(__file__).resolve().parents[2] / "echo_personal_tool" / "resources" / "references" / "references_structured.yaml"
+_YAML_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "echo_personal_tool"
+    / "resources"
+    / "references"
+    / "references_structured.yaml"
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _load_icon(name: str) -> QPixmap:
     """Load SVG icon recolored to theme text."""
-    from PySide6.QtGui import QIcon
     import sys
+
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass is not None:
         icon_dir = Path(meipass) / "echo_personal_tool" / "resources" / "icons"
@@ -249,9 +247,8 @@ class ConstructorDialog(QDialog):
 
     def _save_as(self) -> None:
         from echo_personal_tool.constructor.dialogs import styled_save_file
-        path, _ = styled_save_file(
-            self, "Сохранить как", str(self._yaml_path), "YAML (*.yaml *.yml)"
-        )
+
+        path, _ = styled_save_file(self, "Сохранить как", str(self._yaml_path), "YAML (*.yaml *.yml)")
         if path:
             self._constructor_widget.save_as(Path(path))
 
@@ -302,9 +299,7 @@ class ConstructorDialog(QDialog):
                 self,
                 "Несохранённые изменения",
                 "Есть несохранённые изменения. Сохранить перед закрытием?",
-                QMessageBox.StandardButton.Yes
-                | QMessageBox.StandardButton.No
-                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self._constructor_widget.save()

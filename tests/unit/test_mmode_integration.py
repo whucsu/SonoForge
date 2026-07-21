@@ -6,9 +6,9 @@ from PySide6.QtWidgets import QApplication
 
 from echo_personal_tool.domain.models import InstanceMetadata
 from echo_personal_tool.domain.services.mmode_extractor import extract_mmode_column
-from echo_personal_tool.presentation.mmode_widget import MModeWidget
-from echo_personal_tool.presentation.mmode_scan_line import MModeScanLineItem
 from echo_personal_tool.presentation.mmode_caliper import MModeCaliperTool
+from echo_personal_tool.presentation.mmode_scan_line import MModeScanLineItem
+from echo_personal_tool.presentation.mmode_widget import MModeWidget
 
 
 def _sample_instance() -> InstanceMetadata:

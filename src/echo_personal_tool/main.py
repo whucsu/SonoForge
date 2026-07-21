@@ -10,12 +10,15 @@ from pathlib import Path
 # Memory diagnostics: log top allocations every 10s when ECHO_FREEZE_DIAG=1
 if os.environ.get("ECHO_FREEZE_DIAG") == "1":
     import tracemalloc
+
     tracemalloc.start(25)  # 25 frames deep for useful traces
     import threading as _thr
+
     _mem_log = logging.getLogger("echo_freeze_diag")
 
     def _mem_dump() -> None:
         import gc
+
         gc.collect()
         snap = tracemalloc.take_snapshot()
         top = snap.statistics("lineno")
@@ -23,14 +26,19 @@ if os.environ.get("ECHO_FREEZE_DIAG") == "1":
         for stat in top[:10]:
             _mem_log.warning("[mem_top] %s", stat)
         import resource
+
         rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
         # Count live numpy arrays and their total size
         import numpy as _np
+
         np_arrays = [o for o in gc.get_objects() if isinstance(o, _np.ndarray)]
         np_bytes = sum(a.nbytes for a in np_arrays)
         _mem_log.warning(
             "[mem_top] RSS=%.0f MB numpy_arrays=%d numpy_MB=%.0f GC_objects=%d",
-            rss_mb, len(np_arrays), np_bytes / (1024 * 1024), len(gc.get_objects()),
+            rss_mb,
+            len(np_arrays),
+            np_bytes / (1024 * 1024),
+            len(gc.get_objects()),
         )
         _thr.Timer(10.0, _mem_dump).start()
 
@@ -61,8 +69,8 @@ if not _is_frozen:
     try:
         from echo_personal_tool.infrastructure.runtime_setup import (
             check_deps,
-            check_models,
         )
+
         if not check_deps():
             print(
                 "SonoForge: missing Python dependencies.\n"
@@ -77,12 +85,11 @@ if not _is_frozen:
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
+from echo_personal_tool.infrastructure.profiler import is_enabled, print_summary
 from echo_personal_tool.infrastructure.user_preferences import load_user_preferences
-from echo_personal_tool.resources.bundled_fonts import ensure_bundled_fonts_loaded, ui_font
-
 from echo_personal_tool.presentation.main_window import MainWindow, apply_maximized_to_work_area
 from echo_personal_tool.presentation.pyqtgraph_export import patch_pyqtgraph_export_dialog
-from echo_personal_tool.infrastructure.profiler import print_summary, is_enabled
+from echo_personal_tool.resources.bundled_fonts import ensure_bundled_fonts_loaded, ui_font
 
 
 def main() -> int:
@@ -92,7 +99,9 @@ def main() -> int:
 
     # Set application icon (window icon + taskbar)
     from PySide6.QtGui import QIcon
+
     from echo_personal_tool.presentation.dark_theme import get_logo_path
+
     app.setWindowIcon(QIcon(str(get_logo_path())))
 
     # Check models after QApplication exists (can show Qt dialog)
@@ -102,6 +111,7 @@ def main() -> int:
                 check_models,
                 show_setup_dialog,
             )
+
             if not check_models():
                 show_setup_dialog()
         except Exception:

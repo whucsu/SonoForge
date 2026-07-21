@@ -80,8 +80,10 @@ def test_parse_http_headers() -> None:
 
 # ── Profile tests ──────────────────────────────────────────────────
 
+
 def test_list_profiles_empty(isolated_settings: None) -> None:
     from echo_personal_tool.infrastructure.server_settings import list_profiles
+
     assert list_profiles() == {}
 
 
@@ -92,6 +94,7 @@ def test_save_and_load_profile(isolated_settings: None) -> None:
         load_profile,
         save_profile,
     )
+
     settings = ServerSettings(
         description="Test Profile",
         url="http://10.0.0.1:8042/dicom-web",
@@ -115,6 +118,7 @@ def test_profile_overwrite(isolated_settings: None) -> None:
         list_profiles,
         save_profile,
     )
+
     s1 = ServerSettings(description="v1", url="http://a:8042/dicom-web")
     s2 = ServerSettings(description="v2", url="http://b:8042/dicom-web")
     save_profile("p", s1)
@@ -125,4 +129,5 @@ def test_profile_overwrite(isolated_settings: None) -> None:
 
 def test_delete_nonexistent_profile(isolated_settings: None) -> None:
     from echo_personal_tool.infrastructure.server_settings import delete_profile
+
     assert delete_profile("nope") is False

@@ -23,6 +23,7 @@ def isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(ss, "_SETTINGS_ORG", org)
     monkeypatch.setattr(ss, "_SETTINGS_APP", app)
     from PySide6.QtCore import QSettings
+
     store = QSettings(org, app)
     store.clear()
     store.sync()
@@ -89,6 +90,7 @@ class TestServerSettingsKeyring:
     def test_password_not_in_qsettings(self, isolated_settings: None) -> None:
         """Password should not be stored in QSettings."""
         from PySide6.QtCore import QSettings
+
         settings = ServerSettings(
             username="testuser",
             password="secret123",

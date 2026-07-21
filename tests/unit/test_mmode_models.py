@@ -39,7 +39,5 @@ def test_mmode_caliper_distance() -> None:
 
 
 def test_mmode_caliper_with_values() -> None:
-    cal = MModeCaliperMeasurement(
-        kind="time", start=(10.0, 0.0), end=(100.0, 0.0), value_ms=320.0
-    )
+    cal = MModeCaliperMeasurement(kind="time", start=(10.0, 0.0), end=(100.0, 0.0), value_ms=320.0)
     assert cal.value_ms == 320.0

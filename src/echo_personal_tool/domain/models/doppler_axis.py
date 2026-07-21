@@ -52,10 +52,7 @@ class DopplerAxisMapping:
     @property
     def has_roi_calibration(self) -> bool:
         return (
-            self.roi is not None
-            and self.plot_width > 0.0
-            and self.plot_height > 0.0
-            and self.baseline_y_px is not None
+            self.roi is not None and self.plot_width > 0.0 and self.plot_height > 0.0 and self.baseline_y_px is not None
         )
 
     def baseline_plot_y(self) -> float | None:

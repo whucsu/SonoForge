@@ -11,7 +11,7 @@ def export_to_pdf(model: ReferenceModel, path: Path) -> None:
     """Export reference to PDF via QPrinter."""
     try:
         from PySide6.QtCore import QMarginsF, QPageLayout, QPageSize
-        from PySide6.QtGui import QFont, QTextDocument
+        from PySide6.QtGui import QTextDocument
         from PySide6.QtPrintSupport import QPrinter
     except ImportError:
         raise ImportError("Требуется PySide6.QtPrintSupport")
@@ -21,11 +21,13 @@ def export_to_pdf(model: ReferenceModel, path: Path) -> None:
 
     printer = QPrinter(QPrinter.OutputFormat.PdfOutput)
     printer.setOutputFileName(str(path))
-    printer.setPageLayout(QPageLayout(
-        QPageSize(QPageSize.PageSize.A4),
-        QPageLayout.Orientation.Portrait,
-        QMarginsF(15, 15, 15, 15),
-    ))
+    printer.setPageLayout(
+        QPageLayout(
+            QPageSize(QPageSize.PageSize.A4),
+            QPageLayout.Orientation.Portrait,
+            QMarginsF(15, 15, 15, 15),
+        )
+    )
 
     doc = QTextDocument()
     doc.setHtml(html)
@@ -60,8 +62,7 @@ def _build_html(model: ReferenceModel) -> str:
             if params:
                 parts.append("<table>")
                 parts.append(
-                    "<tr><th>ID</th><th>Название</th><th>Ед.</th>"
-                    "<th>Норм М</th><th>Норм Ж</th><th>Описание</th></tr>"
+                    "<tr><th>ID</th><th>Название</th><th>Ед.</th><th>Норм М</th><th>Норм Ж</th><th>Описание</th></tr>"
                 )
                 for param in params:
                     norm_m = _format_norm(param.norm_male)
@@ -78,10 +79,7 @@ def _build_html(model: ReferenceModel) -> str:
                 for grad in patho.gradations:
                     parts.append(f"<h3>{grad.name}</h3>")
                     parts.append("<table>")
-                    parts.append(
-                        "<tr><th>ID</th><th>Название</th><th>Ед.</th>"
-                        "<th>Норм М</th><th>Норм Ж</th></tr>"
-                    )
+                    parts.append("<tr><th>ID</th><th>Название</th><th>Ед.</th><th>Норм М</th><th>Норм Ж</th></tr>")
                     for param in grad.parameters:
                         norm_m = _format_norm(param.norm_male)
                         norm_f = _format_norm(param.norm_female)

@@ -48,12 +48,8 @@ def test_compute_full_diastolic_scenario() -> None:
 
 def test_compute_cw_scenario() -> None:
     dto = DopplerMeasurementDTO(
-        peaks=(
-            DopplerPeakMarker(label="vmax", time_ms=0.0, velocity_cm_s=300.0),
-        ),
-        intervals=(
-            DopplerIntervalMarker(label="AT", start_time_ms=200.0, end_time_ms=500.0),
-        ),
+        peaks=(DopplerPeakMarker(label="vmax", time_ms=0.0, velocity_cm_s=300.0),),
+        intervals=(DopplerIntervalMarker(label="AT", start_time_ms=200.0, end_time_ms=500.0),),
         traces=(
             DopplerTrace(
                 label="vti",

@@ -91,9 +91,7 @@ def test_merge_linear_measurements_replaces_by_label() -> None:
         LinearMeasurement(label="LVEDD", pixel_length=100.0, millimeter_length=50.0),
         LinearMeasurement(label="LVESD", pixel_length=80.0, millimeter_length=40.0),
     )
-    incoming = (
-        LinearMeasurement(label="LVEDD", pixel_length=90.0, millimeter_length=45.0),
-    )
+    incoming = (LinearMeasurement(label="LVEDD", pixel_length=90.0, millimeter_length=45.0),)
 
     merged = merge_linear_measurements(existing, incoming)
 

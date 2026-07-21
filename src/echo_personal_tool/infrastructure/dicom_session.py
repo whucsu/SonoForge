@@ -30,18 +30,23 @@ def _cleanup_all_sessions() -> None:
             pass
     _all_sessions.clear()
 
-_UNCOMPRESSED_SYNTAXES = frozenset({
-    "1.2.840.10008.1.2",
-    "1.2.840.10008.1.2.1",
-    "1.2.840.10008.1.2.2",
-})
 
-_JPEG2000_SYNTAXES = frozenset({
-    "1.2.840.10008.1.2.4.90",
-    "1.2.840.10008.1.2.4.91",
-    "1.2.840.10008.1.2.4.92",
-    "1.2.840.10008.1.2.4.93",
-})
+_UNCOMPRESSED_SYNTAXES = frozenset(
+    {
+        "1.2.840.10008.1.2",
+        "1.2.840.10008.1.2.1",
+        "1.2.840.10008.1.2.2",
+    }
+)
+
+_JPEG2000_SYNTAXES = frozenset(
+    {
+        "1.2.840.10008.1.2.4.90",
+        "1.2.840.10008.1.2.4.91",
+        "1.2.840.10008.1.2.4.92",
+        "1.2.840.10008.1.2.4.93",
+    }
+)
 
 _MAX_DECODE_WORKERS = 4
 _PIXEL_DATA_TAG = struct.pack("<HH", 0x7FE0, 0x0010)
@@ -88,7 +93,14 @@ def _extract_pixel_data_from_bytes(raw: bytes) -> bytes | None:
             try:
                 vr = vr_bytes.decode("ascii")
                 is_explicit = all(c.isalpha() for c in vr) and vr in (
-                    "OB", "OW", "OF", "SQ", "UC", "UN", "UR", "UT",
+                    "OB",
+                    "OW",
+                    "OF",
+                    "SQ",
+                    "UC",
+                    "UN",
+                    "UR",
+                    "UT",
                 )
             except Exception:
                 is_explicit = False
@@ -285,13 +297,9 @@ class DicomSession:
         self.release()
         self._open_path = resolved
         self._raw_bytes = resolved.read_bytes()
-        self._metadata = pydicom.dcmread(
-            BytesIO(self._raw_bytes), stop_before_pixels=True, force=True
-        )
+        self._metadata = pydicom.dcmread(BytesIO(self._raw_bytes), stop_before_pixels=True, force=True)
         self._frame_count = int(getattr(self._metadata, "NumberOfFrames", 1))
-        tsuid = str(
-            getattr(self._metadata.file_meta, "TransferSyntaxUID", "1.2.840.10008.1.2.1")
-        )
+        tsuid = str(getattr(self._metadata.file_meta, "TransferSyntaxUID", "1.2.840.10008.1.2.1"))
         self._transfer_syntax_uid = tsuid
         self._extended_offsets = _extended_offsets_from_metadata(self._metadata)
         self._is_uncompressed = tsuid in _UNCOMPRESSED_SYNTAXES
@@ -310,9 +318,7 @@ class DicomSession:
         samples = int(getattr(ds, "SamplesPerPixel", 1))
         bytes_per_pixel = (int(getattr(ds, "BitsAllocated", 8)) // 8) * samples
         frame_size = rows * cols * bytes_per_pixel
-        self._frame_slices = [
-            (i * frame_size, frame_size) for i in range(self._frame_count)
-        ]
+        self._frame_slices = [(i * frame_size, frame_size) for i in range(self._frame_count)]
 
     def annotations(self) -> tuple:
         """Extract calipers and contours from DICOM Graphic Annotation."""
@@ -369,9 +375,7 @@ class DicomSession:
         first_frame = getattr(self, "_first_frame", None)
         if first_frame is None:
             first_frame = self._decode_single_frame(0)
-        self._frames = np.empty(
-            (self._frame_count,) + first_frame.shape, dtype=first_frame.dtype
-        )
+        self._frames = np.empty((self._frame_count,) + first_frame.shape, dtype=first_frame.dtype)
         self._frames[0] = first_frame
 
         remaining = list(range(1, self._frame_count))
@@ -380,9 +384,7 @@ class DicomSession:
 
         max_workers = min(len(remaining), _MAX_DECODE_WORKERS)
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(self._decode_single_frame, i): i for i in remaining
-            }
+            futures = {pool.submit(self._decode_single_frame, i): i for i in remaining}
             for future in as_completed(futures):
                 idx = futures[future]
                 self._frames[idx] = future.result()
@@ -392,18 +394,14 @@ class DicomSession:
     def _decode_single_frame(self, index: int) -> np.ndarray:
         ds = self._metadata
         if index < 0 or index >= self._frame_count:
-            raise IndexError(
-                f"Frame index {index} out of range [0, {self._frame_count})"
-            )
+            raise IndexError(f"Frame index {index} out of range [0, {self._frame_count})")
         rows, cols = int(ds.Rows), int(ds.Columns)
 
         if self._is_uncompressed and self._frame_slices is not None:
             samples = int(getattr(ds, "SamplesPerPixel", 1))
             bytes_per_pixel = (int(ds.BitsAllocated) // 8) * samples
             offset, size = self._frame_slices[index]
-            return _decode_uncompressed_frame(
-                self._pixel_data_raw, offset, size, rows, cols, bytes_per_pixel
-            )
+            return _decode_uncompressed_frame(self._pixel_data_raw, offset, size, rows, cols, bytes_per_pixel)
 
         compressed = self._encapsulated_frame_bytes(index)
         if compressed is not None:
@@ -435,14 +433,10 @@ class DicomSession:
     def read_frame(self, frame_index: int) -> np.ndarray:
         if self._frames is not None:
             if frame_index < 0 or frame_index >= self._frames.shape[0]:
-                raise IndexError(
-                    f"Frame index {frame_index} out of range [0, {self._frames.shape[0]})"
-                )
+                raise IndexError(f"Frame index {frame_index} out of range [0, {self._frames.shape[0]})")
             return np.ascontiguousarray(self._frames[frame_index]).copy()
         if frame_index < 0 or frame_index >= self._frame_count:
-            raise IndexError(
-                f"Frame index {frame_index} out of range [0, {self._frame_count})"
-            )
+            raise IndexError(f"Frame index {frame_index} out of range [0, {self._frame_count})")
         return np.ascontiguousarray(self.decode_single_frame(frame_index)).copy()
 
     def release(self) -> None:
@@ -489,7 +483,5 @@ def stack_pixel_array(pixel_array: np.ndarray) -> np.ndarray:
     if frames.ndim == 4 and frames.shape[-1] not in (3,):
         raise ValueError(f"Expected color channels last in {frames.shape}")
     if frames.ndim not in (3, 4):
-        raise ValueError(
-            f"Expected (N,H,W) or (N,H,W,C) after normalization, got {frames.shape}"
-        )
+        raise ValueError(f"Expected (N,H,W) or (N,H,W,C) after normalization, got {frames.shape}")
     return np.ascontiguousarray(frames)

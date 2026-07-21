@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -274,6 +273,7 @@ def test_frame_overlay_clears_on_frame_change(qtbot) -> None:
 
 def test_tool_panel_has_results_button_under_patient_metrics(qtbot) -> None:
     from echo_personal_tool.infrastructure.i18n import set_language
+
     set_language("ru")
     panel = ToolPanel()
     qtbot.addWidget(panel)

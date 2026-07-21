@@ -426,8 +426,7 @@ def _closest_interior_index(
         return max(0, len(points) // 2)
     return min(
         range(1, len(points) - 1),
-        key=lambda index: (points[index][0] - target[0]) ** 2
-        + (points[index][1] - target[1]) ** 2,
+        key=lambda index: (points[index][0] - target[0]) ** 2 + (points[index][1] - target[1]) ** 2,
     )
 
 
@@ -627,10 +626,7 @@ def polygon_area_mm2(
         return 0.0
 
     row_spacing, col_spacing = pixel_spacing
-    mm_points = [
-        (float(col) * col_spacing, float(row) * row_spacing)
-        for col, row in polygon_points
-    ]
+    mm_points = [(float(col) * col_spacing, float(row) * row_spacing) for col, row in polygon_points]
     area = 0.0
     for index, (x1, y1) in enumerate(mm_points):
         x2, y2 = mm_points[(index + 1) % len(mm_points)]

@@ -116,6 +116,7 @@ class OrthancDownloadWorker(QRunnable):
                     self._finish_cancelled()
                     return
                 from echo_personal_tool.infrastructure.i18n import tr
+
                 self.signals.status.emit(tr("orthanc.querying_instances", uid=series_uid[:12]))
                 t_q = time.monotonic()
                 instances = _client.query_instances(self._study_uid, series_uid)
@@ -134,21 +135,14 @@ class OrthancDownloadWorker(QRunnable):
                 self.signals.done.emit(self._session_id, self._study_uid)
                 return
 
-            if (
-                self._retrieve_service is not None
-                and self._retrieve_service.default_source == "cmove"
-            ):
+            if self._retrieve_service is not None and self._retrieve_service.default_source == "cmove":
                 for series_uid in self._series_uids:
                     if self._cancelled.is_set():
                         self._finish_cancelled()
                         return
-                    self.signals.status.emit(
-                        f"C-MOVE prefetch series {series_uid[:12]}…"
-                    )
+                    self.signals.status.emit(f"C-MOVE prefetch series {series_uid[:12]}…")
                     try:
-                        self._retrieve_service.prefetch_series(
-                            self._study_uid, series_uid
-                        )
+                        self._retrieve_service.prefetch_series(self._study_uid, series_uid)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "C-MOVE series prefetch failed series=%s: %s",
@@ -165,6 +159,7 @@ class OrthancDownloadWorker(QRunnable):
 
             self.signals.progress.emit(0, total, self._series_uids[0])
             from echo_personal_tool.infrastructure.i18n import tr
+
             self.signals.status.emit(tr("orthanc.downloading_count", count=total))
 
             saved_count = 0
@@ -255,9 +250,7 @@ class OrthancDownloadWorker(QRunnable):
     def _make_thread_client(self) -> OrthancDicomWebClient:
         if self._server_settings is not None:
             download_timeout = max(self._server_settings.network_timeout * 10, 300.0)
-            return OrthancDicomWebClient.from_settings(
-                self._server_settings, timeout=download_timeout
-            )
+            return OrthancDicomWebClient.from_settings(self._server_settings, timeout=download_timeout)
         return OrthancDicomWebClient(
             self._base_url or "",
             self._username or "",
@@ -278,9 +271,7 @@ class OrthancDownloadWorker(QRunnable):
         # Use retrieve service if available (supports DIMSE/C-GET/C-MOVE)
         if self._retrieve_service is not None:
             try:
-                data = self._retrieve_service.retrieve_instance(
-                    study_uid, series_uid, instance_uid
-                )
+                data = self._retrieve_service.retrieve_instance(study_uid, series_uid, instance_uid)
                 if not data:
                     return None
                 self._cache.save_instance(

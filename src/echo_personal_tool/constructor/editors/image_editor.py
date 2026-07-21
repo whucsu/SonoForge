@@ -9,7 +9,6 @@ from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QImage, 
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -63,8 +62,7 @@ class ImageEditor(BaseEditor):
         self._drop_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._drop_hint.setFixedHeight(40)
         self._drop_hint.setStyleSheet(
-            f"color: {p['text_dim']}; border: 2px dashed {p['border']}; "
-            f"margin: 4px 8px; border-radius: 4px;"
+            f"color: {p['text_dim']}; border: 2px dashed {p['border']}; margin: 4px 8px; border-radius: 4px;"
         )
         layout.addWidget(self._drop_hint)
 
@@ -117,9 +115,7 @@ class ImageEditor(BaseEditor):
         self._preview_scroll.setWidgetResizable(True)
         self._preview_label = QLabel()
         self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._preview_label.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self._preview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._preview_scroll.setWidget(self._preview_label)
         preview_layout.addWidget(self._preview_scroll, 1)
 
@@ -169,8 +165,8 @@ class ImageEditor(BaseEditor):
 
     def _render_svg(self, path: Path) -> None:
         try:
-            from PySide6.QtSvg import QSvgRenderer
             from PySide6.QtGui import QPainter
+            from PySide6.QtSvg import QSvgRenderer
 
             renderer = QSvgRenderer(str(path))
             if renderer.isValid():
@@ -248,9 +244,9 @@ class ImageEditor(BaseEditor):
 
     def _add_image(self) -> None:
         from echo_personal_tool.constructor.dialogs import styled_open_files
+
         files = styled_open_files(
-            self, "Добавить изображения", "",
-            "Изображения (*.png *.jpg *.jpeg *.gif *.bmp *.svg)"
+            self, "Добавить изображения", "", "Изображения (*.png *.jpg *.jpeg *.gif *.bmp *.svg)"
         )
         for f in files:
             filename = self._image_storage.copy(Path(f))
@@ -284,6 +280,7 @@ class ImageEditor(BaseEditor):
         if path:
             from PySide6.QtCore import QUrl
             from PySide6.QtGui import QDesktopServices
+
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def delete_selected(self) -> None:

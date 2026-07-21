@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-_UID_PATTERN = re.compile(r'^[0-9.]+$')
+_UID_PATTERN = re.compile(r"^[0-9.]+$")
 
 
 def validate_dicom_uid(uid: str) -> bool:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from echo_personal_tool.application.dicom_upload_utils import collect_dicom_bytes
@@ -30,7 +30,7 @@ def _study_with_file(path: Path, *, media_format: str = "dicom") -> StudyMetadat
     )
     return StudyMetadata(
         study_uid="1.2.3.5",
-        study_datetime=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        study_datetime=datetime(2026, 1, 1, tzinfo=UTC),
         series=(series,),
     )
 
@@ -62,7 +62,7 @@ def test_collect_dicom_bytes_deduplicates(tmp_path: Path) -> None:
     )
     study = StudyMetadata(
         study_uid="1.2.3.5",
-        study_datetime=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        study_datetime=datetime(2026, 1, 1, tzinfo=UTC),
         series=(series,),
     )
     assert len(collect_dicom_bytes([study])) == 1

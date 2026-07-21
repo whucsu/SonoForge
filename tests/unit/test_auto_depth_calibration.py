@@ -7,7 +7,6 @@ from echo_personal_tool.domain.services.auto_depth_calibration import (
     try_auto_depth_calibration,
 )
 
-
 _rng = np.random.default_rng(42)
 
 

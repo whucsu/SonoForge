@@ -21,9 +21,7 @@ _ITEM_DATA_ROLE = 256
 _VISIBLE_WINDOW_PADDING = 6
 _SCROLL_REQUEST_DEBOUNCE_MS = 25
 
-ThumbnailLoader = (
-    Callable[[InstanceMetadata], None] | Callable[[InstanceMetadata, ThumbnailPriority], None]
-)
+ThumbnailLoader = Callable[[InstanceMetadata], None] | Callable[[InstanceMetadata, ThumbnailPriority], None]
 
 
 def _instance_label(instance: InstanceMetadata) -> str:
@@ -255,7 +253,4 @@ class LocalBrowserWidget(QTreeWidget):
         ]
         if len(positional_params) >= 2:
             return True
-        return any(
-            parameter.kind == inspect.Parameter.VAR_POSITIONAL
-            for parameter in signature.parameters.values()
-        )
+        return any(parameter.kind == inspect.Parameter.VAR_POSITIONAL for parameter in signature.parameters.values())

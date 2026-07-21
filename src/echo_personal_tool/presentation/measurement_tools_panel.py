@@ -67,6 +67,7 @@ class MeasurementToolsPanel(QWidget):
 
     def reload_text(self) -> None:
         from echo_personal_tool.infrastructure.i18n import tr
+
         for (view, phase), btn in self._manual_buttons.items():
             if phase == "ED":
                 btn.setText(tr(f"menu.{view.lower()}_ed"))
@@ -176,9 +177,7 @@ class MeasurementToolsPanel(QWidget):
         if self._blink_target is None:
             return
         self._blink_on = not self._blink_on
-        self._blink_target.setStyleSheet(
-            self._BLINK_STYLE if self._blink_on else self._NORMAL_STYLE
-        )
+        self._blink_target.setStyleSheet(self._BLINK_STYLE if self._blink_on else self._NORMAL_STYLE)
 
     def _build_lv2d_group(self) -> QGroupBox:
         group = QGroupBox(tr("tools.lv2d"))

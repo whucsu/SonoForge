@@ -85,9 +85,7 @@ def contours_for_instance(
     instance_uid: str,
 ) -> tuple[Contour, ...]:
     """Return contours scoped to a single DICOM/clip instance."""
-    return tuple(
-        contour for contour in contours if contour.sop_instance_uid == instance_uid
-    )
+    return tuple(contour for contour in contours if contour.sop_instance_uid == instance_uid)
 
 
 def merge_contours(
@@ -135,9 +133,7 @@ class StudyMeasurementData:
     doppler_by_instance: tuple[tuple[str, DopplerMeasurementDTO], ...] = ()
     doppler_by_instance_frame: tuple[tuple[str, int, DopplerMeasurementDTO], ...] = ()
     doppler_calibration_by_instance: tuple[tuple[str, DopplerCalibrationState], ...] = ()
-    doppler_calibration_by_instance_frame: tuple[
-        tuple[str, int, DopplerCalibrationState], ...
-    ] = ()
+    doppler_calibration_by_instance_frame: tuple[tuple[str, int, DopplerCalibrationState], ...] = ()
     mmode_calibration_by_instance: tuple[tuple[str, MmodeCalibrationState], ...] = ()
     cine_segment_roi_by_instance: tuple[tuple[str, tuple[float, float, float, float]], ...] = ()
     manual_pixel_spacing: tuple[float, float] | None = None
@@ -234,10 +230,7 @@ class StudyMeasurementSessionStore:
         calibration: DopplerCalibrationState | None,
     ) -> None:
         data = self.get(study_uid)
-        current = {
-            (uid, frame): stored
-            for uid, frame, stored in data.doppler_calibration_by_instance_frame
-        }
+        current = {(uid, frame): stored for uid, frame, stored in data.doppler_calibration_by_instance_frame}
         key = (instance_uid, frame_index)
         if calibration is None:
             current.pop(key, None)
@@ -281,17 +274,12 @@ class StudyMeasurementSessionStore:
         dto: DopplerMeasurementDTO,
     ) -> None:
         data = self.get(study_uid)
-        current = {
-            (uid, frame): stored
-            for uid, frame, stored in data.doppler_by_instance_frame
-        }
+        current = {(uid, frame): stored for uid, frame, stored in data.doppler_by_instance_frame}
         key = (instance_uid, frame_index)
         current[key] = merge_doppler_dtos(current.get(key), dto)
         self._studies[study_uid] = replace(
             data,
-            doppler_by_instance_frame=tuple(
-                (uid, frame, stored) for (uid, frame), stored in current.items()
-            ),
+            doppler_by_instance_frame=tuple((uid, frame, stored) for (uid, frame), stored in current.items()),
         )
 
     def get_doppler_for_instance_frame(

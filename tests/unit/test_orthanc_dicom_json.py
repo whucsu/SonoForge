@@ -40,9 +40,7 @@ def test_tag_value_reads_ui_study_instance_uid() -> None:
             "Value": ["1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.1"],
         }
     }
-    assert tag_value(item, "0020000D") == (
-        "1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.1"
-    )
+    assert tag_value(item, "0020000D") == ("1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.1")
 
 
 def test_parse_studies_from_fixture() -> None:
@@ -50,9 +48,7 @@ def test_parse_studies_from_fixture() -> None:
     studies = parse_studies(json.loads(raw))
     assert len(studies) >= 1
     assert studies[0].study_uid.startswith("1.2.")
-    assert studies[0].study_uid == (
-        "1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.1"
-    )
+    assert studies[0].study_uid == ("1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.1")
     assert studies[0].patient_name == "TEST^PATIENT"
     assert studies[0].patient_id == "TEST123"
     assert studies[0].study_date == "20240404"
@@ -71,9 +67,7 @@ def test_parse_series_injects_study_uid() -> None:
     ]
     series_list = parse_series(payload, study_uid)
     assert len(series_list) == 1
-    assert series_list[0].series_uid == (
-        "1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.2"
-    )
+    assert series_list[0].series_uid == ("1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.2")
     assert series_list[0].study_uid == study_uid
     assert series_list[0].modality == "US"
     assert series_list[0].description == "Echo series"
@@ -93,8 +87,6 @@ def test_parse_instances_injects_study_and_series_uid() -> None:
     ]
     instances = parse_instances(payload, study_uid, series_uid)
     assert len(instances) == 1
-    assert instances[0].sop_instance_uid == (
-        "1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.3"
-    )
+    assert instances[0].sop_instance_uid == ("1.2.410.200001.1.1185.2062614048.1.20240404.1120546412.448.3")
     assert instances[0].study_uid == study_uid
     assert instances[0].series_uid == series_uid
