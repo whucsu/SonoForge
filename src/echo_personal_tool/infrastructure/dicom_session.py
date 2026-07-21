@@ -337,6 +337,10 @@ class DicomSession:
             self._pixel_data_raw = extracted
         else:
             full_ds = pydicom.dcmread(BytesIO(self._raw_bytes), force=True)
+            # Ensure Transfer Syntax UID is present (some DICOM files lack file_meta)
+            if not hasattr(full_ds.file_meta, "TransferSyntaxUID") or full_ds.file_meta.TransferSyntaxUID is None:
+                from pydicom.uid import ImplicitVRLittleEndian
+                full_ds.file_meta.TransferSyntaxUID = ImplicitVRLittleEndian
             self._pixel_data_raw = bytes(full_ds.PixelData)
         # _pixel_data_raw is a bytes COPY — free the full file (20-200 MB).
         self._raw_bytes = None
@@ -419,6 +423,10 @@ class DicomSession:
     def _decode_pydicom_fallback(self, index: int) -> np.ndarray:
         """Fallback: full pydicom decode, extract frame index."""
         full_ds = pydicom.dcmread(BytesIO(self._raw_bytes), force=True)
+        # Ensure Transfer Syntax UID is present (some DICOM files lack file_meta)
+        if not hasattr(full_ds.file_meta, "TransferSyntaxUID") or full_ds.file_meta.TransferSyntaxUID is None:
+            from pydicom.uid import ImplicitVRLittleEndian
+            full_ds.file_meta.TransferSyntaxUID = ImplicitVRLittleEndian
         pixel_array = full_ds.pixel_array
         frames = stack_pixel_array(pixel_array)
         return np.ascontiguousarray(frames[index])
