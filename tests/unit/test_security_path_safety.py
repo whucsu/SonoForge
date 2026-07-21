@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,7 @@ class TestOrthancCachePathSafety:
         with pytest.raises(ValueError):
             cache.save_instance(session, "1.2", "3.4", "../../etc/shadow", b"DICM")
 
+    @pytest.mark.xfail(sys.platform == "win32", reason="Windows uses different file permissions")
     def test_file_permissions_restrictive(self, tmp_path: Path) -> None:
         import os
 
