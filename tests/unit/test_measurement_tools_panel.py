@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import numpy as np
+import pytest
 from PySide6.QtWidgets import QPushButton
 
 from echo_personal_tool.application.app_controller import AppController

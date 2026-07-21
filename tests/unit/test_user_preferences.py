@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from echo_personal_tool.infrastructure.user_preferences import (
     DEFAULT_UI_FONT_SIZE,
     UserPreferences,

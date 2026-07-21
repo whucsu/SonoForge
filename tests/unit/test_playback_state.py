@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from echo_personal_tool.application.app_controller import AppController
 from echo_personal_tool.application.state_manager import StateManager
 from echo_personal_tool.domain.models import InstanceMetadata

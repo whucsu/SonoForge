@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from echo_personal_tool.domain.models import (
     ChamberSimpsonResult,
     DopplerResults,

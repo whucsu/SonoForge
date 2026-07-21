@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from echo_personal_tool.presentation.ase_reference_dialog import AseReferenceDialog
 
 pytestmark = pytest.mark.gui

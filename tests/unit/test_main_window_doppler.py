@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PySide6.QtCore import Qt
 
 from echo_personal_tool.application.app_controller import AppController

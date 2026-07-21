@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import pytest
 from PySide6.QtWidgets import QPushButton
 
 from echo_personal_tool.presentation.system_bar import SystemBar

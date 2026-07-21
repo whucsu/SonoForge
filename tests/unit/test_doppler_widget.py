@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from echo_personal_tool.domain.models import (
     DopplerIntervalMarker,
