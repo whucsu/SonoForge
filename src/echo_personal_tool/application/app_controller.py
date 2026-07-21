@@ -11,19 +11,8 @@ from pathlib import Path
 from time import perf_counter
 
 import numpy as np
-
-# Debug file logging for measurement flow tracing
-_LOG_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "SonoForge" / "logs"
-_LOG_DIR.mkdir(parents=True, exist_ok=True)
-_LOG_PATH = _LOG_DIR / "errors.log"
-_file_handler = logging.FileHandler(str(_LOG_PATH), mode="w", encoding="utf-8")
-_file_handler.setLevel(logging.WARNING)
-_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
-logging.getLogger("echo_personal_tool.application.app_controller").addHandler(_file_handler)
-from PySide6.QtCore import Qt, QObject, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QImage
-
-from echo_personal_tool.infrastructure.profiler import profiled as _prof
 
 from echo_personal_tool.application.frame_cache import FrameCache
 from echo_personal_tool.application.state_manager import StateManager
@@ -38,10 +27,10 @@ from echo_personal_tool.application.thumbnail_scheduler import (
 )
 from echo_personal_tool.application.workers.dicom_decode_worker import DicomDecodeWorker
 from echo_personal_tool.application.workers.frame_loader_worker import FrameLoaderWorker
-from echo_personal_tool.application.workers.video_decode_worker import VideoDecodeWorker
 from echo_personal_tool.application.workers.onnx_worker import OnnxWorker
 from echo_personal_tool.application.workers.scan_worker import ScanWorker
 from echo_personal_tool.application.workers.thumbnail_loader_worker import ThumbnailLoaderWorker
+from echo_personal_tool.application.workers.video_decode_worker import VideoDecodeWorker
 from echo_personal_tool.domain.calculations.body_surface import compute_indexed_measurements
 from echo_personal_tool.domain.calculations.chamber_simpson import calculate_chamber
 from echo_personal_tool.domain.calculations.diastology_grade import grade_diastolic_function
@@ -72,7 +61,14 @@ from echo_personal_tool.domain.models.measurements import MeasurementSnapshot
 from echo_personal_tool.domain.models.speckle import SpeckleConfig
 from echo_personal_tool.domain.models.viewer_state import ViewerState
 from echo_personal_tool.domain.ports import IOnnxSegmenter
+from echo_personal_tool.domain.services.auto_depth_calibration import (
+    try_auto_depth_calibration,
+)
 from echo_personal_tool.domain.services.contour_geometry import apex_point
+from echo_personal_tool.domain.services.lv_temporal_fusion import (
+    compute_window,
+    temporal_fuse,
+)
 from echo_personal_tool.domain.services.planimeter_formatter import planimeter_results_from_contours
 from echo_personal_tool.domain.services.segment_roi import (
     echonet_crop_mode_for_media,
@@ -87,30 +83,31 @@ from echo_personal_tool.domain.services.segmentation_service import (
     papillary_mask_cleanup,
     smooth_contour,
 )
-from echo_personal_tool.domain.services.lv_temporal_fusion import (
-    compute_window,
-    temporal_fuse,
-)
+from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.onnx_engine import (
     OnnxInferenceEngine,
     _default_models_dir,
     _load_manifest,
 )
-from echo_personal_tool.domain.services.auto_depth_calibration import (
-    try_auto_depth_calibration,
-)
-from echo_personal_tool.infrastructure.i18n import tr
 from echo_personal_tool.infrastructure.system_profiler import (
     PlaybackConfig,
     detect_playback_config,
 )
 from echo_personal_tool.infrastructure.video_reader import VideoReader
 
+# ── Logging setup (after all imports) ────────────────────────────────
+_LOG_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "SonoForge" / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+_LOG_PATH = _LOG_DIR / "errors.log"
+_file_handler = logging.FileHandler(str(_LOG_PATH), mode="w", encoding="utf-8")
+_file_handler.setLevel(logging.WARNING)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.getLogger("echo_personal_tool.application.app_controller").addHandler(_file_handler)
+
 _FRAME_CACHE_WARN_BYTES = 512 * 1024 * 1024
 
 # ── Freeze diagnostics (set ECHO_FREEZE_DIAG=1 to enable) ────────────
-import os as _os
-_FREEZE_DIAG = _os.environ.get("ECHO_FREEZE_DIAG", "0") == "1"
+_FREEZE_DIAG = os.environ.get("ECHO_FREEZE_DIAG", "0") == "1"
 _diag_log = logging.getLogger("echo_freeze_diag")
 logger = logging.getLogger(__name__)
 
@@ -379,8 +376,8 @@ class AppController(QObject):
         # Load annotations from DICOM Graphic Annotation tags
         if not session_contours and instance.path is not None and instance.media_format == "dicom":
             try:
+
                 import pydicom
-                from io import BytesIO
                 ds = pydicom.dcmread(str(instance.path), stop_before_pixels=True, force=True)
                 dicom_calipers, dicom_contours = read_annotations_from_dicom(ds)
                 if dicom_contours:
@@ -724,6 +721,7 @@ class AppController(QObject):
             return
 
         import os
+
         from echo_personal_tool.infrastructure.user_preferences import _read_bool, _settings_store
         store = _settings_store()
         gold_enabled = _read_bool(store.value("gold_annotation_enabled"), False)
@@ -2439,10 +2437,6 @@ class AppController(QObject):
 
     def request_la_auto_segment(self) -> None:
         """Request LA auto-segmentation on the current A4C ES frame."""
-        from echo_personal_tool.domain.services.la_segmentation_service import (
-            explain_la_auto_reject_reason,
-            la_mask_to_contour,
-        )
 
         if self._segment_in_progress:
             self.status_message.emit(tr("status.segmentation_in_progress"))
@@ -2512,7 +2506,11 @@ class AppController(QObject):
 
     def _la_segmenter_available(self) -> bool:
         """Check if LA ONNX model is available."""
-        from echo_personal_tool.infrastructure.onnx_engine import _default_models_dir, _load_manifest, _resolve_model_path
+        from echo_personal_tool.infrastructure.onnx_engine import (
+            _default_models_dir,
+            _load_manifest,
+            _resolve_model_path,
+        )
         models_dir = _default_models_dir()
         manifest = _load_manifest(models_dir)
         if manifest is None:
@@ -2549,7 +2547,7 @@ class AppController(QObject):
 
         try:
             open_points, annulus, apex = la_mask_to_contour(mask, num_nodes=32)
-        except ValueError as exc:
+        except ValueError:
             self.status_message.emit(tr("app.segmentation_no_contour"))
             return
 
