@@ -41,16 +41,10 @@ jobs:
             --cov-report=term-missing \
             -q --tb=line -m "not gui" --no-header
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage.xml
-          flags: unittests
-          name: SonoForge
-          fail_ci_if_error: false
-          verbose: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Coverage summary
+        run: |
+          echo "Coverage report generated"
+          echo "Download the coverage-report artifact for details"
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
