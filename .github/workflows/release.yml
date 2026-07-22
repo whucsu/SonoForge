@@ -88,35 +88,22 @@ jobs:
           print('Dependencies OK')
           "
 
-      - name: Build staging directory
-        run: build\windows\build-lite.bat
-
-      - name: Build launcher exe
+      - name: Build standalone exe
         run: |
           python -m pip install pyinstaller
-          python -m PyInstaller --onefile --name SonoForgeLauncher --console --clean launcher.py
-          copy dist\SonoForgeLauncher.exe dist\SonoForge-Setup\SonoForge.exe
+          python -m PyInstaller sonoforge-standalone.spec --noconfirm --clean
 
-      - name: Build self-extracting installer
-        run: python scripts\create_installer.py
-
-      - name: List artifacts
+      - name: Verify exe
         run: |
-          dir dist\SonoForge-Setup
-          dir dist\*.zip
-          dir dist\*.exe
+          $exe = Get-Item dist\SonoForge.exe
+          Write-Host "Exe: $($exe.FullName)"
+          Write-Host "Size: $([math]::Round($exe.Length / 1MB, 1)) MB"
 
-      - name: Upload .zip
-        uses: actions/upload-artifact@v7
-        with:
-          name: sonoforge-windows-zip
-          path: dist\*.zip
-
-      - name: Upload .exe installer
+      - name: Upload standalone exe
         uses: actions/upload-artifact@v7
         with:
           name: sonoforge-windows-exe
-          path: dist\SonoForge-Setup.exe
+          path: dist\SonoForge.exe
 
   release:
     needs: [build-linux, build-windows]
@@ -139,12 +126,7 @@ jobs:
         with:
           name: sonoforge-deb
 
-      - name: Download Windows zip
-        uses: actions/download-artifact@v8
-        with:
-          name: sonoforge-windows-zip
-
-      - name: Download Windows installer
+      - name: Download Windows exe
         uses: actions/download-artifact@v8
         with:
           name: sonoforge-windows-exe
@@ -159,8 +141,7 @@ jobs:
           name: ${{ steps.tag.outputs.tag }}
           files: |
             sonoforge_*.deb
-            SonoForge-*-Windows.zip
-            SonoForge-Setup.exe
+            SonoForge.exe
           generate_release_notes: true
           draft: false
           prerelease: false

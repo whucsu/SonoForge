@@ -104,18 +104,18 @@ def main() -> int:
 
     app.setWindowIcon(QIcon(str(get_logo_path())))
 
-    # Check models after QApplication exists (can show Qt dialog)
-    if not _is_frozen:
-        try:
-            from echo_personal_tool.infrastructure.runtime_setup import (
-                check_models,
-                show_setup_dialog,
-            )
+    # Check models after QApplication exists (can show Qt dialog).
+    # In frozen (PyInstaller) builds, deps are bundled — only check models.
+    try:
+        from echo_personal_tool.infrastructure.runtime_setup import (
+            check_models,
+            show_setup_dialog,
+        )
 
-            if not check_models():
-                show_setup_dialog()
-        except Exception:
-            pass
+        if not check_models():
+            show_setup_dialog()
+    except Exception:
+        pass
     ensure_bundled_fonts_loaded()
     preferences = load_user_preferences()
     app.setFont(ui_font(point_size=preferences.ui_font_size))

@@ -199,13 +199,16 @@ def show_setup_dialog() -> bool:
     if status.deps_installed and status.models_exist:
         return True
 
+    # In frozen (PyInstaller) builds, deps are bundled — only download models.
+    frozen = getattr(sys, "frozen", False)
+
     class SetupWorker(QThread):
         progress = Signal(str, int)
         finished = Signal(bool)
 
         def run(self) -> None:
             success = True
-            if not status.deps_installed:
+            if not frozen and not status.deps_installed:
                 success = install_deps(progress_callback=lambda msg, pct: self.progress.emit(msg, pct))
             if success and not status.models_exist:
                 success = download_models(progress_callback=lambda msg, pct: self.progress.emit(msg, pct))
